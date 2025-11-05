@@ -1,4 +1,4 @@
-# JavaLab Agent 后端服务
+# JavaLab Agent
 
 基于 Spring AI 的智能 RAG（检索增强生成）对话系统，集成通义千问大模型，支持知识库管理和智能问答。
 
