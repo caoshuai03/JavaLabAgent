@@ -85,7 +85,8 @@ public class AiRagController {
     @Operation(summary = "rag", description = "Rag对话接口")
     @GetMapping(value = "/rag")
     @Loggable
-    public Flux<String> generate(@RequestParam(value = "message", defaultValue = "你好") String message) throws IOException {
+    public Flux<String> generate(@RequestParam(value = "message", defaultValue = "你好") String message,
+                                  @RequestParam(value = "conversationId", required = false) String conversationId) throws IOException {
         List<SensitiveWord> list = sensitiveWordService.list();
 
         for(SensitiveWord sensitiveWord: list){
@@ -149,13 +150,18 @@ public class AiRagController {
                 ))
                 .build();
 
+        // 如果没有传入conversationId，使用默认值"0"以保持向后兼容
+        String finalConversationId = (conversationId != null && !conversationId.trim().isEmpty()) 
+                ? conversationId 
+                : "0";
+
         return chatClient.prompt()
                 // RAG配置：自定义系统提示词
                 .system("如果检测到向量数据库包含用户提问的信息，那么在回答时不使用网络来源信息进行生成")
                 .advisors(new MessageChatMemoryAdvisor(chatMemory))
                 .advisors(a -> a
                         // RAG配置：对话记忆参数
-                        .param(CHAT_MEMORY_CONVERSATION_ID_KEY, 0)  // 对话ID，可以为每个用户设置不同ID
+                        .param(CHAT_MEMORY_CONVERSATION_ID_KEY, finalConversationId)  // 对话ID，可以为每个用户设置不同ID
                         .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 100))  // 检索的历史对话条数，可调整
                 .user(message)
                 .stream()

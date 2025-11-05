@@ -81,7 +81,8 @@ public class ChatController {
     @GetMapping(value = "/stream")
     @Loggable
     public Flux<String> streamRagChat(@RequestParam(value = "message", defaultValue = "你好" ) String message,
-                                      @RequestParam(value = "prompt", defaultValue = "你是一名AI助手，致力于帮助人们解决问题.") String prompt){
+                                      @RequestParam(value = "prompt", defaultValue = "你是一名AI助手，致力于帮助人们解决问题.") String prompt,
+                                      @RequestParam(value = "conversationId", required = false) String conversationId){
         List<SensitiveWord> list = sensitiveWordService.list();
 
         for(SensitiveWord sensitiveWord: list){
@@ -96,11 +97,17 @@ public class ChatController {
                 message = message + "网络来源:"+ "\n" + map.get("title") + "\n" + map.get("content");
             }
         }
+        
+        // 如果没有传入conversationId，使用默认值"0"以保持向后兼容
+        String finalConversationId = (conversationId != null && !conversationId.trim().isEmpty()) 
+                ? conversationId 
+                : "0";
+        
         return chatClient.prompt()
                 .system(prompt)
                 .advisors(new MessageChatMemoryAdvisor(chatMemory))
                 .advisors(a -> a
-                        .param(CHAT_MEMORY_CONVERSATION_ID_KEY, 0)
+                        .param(CHAT_MEMORY_CONVERSATION_ID_KEY, finalConversationId)
                         .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 100))
                 .user(message)
                 .stream()
