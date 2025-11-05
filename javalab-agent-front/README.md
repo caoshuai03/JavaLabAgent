@@ -14,44 +14,36 @@
 - Node.js: ^20.19.0 或 >=22.12.0
 - Docker
 
-## 项目设置
+## 快速开始
 
-### 1. 克隆仓库
-
-```bash
-git clone xxx
-cd javalab-agent-front
-```
-
-### 2. 安装依赖
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-## 开发模式
+### 2. 启动服务
 
-### 镜像启动nginx
-- windows下打开docker desktop
-- 然后执行docker-compose up -d
-- 这时候就已经可以访问了，默认端口是80
+在 Windows 下：
 
-
-通常可以通过 `http://localhost` 访问应用。
+1. 打开 Docker Desktop
+2. 进入项目目录：`cd javalab-agent-front`
+3. 启动 nginx 容器：`docker-compose up -d`
 
 
-## 生产部署
+启动后访问：`http://localhost`
 
-### 1. 构建生产版本
+### 3. 代码更新
+
+代码更新后执行构建：
 
 ```bash
 npm run build
 ```
 
-### 2. 部署到Nginx
+构建完成后，由于 Docker volume 挂载，新文件会自动生效。如遇缓存问题，可：
+- 清除浏览器缓存（Ctrl+F5 强制刷新）
+- 或重启容器：`docker-compose restart nginx`
 
-构建完成后，将 `dist` 目录中的文件部署到Nginx服务器。
-
-详细部署说明请参考 [DEPLOYMENT.md](DEPLOYMENT.md) 文件。
 
 
