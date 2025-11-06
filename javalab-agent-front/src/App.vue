@@ -57,11 +57,13 @@ html, body {
   --bg-secondary: #171717;
   --bg-tertiary: #444654;
   --bg-hover: #2f2f2f;
+  --bg-active: #2f2f2f;
   --border-color: #2f2f2f;
   --border-color-hover: #565869;
   --text-primary: #ececf1;
   --text-secondary: #8e8ea0;
   --text-tertiary: #565869;
+  --accent-color: #10a37f;
   --user-message-bg: #f7f7f8;
   --user-message-text: #353740;
   --assistant-message-bg: #444654;
@@ -79,11 +81,13 @@ html, body {
   --bg-secondary: #f7f7f8;
   --bg-tertiary: #f9f9f9;
   --bg-hover: #e5e5e5;
+  --bg-active: #ebebeb;
   --border-color: #e5e5e5;
   --border-color-hover: #d1d1d1;
   --text-primary: #353740;
   --text-secondary: #6e6e80;
   --text-tertiary: #8e8ea0;
+  --accent-color: #10a37f;
   --user-message-bg: #f7f7f8;
   --user-message-text: #353740;
   --assistant-message-bg: #f9f9f9;

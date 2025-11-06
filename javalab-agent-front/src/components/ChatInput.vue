@@ -7,7 +7,7 @@
         @input="handleInput"
         :disabled="chatStore.isStreaming"
         :placeholder="chatStore.isStreaming ? 'AI 正在回复...' : '输入消息...'"
-        class="chat-input"
+        :class="['chat-input', { 'has-scrollbar': showScrollbar }]"
         ref="inputRef"
         rows="1"
       ></textarea>
@@ -36,13 +36,18 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chat'
 import apiClient from '../api'
 
 const chatStore = useChatStore()
 const inputText = ref('')
 const inputRef = ref(null)
+const showScrollbar = ref(false)
+
+// 高度常量配置
+const MIN_HEIGHT = 48 // 最小高度 (padding上下各12px + 一行文字高度24px)
+const MAX_HEIGHT = 200 // 最大高度 (约6-7行，包含padding)
 
 const canSend = computed(() => {
   return inputText.value.trim().length > 0 && !chatStore.isStreaming
@@ -51,10 +56,18 @@ const canSend = computed(() => {
 let eventSource = null
 
 const handleInput = () => {
-  // 自动调整高度
+  // 自动调整高度并管理滚动条
   if (inputRef.value) {
+    // 重置高度以获取准确的scrollHeight
     inputRef.value.style.height = 'auto'
-    inputRef.value.style.height = inputRef.value.scrollHeight + 'px'
+    const scrollHeight = inputRef.value.scrollHeight
+    
+    // 计算实际高度，限制在最小和最大高度之间
+    let newHeight = Math.max(MIN_HEIGHT, Math.min(scrollHeight, MAX_HEIGHT))
+    inputRef.value.style.height = newHeight + 'px'
+    
+    // 判断是否需要显示滚动条：当内容高度超过最大高度时显示
+    showScrollbar.value = scrollHeight > MAX_HEIGHT
   }
 }
 
@@ -90,10 +103,11 @@ const handleSend = async () => {
   // 添加用户消息
   chatStore.addMessage('user', message)
   
-  // 清空输入框
+  // 清空输入框并重置高度
   inputText.value = ''
   if (inputRef.value) {
-    inputRef.value.style.height = 'auto'
+    inputRef.value.style.height = MIN_HEIGHT + 'px'
+    showScrollbar.value = false
   }
   
   // 创建 AI 消息占位符
@@ -166,8 +180,16 @@ const handleStop = () => {
   }
 }
 
+// 组件挂载时初始化高度
+onMounted(() => {
+  if (inputRef.value) {
+    // 初始化时设置最小高度（包含padding）
+    // padding上下各12px + 一行文字高度24px = 48px
+    inputRef.value.style.height = '48px'
+  }
+})
+
 // 组件卸载时清理
-import { onUnmounted } from 'vue'
 onUnmounted(() => {
   if (eventSource) {
     eventSource.close()
@@ -188,6 +210,7 @@ onUnmounted(() => {
     display: flex;
     gap: 12px;
     align-items: flex-end;
+    position: relative;
   }
 }
 
@@ -202,13 +225,20 @@ onUnmounted(() => {
   font-family: inherit;
   line-height: 1.5;
   resize: none;
+  min-height: 48px;
   max-height: 200px;
-  overflow-y: auto;
-  transition: border-color 0.2s, background-color 0.3s ease, color 0.3s ease;
+  overflow-y: hidden; // 默认隐藏滚动条
+  transition: height 0.2s ease, border-color 0.2s ease, background-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease;
+  
+  // 当需要显示滚动条时
+  &.has-scrollbar {
+    overflow-y: auto;
+  }
   
   &:focus {
     outline: none;
     border-color: #10a37f;
+    box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.1);
   }
   
   &:disabled {
@@ -218,22 +248,37 @@ onUnmounted(() => {
   
   &::placeholder {
     color: var(--text-secondary);
+    opacity: 0.6;
   }
   
+  // 滚动条样式优化 - 更细更精致
   &::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
   }
   
   &::-webkit-scrollbar-track {
     background: transparent;
+    border-radius: 3px;
   }
   
   &::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb);
-    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+    transition: background 0.2s ease;
     
     &:hover {
-      background: var(--scrollbar-thumb-hover);
+      background: rgba(0, 0, 0, 0.3);
+    }
+  }
+  
+  // 暗色模式下的滚动条
+  @media (prefers-color-scheme: dark) {
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
     }
   }
 }
@@ -241,6 +286,7 @@ onUnmounted(() => {
 .input-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   
   .action-button {
     padding: 10px 20px;
@@ -249,7 +295,12 @@ onUnmounted(() => {
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    
+    &:active {
+      transform: scale(0.98);
+    }
     
     &.send-button {
       background-color: #10a37f;
@@ -257,12 +308,16 @@ onUnmounted(() => {
       
       &:hover:not(:disabled) {
         background-color: #0d8f6e;
+        box-shadow: 0 2px 4px rgba(16, 163, 127, 0.2);
+        transform: translateY(-1px);
       }
       
       &:disabled {
         background-color: var(--border-color-hover);
         color: var(--text-secondary);
         cursor: not-allowed;
+        box-shadow: none;
+        transform: none;
       }
     }
     
@@ -272,9 +327,12 @@ onUnmounted(() => {
       
       &:hover {
         background-color: #c82333;
+        box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+        transform: translateY(-1px);
       }
     }
   }
 }
 </style>
+
 

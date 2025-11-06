@@ -1,24 +1,38 @@
 <template>
   <div :class="['user-profile', { collapsed: chatStore.sidebarCollapsed }]">
-    <div class="profile-content">
-      <div class="avatar">
-        {{ userInitial }}
-      </div>
-      <transition name="fade">
-        <div v-show="!chatStore.sidebarCollapsed" class="user-info">
-          <div class="username">{{ displayName }}</div>
-          <div class="menu">
-            <button @click="showProfileModal" class="menu-item">个人资料</button>
-            <button @click="showChangePasswordModal" class="menu-item">修改密码</button>
-            <button @click="handleLogout" class="menu-item logout">登出</button>
-          </div>
+    <div class="profile-content" v-click-outside="closeDropdown">
+      <div class="profile-header" @click="toggleDropdown">
+        <div class="avatar">
+          {{ userInitial }}
         </div>
-      </transition>
-      <transition name="fade">
-        <div v-show="chatStore.sidebarCollapsed" class="menu-collapsed">
-          <button @click="showProfileModal" class="menu-icon" title="个人资料">👤</button>
-          <button @click="showChangePasswordModal" class="menu-icon" title="修改密码">🔒</button>
-          <button @click="handleLogout" class="menu-icon" title="登出">🚪</button>
+        <transition name="fade">
+          <div v-show="!chatStore.sidebarCollapsed" class="user-info">
+            <div class="username">{{ displayName }}</div>
+          </div>
+        </transition>
+      </div>
+      
+      <transition name="dropdown">
+        <div v-show="showDropdown" :class="['dropdown-menu', { collapsed: chatStore.sidebarCollapsed }]">
+          <button @click="handleMenuClick('profile')" class="menu-item">
+            <UserIcon :size="18" />
+            <span v-if="!chatStore.sidebarCollapsed">个人资料</span>
+          </button>
+          <button @click="handleMenuClick('password')" class="menu-item">
+            <LockIcon :size="18" />
+            <span v-if="!chatStore.sidebarCollapsed">修改密码</span>
+          </button>
+          <button @click="handleMenuClick('theme')" class="menu-item">
+            <MoonIcon v-if="themeStore.theme === 'light'" :size="18" />
+            <SunIcon v-else :size="18" />
+            <span v-if="!chatStore.sidebarCollapsed">
+              {{ themeStore.theme === 'light' ? '深色模式' : '浅色模式' }}
+            </span>
+          </button>
+          <button @click="handleMenuClick('logout')" class="menu-item logout">
+            <LogoutIcon :size="18" />
+            <span v-if="!chatStore.sidebarCollapsed">登出</span>
+          </button>
         </div>
       </transition>
     </div>
@@ -40,15 +54,23 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
+import { useThemeStore } from '../stores/theme'
 import ProfileModal from './ProfileModal.vue'
 import PasswordModal from './PasswordModal.vue'
+import UserIcon from './icons/UserIcon.vue'
+import LockIcon from './icons/LockIcon.vue'
+import LogoutIcon from './icons/LogoutIcon.vue'
+import MoonIcon from './icons/MoonIcon.vue'
+import SunIcon from './icons/SunIcon.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
+const themeStore = useThemeStore()
 
 const showProfileModalFlag = ref(false)
 const showChangePasswordModalFlag = ref(false)
+const showDropdown = ref(false)
 
 const displayName = computed(() => {
   return userStore.userInfo?.name || userStore.userInfo?.userName || '用户'
@@ -58,6 +80,14 @@ const userInitial = computed(() => {
   const name = displayName.value
   return name.charAt(0).toUpperCase()
 })
+
+const toggleDropdown = () => {
+  showDropdown.value = !showDropdown.value
+}
+
+const closeDropdown = () => {
+  showDropdown.value = false
+}
 
 const showProfileModal = () => {
   showProfileModalFlag.value = true
@@ -79,124 +109,189 @@ const handleLogout = () => {
   userStore.logout()
   router.push('/login')
 }
+
+const handleThemeToggle = () => {
+  themeStore.toggleTheme()
+}
+
+const modalActions = {
+  profile: showProfileModal,
+  password: showChangePasswordModal,
+  theme: handleThemeToggle,
+  logout: handleLogout
+}
+
+const handleMenuClick = (action) => {
+  closeDropdown()
+  modalActions[action]?.()
+}
+
+const vClickOutside = {
+  mounted(el, binding) {
+    el.clickOutsideEvent = (event) => {
+      if (!(el === event.target || el.contains(event.target))) {
+        binding.value()
+      }
+    }
+    document.addEventListener('click', el.clickOutsideEvent, true)
+  },
+  unmounted(el) {
+    if (el.clickOutsideEvent) {
+      document.removeEventListener('click', el.clickOutsideEvent, true)
+    }
+  }
+}
 </script>
 
 <style lang="scss" scoped>
 .user-profile {
-  padding: 12px;
-  border-top: 1px solid var(--border-color);
+  padding: 8px;
   transition: border-color 0.3s ease, padding 0.3s ease;
   
   &.collapsed {
-    padding: 8px;
+    padding: 0;
+    border-top: none;
   }
   
   .profile-content {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    transition: align-items 0.3s ease, gap 0.3s ease;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    position: relative;
     
-    // 缩回状态下改为垂直布局
     .user-profile.collapsed & {
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); // 保持品牌色不变
-      display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: 14px;
-      flex-shrink: 0;
-      transition: width 0.3s ease, height 0.3s ease, font-size 0.3s ease;
+    }
+    
+      .profile-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 8px;
+      transition: background-color 0.2s ease;
       
       .user-profile.collapsed & {
-        width: 40px;
-        height: 40px;
-        font-size: 16px;
-      }
-    }
-    
-    .user-info {
-      flex: 1;
-      min-width: 0;
-      
-      .username {
-        color: var(--text-primary);
-        font-size: 14px;
-        font-weight: 500;
-        margin-bottom: 4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      
-      .menu {
-        display: flex;
-        gap: 8px;
-        
-        .menu-item {
-          padding: 4px 8px;
-          background: transparent;
-          border: none;
-          color: var(--text-secondary);
-          font-size: 12px;
-          cursor: pointer;
-          border-radius: 4px;
-          transition: all 0.2s;
-          
-          &:hover {
-            background-color: var(--bg-hover);
-            color: var(--text-primary);
-          }
-          
-          &.logout:hover {
-            background-color: #dc3545; // 保持警告色不变
-            color: white;
-          }
-        }
-      }
-    }
-    
-    .menu-collapsed {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      align-items: center;
-      width: 100%;
-      
-      .menu-icon {
-        width: 100%;
-        padding: 8px;
-        background: transparent;
-        border: none;
-        color: var(--text-secondary);
-        font-size: 18px;
+        width: auto;
+        padding: 0;
+        justify-content: center;
         cursor: pointer;
-        border-radius: 4px;
-        transition: all 0.2s;
+      }
+      
+      &:hover {
+        background-color: var(--bg-hover);
+      }
+      
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         display: flex;
         align-items: center;
         justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 14px;
+        flex-shrink: 0;
+        transition: transform 0.2s ease;
         
-        &:hover {
-          background-color: var(--bg-hover);
+        .profile-header:hover & {
+          transform: scale(1.05);
+        }
+        
+        .user-profile.collapsed & {
+          width: 32px;
+          height: 32px;
+          font-size: 14px;
+        }
+      }
+      
+      .user-info {
+        flex: 1;
+        min-width: 0;
+        
+        .username {
           color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 500;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       }
     }
+    
+    .dropdown-menu {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      padding: 4px;
+      margin-bottom: 8px;
+      z-index: 1000;
+      min-width: 180px;
+      overflow: hidden;
+      
+      &.collapsed {
+        left: auto;
+        right: 0;
+        min-width: 160px;
+      }
+      
+      .menu-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 14px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.15s ease;
+        text-align: left;
+        
+        svg {
+          flex-shrink: 0;
+          width: 18px;
+          height: 18px;
+        }
+        
+        &:not(:last-child) {
+          border-bottom: 1px solid var(--border-color);
+          margin-bottom: 2px;
+          padding-bottom: 10px;
+        }
+        
+        &:hover {
+          background-color: var(--bg-hover);
+        }
+        
+        &.logout {
+          color: #dc3545;
+          
+          &:hover {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+          }
+        }
+      }
+    }
+    
   }
 }
 
-// 过渡动画
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease;
@@ -205,6 +300,21 @@ const handleLogout = () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.2s ease;
+}
+
+.dropdown-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 </style>
 

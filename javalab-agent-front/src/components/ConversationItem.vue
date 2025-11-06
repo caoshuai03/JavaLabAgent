@@ -13,17 +13,17 @@
     <div v-if="showActions" class="actions" @click.stop>
       <button 
         @click="handleRename" 
-        class="action-button"
+        class="action-button rename"
         title="重命名"
       >
-        ✏️
+        <EditIcon :size="16" />
       </button>
       <button 
         @click="handleDelete" 
         class="action-button delete"
         title="删除"
       >
-        🗑️
+        <TrashIcon :size="16" />
       </button>
     </div>
     
@@ -43,6 +43,8 @@
 <script setup>
 import { ref, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
+import EditIcon from './icons/EditIcon.vue'
+import TrashIcon from './icons/TrashIcon.vue'
 
 const props = defineProps({
   conversation: {
@@ -146,7 +148,7 @@ const formatTime = (timestamp) => {
   margin-bottom: 4px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -156,7 +158,19 @@ const formatTime = (timestamp) => {
   }
   
   &.active {
-    background-color: var(--bg-primary);
+    background-color: var(--bg-active);
+    
+    .content {
+      .title {
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+      
+      .time {
+        color: var(--text-secondary);
+        opacity: 0.9;
+      }
+    }
   }
   
   .content {
@@ -170,41 +184,62 @@ const formatTime = (timestamp) => {
       overflow: hidden;
       text-overflow: ellipsis;
       margin-bottom: 4px;
+      transition: color 0.2s ease, font-weight 0.2s ease;
     }
     
     .time {
       color: var(--text-secondary);
       font-size: 12px;
+      transition: color 0.2s ease, opacity 0.2s ease;
     }
   }
   
   .actions {
     display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity 0.2s;
+    gap: 8px;
+    opacity: 0.6;
+    transition: all 0.2s;
     
     .conversation-item:hover & {
       opacity: 1;
     }
     
     .action-button {
-      padding: 4px 8px;
+      padding: 6px;
+      min-width: 28px;
+      min-height: 28px;
       background: transparent;
       border: none;
       color: var(--text-secondary);
       cursor: pointer;
-      font-size: 14px;
       border-radius: 4px;
       transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      
+      svg {
+        width: 16px;
+        height: 16px;
+      }
       
       &:hover {
         background-color: var(--border-color-hover);
         color: var(--text-primary);
+        transform: scale(1.05);
+      }
+      
+      &.rename {
+        color: var(--text-primary);
+        opacity: 0.8;
+        
+        &:hover {
+          opacity: 1;
+        }
       }
       
       &.delete {
-        color: var(--text-primary);
+        color: #dc3545;
         opacity: 0.8;
         
         &:hover {

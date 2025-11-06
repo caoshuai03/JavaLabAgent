@@ -33,6 +33,7 @@ npm install
 
 启动后访问：`http://localhost`
 
+`docker-compose down` 停止容器
 ### 3. 代码更新
 
 代码更新后执行构建：

@@ -6,7 +6,7 @@
         @click="handleNewConversation" 
         class="new-chat-button"
       >
-        <span class="icon">+</span>
+        <PlusIcon :size="18" />
         <span>新建对话</span>
       </button>
       <button 
@@ -15,44 +15,35 @@
         class="new-chat-button collapsed"
         title="新建对话"
       >
-        <span class="icon">+</span>
+        <PlusIcon :size="18" />
       </button>
       <button 
         @click="chatStore.toggleSidebar" 
         class="toggle-button"
         :title="chatStore.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
       >
-        <span class="icon">{{ chatStore.sidebarCollapsed ? '→' : '←' }}</span>
+        <ChevronLeftIcon v-if="!chatStore.sidebarCollapsed" :size="16" />
+        <ChevronRightIcon v-else :size="16" />
       </button>
     </div>
     
     <ConversationList v-if="!chatStore.sidebarCollapsed" />
     
-    <div class="sidebar-footer">
-      <button 
-        @click="themeStore.toggleTheme" 
-        class="theme-toggle-button"
-        :title="themeStore.theme === 'light' ? '切换到深色模式' : '切换到浅色模式'"
-      >
-        <span class="icon">{{ themeStore.theme === 'light' ? '🌙' : '☀️' }}</span>
-        <span v-if="!chatStore.sidebarCollapsed" class="text">
-          {{ themeStore.theme === 'light' ? '深色模式' : '浅色模式' }}
-        </span>
-      </button>
+    <div class="sidebar-bottom">
+      <UserProfile />
     </div>
-    
-    <UserProfile />
   </div>
 </template>
 
 <script setup>
 import { useChatStore } from '../stores/chat'
-import { useThemeStore } from '../stores/theme'
 import ConversationList from './ConversationList.vue'
 import UserProfile from './UserProfile.vue'
+import PlusIcon from './icons/PlusIcon.vue'
+import ChevronLeftIcon from './icons/ChevronLeftIcon.vue'
+import ChevronRightIcon from './icons/ChevronRightIcon.vue'
 
 const chatStore = useChatStore()
-const themeStore = useThemeStore()
 
 const handleNewConversation = () => {
   chatStore.createConversation()
@@ -144,9 +135,7 @@ const handleNewConversation = () => {
       }
     }
     
-    .icon {
-      font-size: 18px;
-      font-weight: bold;
+    svg {
       flex-shrink: 0;
     }
   }
@@ -174,64 +163,21 @@ const handleNewConversation = () => {
       border-color: var(--text-primary);
     }
     
-    .icon {
-      font-size: 16px;
+    svg {
+      flex-shrink: 0;
     }
   }
 }
 
-.sidebar-footer {
-  padding: 8px;
+.sidebar-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
   border-top: 1px solid var(--border-color);
-  transition: padding 0.3s ease;
   
   .sidebar.collapsed & {
-    padding: 8px;
-  }
-  
-  .theme-toggle-button {
-    width: 100%;
-    display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px;
-    background-color: transparent;
-    border: 1px solid var(--border-color-hover);
-    border-radius: 8px;
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.3s ease;
-    
-    .sidebar.collapsed & {
-      width: 48px;
-      padding: 12px;
-      margin: 0 auto;
-    }
-    
-    &:hover {
-      background-color: var(--bg-hover);
-      border-color: var(--text-primary);
-    }
-    
-    .icon {
-      font-size: 18px;
-      flex-shrink: 0;
-    }
-    
-    .text {
-      white-space: nowrap;
-      transition: opacity 0.3s ease, width 0.3s ease;
-      
-      .sidebar.collapsed & {
-        display: none;
-      }
-      
-      @media (max-width: 768px) {
-        display: none;
-      }
-    }
   }
 }
 </style>
