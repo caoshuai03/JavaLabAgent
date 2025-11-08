@@ -36,7 +36,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chat'
 import apiClient from '../api'
 
@@ -180,6 +180,17 @@ const handleStop = () => {
   }
 }
 
+// 监听聚焦标志，自动聚焦输入框
+watch(() => chatStore.shouldFocusInput, (shouldFocus) => {
+  if (shouldFocus && inputRef.value) {
+    nextTick(() => {
+      inputRef.value.focus()
+      // 重置标志
+      chatStore.shouldFocusInput = false
+    })
+  }
+})
+
 // 组件挂载时初始化高度
 onMounted(() => {
   if (inputRef.value) {
@@ -268,17 +279,6 @@ onUnmounted(() => {
     
     &:hover {
       background: rgba(0, 0, 0, 0.3);
-    }
-  }
-  
-  // 暗色模式下的滚动条
-  @media (prefers-color-scheme: dark) {
-    &::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.2);
-      
-      &:hover {
-        background: rgba(255, 255, 255, 0.3);
-      }
     }
   }
 }

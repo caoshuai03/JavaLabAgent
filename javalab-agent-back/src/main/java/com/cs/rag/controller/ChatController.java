@@ -34,7 +34,7 @@ import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvis
  * @date 2025/11/05 18:19
  * @description: 对话接口
  */
-@Tag(name="AiRagController",description = "chat对话接口")
+@Tag(name="ChatController",description = "chat对话接口")
 @Slf4j
 @RestController
 @RequestMapping(ApplicationConstant.API_VERSION + "/chat")
@@ -60,7 +60,6 @@ public class ChatController {
                         new PromptChatMemoryAdvisor(chatMemory),
                         new MessageChatMemoryAdvisor(chatMemory),
                         new QuestionAnswerAdvisor(vectorStore, SearchRequest.builder().build()))
-                .defaultFunctions("getBookingDetails", "changeBooking", "cancelBooking")
                 .build();
     }
 
@@ -107,10 +106,4 @@ public class ChatController {
                 .stream()
                 .content();
     }
-
-
-
-
-
-
 }

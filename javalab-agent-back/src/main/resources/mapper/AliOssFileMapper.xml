@@ -18,7 +18,11 @@
     </sql>
     <select id="findByFileNameContaining" resultType="com.cs.rag.entity.AliOssFile">
         SELECT * FROM ali_oss_file
-        WHERE file_name LIKE CONCAT('%', #{fileName}, '%')
-        ORDER BY id
+        <where>
+            <if test="fileName != null and fileName != ''">
+                file_name LIKE '%' || #{fileName} || '%'
+            </if>
+        </where>
+        ORDER BY create_time DESC, id DESC
     </select>
 </mapper>

@@ -22,13 +22,6 @@
             <LockIcon :size="18" />
             <span v-if="!chatStore.sidebarCollapsed">修改密码</span>
           </button>
-          <button @click="handleMenuClick('theme')" class="menu-item">
-            <MoonIcon v-if="themeStore.theme === 'light'" :size="18" />
-            <SunIcon v-else :size="18" />
-            <span v-if="!chatStore.sidebarCollapsed">
-              {{ themeStore.theme === 'light' ? '深色模式' : '浅色模式' }}
-            </span>
-          </button>
           <button @click="handleMenuClick('logout')" class="menu-item logout">
             <LogoutIcon :size="18" />
             <span v-if="!chatStore.sidebarCollapsed">登出</span>
@@ -54,19 +47,15 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
-import { useThemeStore } from '../stores/theme'
 import ProfileModal from './ProfileModal.vue'
 import PasswordModal from './PasswordModal.vue'
 import UserIcon from './icons/UserIcon.vue'
 import LockIcon from './icons/LockIcon.vue'
 import LogoutIcon from './icons/LogoutIcon.vue'
-import MoonIcon from './icons/MoonIcon.vue'
-import SunIcon from './icons/SunIcon.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
-const themeStore = useThemeStore()
 
 const showProfileModalFlag = ref(false)
 const showChangePasswordModalFlag = ref(false)
@@ -110,14 +99,9 @@ const handleLogout = () => {
   router.push('/login')
 }
 
-const handleThemeToggle = () => {
-  themeStore.toggleTheme()
-}
-
 const modalActions = {
   profile: showProfileModal,
   password: showChangePasswordModal,
-  theme: handleThemeToggle,
   logout: handleLogout
 }
 

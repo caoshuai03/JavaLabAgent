@@ -84,13 +84,28 @@ public class AliOssFileServiceImpl extends ServiceImpl<AliOssFileMapper, AliOssF
         return ResultUtils.success("下载成功");
     }
     public static String extractFileName(String url) {
-        // 找到最后一个斜杠的位置
-        int lastSlashIndex = url.lastIndexOf('/');
-        if (lastSlashIndex == -1) {
-            return url; // 如果没有找到斜杠，返回整个URL
+        // 从完整URL中提取OSS对象路径（包含文件夹前缀）
+        // URL格式：https://bucket.endpoint/java-lab-agent-rag/filename.ext
+        try {
+            java.net.URL urlObj = new java.net.URL(url);
+            String path = urlObj.getPath();
+            // 移除开头的斜杠，返回完整路径（包含文件夹前缀）
+            return path.startsWith("/") ? path.substring(1) : path;
+        } catch (java.net.MalformedURLException e) {
+            // 如果URL格式不正确，尝试直接提取路径
+            int lastSlashIndex = url.lastIndexOf('/');
+            if (lastSlashIndex == -1) {
+                return url;
+            }
+            // 查找 java-lab-agent-rag 的位置
+            int folderIndex = url.indexOf("java-lab-agent-rag/");
+            if (folderIndex != -1) {
+                // 提取从文件夹前缀开始的完整路径
+                return url.substring(folderIndex);
+            }
+            // 如果没有找到文件夹前缀，返回最后一个斜杠后的部分
+            return url.substring(lastSlashIndex + 1);
         }
-        // 从最后一个斜杠之后的部分截取
-        return url.substring(lastSlashIndex + 1);
     }
 
 }

@@ -18,6 +18,22 @@
         <PlusIcon :size="18" />
       </button>
       <button 
+        v-if="!chatStore.sidebarCollapsed" 
+        @click="handleKnowledgeManagement" 
+        class="knowledge-button"
+      >
+        <FolderIcon :size="18" />
+        <span>知识库管理</span>
+      </button>
+      <button 
+        v-else 
+        @click="handleKnowledgeManagement" 
+        class="knowledge-button collapsed"
+        title="知识库管理"
+      >
+        <FolderIcon :size="18" />
+      </button>
+      <button 
         @click="chatStore.toggleSidebar" 
         class="toggle-button"
         :title="chatStore.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
@@ -36,17 +52,33 @@
 </template>
 
 <script setup>
+import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import ConversationList from './ConversationList.vue'
 import UserProfile from './UserProfile.vue'
 import PlusIcon from './icons/PlusIcon.vue'
+import FolderIcon from './icons/FolderIcon.vue'
 import ChevronLeftIcon from './icons/ChevronLeftIcon.vue'
 import ChevronRightIcon from './icons/ChevronRightIcon.vue'
 
+const router = useRouter()
+const route = useRoute()
 const chatStore = useChatStore()
 
 const handleNewConversation = () => {
+  // 创建新对话
   chatStore.createConversation()
+  // 立即保存新对话ID到 localStorage，防止被 initialize() 覆盖
+  localStorage.setItem('chat_current_conversation_id', chatStore.currentConversationId)
+  
+  // 如果当前在知识库页面，导航回对话界面
+  if (route.path === '/knowledge') {
+    router.push('/')
+  }
+}
+
+const handleKnowledgeManagement = () => {
+  router.push('/knowledge')
 }
 </script>
 
@@ -60,9 +92,15 @@ const handleNewConversation = () => {
   transition: width 0.3s ease, background-color 0.3s ease;
   border-right: 1px solid var(--border-color);
   flex-shrink: 0;
+  position: relative;
   
   &.collapsed {
     width: 64px;
+    
+    // 确保折叠状态下内容居中
+    .sidebar-header {
+      align-items: center;
+    }
   }
   
   // 移动端响应式
@@ -72,11 +110,12 @@ const handleNewConversation = () => {
     top: 0;
     z-index: 1000;
     transform: translateX(0);
-    transition: transform 0.3s ease, background-color 0.3s ease;
+    transition: transform 0.3s ease, background-color 0.3s ease, width 0.3s ease;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
     
     &.collapsed {
       transform: translateX(-100%);
+      width: 260px; // 移动端折叠时完全隐藏，保持原始宽度
     }
   }
   
@@ -93,18 +132,19 @@ const handleNewConversation = () => {
 .sidebar-header {
   padding: 8px;
   display: flex;
+  flex-direction: column;
   gap: 8px;
   border-bottom: 1px solid var(--border-color);
   transition: padding 0.3s ease;
   
   .sidebar.collapsed & {
-    flex-direction: column;
     align-items: center;
     padding: 8px;
     gap: 8px;
   }
   
-  .new-chat-button {
+  .new-chat-button,
+  .knowledge-button {
     flex: 1;
     display: flex;
     align-items: center;
@@ -126,9 +166,15 @@ const handleNewConversation = () => {
     }
     
     &.collapsed {
-      flex: 0;
+      flex: 0 0 auto;
       width: 48px;
-      padding: 12px;
+      height: 48px;
+      padding: 0;
+      margin: 0 auto;
+      
+      span {
+        display: none;
+      }
       
       .icon {
         margin: 0;
@@ -144,7 +190,8 @@ const handleNewConversation = () => {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
+    width: 100%;
+    min-height: 48px;
     padding: 12px;
     background-color: transparent;
     border: 1px solid var(--border-color-hover);
@@ -156,6 +203,10 @@ const handleNewConversation = () => {
     
     .sidebar.collapsed & {
       width: 48px;
+      height: 48px;
+      min-height: 48px;
+      padding: 0;
+      margin: 0 auto;
     }
     
     &:hover {

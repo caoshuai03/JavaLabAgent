@@ -20,6 +20,9 @@ export const useChatStore = defineStore('chat', () => {
   // 侧边栏折叠状态
   const sidebarCollapsed = ref(false)
   
+  // 输入框聚焦标志
+  const shouldFocusInput = ref(false)
+  
   // 当前对话
   const currentConversation = computed(() => {
     return conversations.value.find(conv => conv.id === currentConversationId.value)
@@ -35,24 +38,45 @@ export const useChatStore = defineStore('chat', () => {
     return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }
   
-  // 新建对话
+  // 新建对话（不立即添加到列表，只在发送第一条消息时添加）
   const createConversation = () => {
     const newId = generateConversationId()
+    currentConversationId.value = newId
+    messages.value = []
+    
+    // 立即保存新对话ID到 localStorage，防止被 initialize() 覆盖
+    localStorage.setItem('chat_current_conversation_id', newId)
+    
+    // 不立即添加到列表，不保存到 localStorage
+    // 只有在用户发送第一条消息时才会添加到列表
+    
+    // 触发输入框聚焦
+    focusInput()
+    
+    return newId
+  }
+  
+  // 将当前对话添加到列表（仅在首次发送消息时调用）
+  // 注意：此方法由 addMessage 调用，在添加消息之前调用，所以此时 messages.value.length === 0
+  const addConversationToList = () => {
+    if (!currentConversationId.value) return
+    
+    // 检查是否已经在列表中
+    const exists = conversations.value.find(conv => conv.id === currentConversationId.value)
+    if (exists) return
+    
+    // 创建新对话对象并添加到列表
     const newConversation = {
-      id: newId,
+      id: currentConversationId.value,
       title: '新对话',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
     
     conversations.value.unshift(newConversation)
-    currentConversationId.value = newId
-    messages.value = []
     
     // 保存到 localStorage
     saveConversationsToStorage()
-    
-    return newId
   }
   
   // 切换对话
@@ -75,6 +99,9 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       messages.value = []
     }
+    
+    // 触发输入框聚焦
+    focusInput()
   }
   
   // 删除对话
@@ -131,6 +158,20 @@ export const useChatStore = defineStore('chat', () => {
     if (!convId) {
       const newId = createConversation()
       conversationId = newId
+    }
+    
+    // 如果是用户的第一条消息，将对话添加到列表
+    // 必须确保：1) 是用户消息 2) 当前消息列表为空（真正的新会话）3) 会话不在列表中
+    if (sender === 'user') {
+      // 检查是否是真正的新会话：消息列表必须为空
+      const isNewConversation = messages.value.length === 0
+      // 检查会话是否已经在列表中
+      const isInList = conversations.value.find(conv => conv.id === convId) !== undefined
+      
+      // 只有在真正的新会话且不在列表中时，才添加到列表
+      if (isNewConversation && !isInList) {
+        addConversationToList()
+      }
     }
     
     const message = {
@@ -241,6 +282,11 @@ export const useChatStore = defineStore('chat', () => {
     sidebarCollapsed.value = !sidebarCollapsed.value
   }
   
+  // 触发输入框聚焦
+  const focusInput = () => {
+    shouldFocusInput.value = true
+  }
+  
   // 初始化：从 localStorage 加载数据
   const initialize = () => {
     loadConversationsFromStorage()
@@ -254,12 +300,14 @@ export const useChatStore = defineStore('chat', () => {
     isLoading,
     isStreaming,
     sidebarCollapsed,
+    shouldFocusInput,
     
     // 计算属性
     currentConversation,
     
     // 方法
     createConversation,
+    addConversationToList,
     switchConversation,
     deleteConversation,
     renameConversation,
@@ -268,6 +316,7 @@ export const useChatStore = defineStore('chat', () => {
     updateLastMessage,
     clearMessages,
     toggleSidebar,
+    focusInput,
     initialize,
     saveCurrentConversationMessages
   }

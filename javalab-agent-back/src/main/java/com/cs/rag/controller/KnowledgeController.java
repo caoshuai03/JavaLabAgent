@@ -30,9 +30,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Tag(name = "KnowledgeController", description = "知识库管理接口")
@@ -67,27 +67,78 @@ public class KnowledgeController {
             return ResultUtils.error(ErrorCode.PARAMS_ERROR, "请上传文件");
         }
         for (MultipartFile file : files) {
-            Resource resource = file.getResource();
-            TikaDocumentReader tkReader = new TikaDocumentReader(resource);
-            List<Document> documents = tkReader.get();
-            List<Document> splitDocuments = tokenTextSplitter.apply(documents);
-            vectorStore.add(splitDocuments);
+            String originalFilename = file.getOriginalFilename();
+            log.info("开始处理文件上传: {}", originalFilename);
+            
             try {
-                String originalFilename = file.getOriginalFilename();
-                String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-                String objectName = UUID.randomUUID() + extension;
+                // 1. 读取文档内容
+                Resource resource = file.getResource();
+                log.debug("文件资源获取成功: {}", originalFilename);
+                
+                TikaDocumentReader tkReader = new TikaDocumentReader(resource);
+                List<Document> documents = tkReader.get();
+                log.info("文档解析成功，原始文档数: {}", documents.size());
+                
+                // 2. 文档分割
+                List<Document> splitDocuments = tokenTextSplitter.apply(documents);
+                log.info("文档分割完成，分割后文档数: {}", splitDocuments.size());
+                
+                // 3. 向量化存储（添加异常处理和日志）
+                List<String> vectorIds = new ArrayList<>();
+                try {
+                    log.info("开始向量化存储，文档数量: {}", splitDocuments.size());
+                    vectorStore.add(splitDocuments);
+                    
+                    // 获取向量ID
+                    vectorIds = splitDocuments.stream()
+                            .map(Document::getId)
+                            .collect(Collectors.toList());
+                    
+                    log.info("向量化存储成功，文件: {}, 向量ID数量: {}, 向量ID列表: {}", 
+                            originalFilename, vectorIds.size(), vectorIds);
+                } catch (Exception e) {
+                    log.error("向量化存储失败，文件: {}, 错误信息: {}", originalFilename, e.getMessage(), e);
+                    // 即使向量化失败，也继续执行OSS上传和数据库保存
+                    // 但vectorId将为空，后续可以通过重新上传来修复
+                }
+                
+                // 4. OSS上传
+                int lastDotIndex = originalFilename.lastIndexOf(".");
+                String nameWithoutExt = lastDotIndex > 0 
+                        ? originalFilename.substring(0, lastDotIndex) 
+                        : originalFilename;
+                String extension = lastDotIndex > 0 
+                        ? originalFilename.substring(lastDotIndex) 
+                        : "";
+                
+                // 清理文件名中的非法字符
+                nameWithoutExt = nameWithoutExt.replaceAll("[\\\\/:*?\"<>|]", "_");
+                
+                // 生成有意义的文件名：原始文件名_时间戳.扩展名
+                String timestamp = String.valueOf(System.currentTimeMillis());
+                String objectName = nameWithoutExt + "_" + timestamp + extension;
+                
+                log.info("开始上传文件到OSS: {}", objectName);
                 String url = aliOssUtil.upload(file.getBytes(), objectName);
+                log.info("OSS上传成功，URL: {}", url);
+                
+                // 5. 保存数据库记录
                 long currMillis = System.currentTimeMillis();
                 aliOssFileService.save(AliOssFile.builder()
                         .fileName(originalFilename)
-                        .vectorId(JSON.toJSONString(splitDocuments.stream().map(Document::getId).collect(Collectors.toList())))
+                        .vectorId(JSON.toJSONString(vectorIds))
                         .url(url)
                         .createTime(new Date(currMillis))
                         .updateTime(new Date(currMillis))
                         .build());
+                log.info("数据库记录保存成功，文件: {}", originalFilename);
+                
             } catch (IOException e) {
+                log.error("文件处理IO异常，文件: {}, 错误信息: {}", originalFilename, e.getMessage(), e);
                 e.printStackTrace();
-                log.info("文件上传OSS失败" + file.getOriginalFilename());
+            } catch (Exception e) {
+                log.error("文件上传处理异常，文件: {}, 错误信息: {}", originalFilename, e.getMessage(), e);
+                e.printStackTrace();
             }
         }
 
@@ -116,7 +167,6 @@ public class KnowledgeController {
     public BaseResponse downloadFiles(@RequestParam List<Long> ids){
         return aliOssFileService.downloadFiles(ids);
     }
-
 
 
 

@@ -22,8 +22,8 @@ onMounted(() => {
     chatStore.sidebarCollapsed = true
   }
   
-  // 如果没有对话，创建第一个对话
-  if (chatStore.conversations.length === 0) {
+  // 如果没有当前对话ID，创建一个新对话（但不添加到列表，直到用户发送第一条消息）
+  if (!chatStore.currentConversationId) {
     chatStore.createConversation()
   }
 })

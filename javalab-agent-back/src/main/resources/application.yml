@@ -20,9 +20,9 @@ spring:
 
     vectorstore:
       pgvector:
-      index-type: HNSW
-      distance-type: COSINE_DISTANCE
-      dimensions: 1536
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1536
   datasource:
       username: postgres
       password: admin

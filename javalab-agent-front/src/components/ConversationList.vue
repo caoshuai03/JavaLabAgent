@@ -15,13 +15,20 @@
 </template>
 
 <script setup>
+import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import ConversationItem from './ConversationItem.vue'
 
+const router = useRouter()
+const route = useRoute()
 const chatStore = useChatStore()
 
 const handleSelect = (conversationId) => {
   chatStore.switchConversation(conversationId)
+  // 如果当前在知识库页面，导航回聊天页面
+  if (route.path === '/knowledge') {
+    router.push('/')
+  }
 }
 
 const handleDelete = (conversationId) => {

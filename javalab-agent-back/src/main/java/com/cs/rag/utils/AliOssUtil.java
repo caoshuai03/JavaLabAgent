@@ -7,19 +7,19 @@ import com.aliyun.oss.OSSException;
 import com.aliyun.oss.model.GetObjectRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.concurrent.TimeUnit;
 
 @Data
 @AllArgsConstructor
 @Slf4j
 public class AliOssUtil {
+
+    private static final String RAG_FOLDER_PREFIX = "java-lab-agent-rag/";
 
     private String endpoint;
     private String accessKeyId;
@@ -34,13 +34,15 @@ public class AliOssUtil {
      * @return
      */
     public String upload(byte[] bytes, String objectName) {
+        // 添加文件夹前缀
+        String fullObjectName = RAG_FOLDER_PREFIX + objectName;
 
         // 创建OSSClient实例。
         OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
 
         try {
             // 创建PutObject请求。
-            ossClient.putObject(bucketName, objectName, new ByteArrayInputStream(bytes));
+            ossClient.putObject(bucketName, fullObjectName, new ByteArrayInputStream(bytes));
         } catch (OSSException oe) {
             System.out.println("Caught an OSSException, which means your request made it to OSS, "
                     + "but was rejected with an error response for some reason.");
@@ -66,7 +68,7 @@ public class AliOssUtil {
                 .append(".")
                 .append(endpoint)
                 .append("/")
-                .append(objectName);
+                .append(fullObjectName);
 
         log.info("文件上传到:{}", stringBuilder.toString());
 
@@ -113,9 +115,13 @@ public class AliOssUtil {
     public void download(String objectName) {
         OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         // 填写Object下载到本地的完整路径。
-        // 修改点1：构造完整文件路径
+        // 如果objectName不包含文件夹前缀，则添加前缀
+        String fullObjectName = objectName.startsWith(RAG_FOLDER_PREFIX) 
+                ? objectName 
+                : RAG_FOLDER_PREFIX + objectName;
+        
         String dirPath = "D:\\fileOSS";
-        String filePath = dirPath + File.separator + objectName.replace("/", "_");
+        String filePath = dirPath + File.separator + fullObjectName.replace("/", "_");
 
 
         try {
@@ -124,8 +130,8 @@ public class AliOssUtil {
                 dir.mkdirs();
             }
 
-            // 修改点3：使用正确的文件路径
-            ossClient.getObject(new GetObjectRequest(bucketName, objectName), new File(filePath));
+            // 使用正确的文件路径（包含文件夹前缀）
+            ossClient.getObject(new GetObjectRequest(bucketName, fullObjectName), new File(filePath));
 
         } catch (OSSException oe) {
             System.out.println("Caught an OSSException, which means your request made it to OSS, "
