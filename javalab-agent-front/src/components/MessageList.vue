@@ -45,16 +45,13 @@ import MessageItem from './MessageItem.vue'
 const chatStore = useChatStore()
 const messageListRef = ref(null)
 
-// 滚动状态
-const userScrolled = ref(false) // 用户是否手动滚动
-const isAtBottom = ref(true) // 是否在底部
-const showScrollToBottomButton = ref(false) // 是否显示"到底部"按钮
-const autoScrollEnabled = ref(true) // 是否启用自动滚动
+const userScrolled = ref(false)
+const isAtBottom = ref(true)
+const showScrollToBottomButton = ref(false)
+const autoScrollEnabled = ref(true)
 
-// 距离底部的阈值（像素）
 const BOTTOM_THRESHOLD = 100
 
-// 检查是否接近底部
 const checkIsAtBottom = () => {
   if (!messageListRef.value) return false
   
@@ -64,16 +61,13 @@ const checkIsAtBottom = () => {
   return distanceFromBottom <= BOTTOM_THRESHOLD
 }
 
-// 滚动事件处理（节流）
 let scrollTimer = null
-let isUserScrolling = false // 标记用户是否正在主动滚动
+let isUserScrolling = false
 let scrollTimeout = null
 
 const handleScroll = () => {
-  // 标记用户正在滚动
   isUserScrolling = true
   
-  // 清除之前的超时
   if (scrollTimeout) {
     clearTimeout(scrollTimeout)
   }
@@ -93,13 +87,11 @@ const handleScroll = () => {
     const wasAtBottom = isAtBottom.value
     isAtBottom.value = checkIsAtBottom()
     
-    // 如果之前不在底部，现在滚动到底部了，恢复自动滚动
     if (!wasAtBottom && isAtBottom.value) {
       userScrolled.value = false
       autoScrollEnabled.value = true
       showScrollToBottomButton.value = false
     } else if (!isAtBottom.value) {
-      // 如果不在底部，标记为用户手动滚动，禁用自动滚动
       userScrolled.value = true
       autoScrollEnabled.value = false
       showScrollToBottomButton.value = true
@@ -107,11 +99,9 @@ const handleScroll = () => {
   }, 100)
 }
 
-// 滚动到底部
 const scrollToBottom = (force = false) => {
   if (!messageListRef.value) return
   
-  // 如果启用自动滚动或者是强制滚动，则滚动到底部
   if (autoScrollEnabled.value || force) {
     nextTick(() => {
       if (messageListRef.value) {
@@ -131,18 +121,15 @@ const handleScrollToBottom = () => {
   userScrolled.value = false
 }
 
-// 监听消息变化
 watch(
   () => chatStore.messages.length,
   () => {
-    // 新消息到达时，只有在启用自动滚动且用户没有正在滚动时才滚动
     if (autoScrollEnabled.value && !isUserScrolling) {
       scrollToBottom()
     }
   }
 )
 
-// 监听最后一条消息的内容变化（流式更新）
 watch(
   () => {
     const messages = chatStore.messages
@@ -151,18 +138,15 @@ watch(
     return lastMessage ? lastMessage.content : ''
   },
   () => {
-    // 只有在流式输出、启用自动滚动、且用户没有正在滚动时才自动滚动
     if (chatStore.isStreaming && autoScrollEnabled.value && !isUserScrolling) {
       scrollToBottom()
     }
   }
 )
 
-// 监听流式状态变化
 watch(
   () => chatStore.isStreaming,
   (isStreaming) => {
-    // 开始流式输出时，如果启用自动滚动且用户没有正在滚动，则滚动到底部
     if (isStreaming && autoScrollEnabled.value && !isUserScrolling) {
       scrollToBottom()
     }
@@ -195,7 +179,7 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px 0;
+  padding: 32px 0;
   
   &::-webkit-scrollbar {
     width: 8px;
@@ -304,4 +288,3 @@ onMounted(() => {
   }
 }
 </style>
-

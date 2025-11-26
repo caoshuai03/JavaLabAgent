@@ -33,7 +33,7 @@ npm install
 
 启动后访问：`http://localhost`
 
-`docker-compose down` 停止容器
+
 ### 3. 代码更新
 
 代码更新后执行构建：
@@ -41,6 +41,8 @@ npm install
 ```bash
 npm run build
 ```
+
+`docker-compose down` 停止容器
 
 构建完成后，由于 Docker volume 挂载，新文件会自动生效。如遇缓存问题，可：
 - 清除浏览器缓存（Ctrl+F5 强制刷新）

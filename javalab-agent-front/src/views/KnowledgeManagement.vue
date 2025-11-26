@@ -179,12 +179,16 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { knowledgeApi } from '../api/knowledge'
+import { useChatStore } from '../stores/chat'
 import Sidebar from '../components/Sidebar.vue'
 import UploadIcon from '../components/icons/UploadIcon.vue'
 import DownloadIcon from '../components/icons/DownloadIcon.vue'
 import TrashIcon from '../components/icons/TrashIcon.vue'
 import FolderIcon from '../components/icons/FolderIcon.vue'
 import SearchIcon from '../components/icons/SearchIcon.vue'
+
+// 初始化 chatStore
+const chatStore = useChatStore()
 
 // 状态
 const fileList = ref([])
@@ -200,7 +204,6 @@ const downloading = ref(false)
 const fileInput = ref(null)
 const pageInput = ref(1)
 
-// 计算属性
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 const isAllSelected = computed(() => {
   return fileList.value.length > 0 && selectedIds.value.length === fileList.value.length
@@ -218,14 +221,12 @@ const handleSearch = () => {
   }, 300)
 }
 
-// 清除搜索
 const clearSearch = () => {
   searchKeyword.value = ''
   currentPage.value = 1
   fetchFileList()
 }
 
-// 获取文件列表
 const fetchFileList = async () => {
   loading.value = true
   try {
@@ -239,7 +240,6 @@ const fetchFileList = async () => {
     const response = await knowledgeApi.getFileList(params)
     if (response.data.code === 0) {
       const data = response.data.data
-      // MyBatis Plus IPage结构：{ records: [], total: number, current: number, size: number, pages: number }
       fileList.value = data.records || data.list || []
       total.value = data.total || 0
       pageInput.value = currentPage.value
@@ -255,7 +255,6 @@ const fetchFileList = async () => {
   }
 }
 
-// 格式化日期
 const formatDate = (dateString) => {
   if (!dateString) return ''
   const date = new Date(dateString)
@@ -268,7 +267,6 @@ const formatDate = (dateString) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
-// 上传文件
 const handleUpload = () => {
   fileInput.value?.click()
 }
@@ -303,7 +301,6 @@ const handleFileSelect = async (event) => {
   }
 }
 
-// 选择文件
 const handleSelectFile = (id, checked) => {
   if (checked) {
     if (!selectedIds.value.includes(id)) {
@@ -314,7 +311,6 @@ const handleSelectFile = (id, checked) => {
   }
 }
 
-// 全选/取消全选
 const handleSelectAll = (event) => {
   if (event.target.checked) {
     selectedIds.value = fileList.value.map(file => file.id)
@@ -323,7 +319,6 @@ const handleSelectAll = (event) => {
   }
 }
 
-// 行点击
 const handleRowClick = (id) => {
   const index = selectedIds.value.indexOf(id)
   if (index > -1) {
@@ -333,7 +328,6 @@ const handleRowClick = (id) => {
   }
 }
 
-// 删除文件
 const handleDelete = async (id, fileName) => {
   if (!confirm(`确定要删除文件 "${fileName}" 吗？`)) {
     return
@@ -341,7 +335,6 @@ const handleDelete = async (id, fileName) => {
   await deleteFiles([id])
 }
 
-// 批量删除
 const handleBatchDelete = async () => {
   if (selectedIds.value.length === 0) return
   if (!confirm(`确定要删除选中的 ${selectedIds.value.length} 个文件吗？`)) {
@@ -369,12 +362,10 @@ const deleteFiles = async (ids) => {
   }
 }
 
-// 下载文件
 const handleDownload = async (id) => {
   await downloadFiles([id])
 }
 
-// 批量下载
 const handleBatchDownload = async () => {
   if (selectedIds.value.length === 0) return
   await downloadFiles([...selectedIds.value])
@@ -429,7 +420,6 @@ const downloadFiles = async (ids) => {
   }
 }
 
-// 分页
 const goToPage = (page) => {
   if (page < 1 || page > totalPages.value) return
   currentPage.value = page
@@ -441,15 +431,14 @@ const handlePageSizeChange = () => {
   fetchFileList()
 }
 
-// 监听页码输入
 watch(pageInput, (newVal) => {
   if (newVal >= 1 && newVal <= totalPages.value) {
     currentPage.value = newVal
   }
 })
 
-// 初始化
 onMounted(() => {
+  chatStore.initialize()
   fetchFileList()
 })
 </script>
@@ -513,17 +502,16 @@ onMounted(() => {
     align-items: center;
     gap: 8px;
     padding: 10px 16px;
-    background-color: var(--accent-color);
-    color: white;
-    border: none;
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
     transition: all 0.2s ease;
     
     &:hover:not(:disabled) {
-      opacity: 0.9;
-      transform: translateY(-1px);
+      background-color: var(--bg-hover);
     }
     
     &:disabled {

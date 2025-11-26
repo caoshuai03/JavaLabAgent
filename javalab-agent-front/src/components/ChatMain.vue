@@ -32,14 +32,12 @@ const toggleSidebar = () => {
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth <= 768
-  // 移动端默认折叠侧边栏
   if (isMobile.value && !chatStore.sidebarCollapsed) {
     chatStore.sidebarCollapsed = true
   }
 }
 
 const handleMainClick = () => {
-  // 移动端点击主区域时关闭侧边栏
   if (isMobile.value && !chatStore.sidebarCollapsed) {
     chatStore.sidebarCollapsed = true
   }
@@ -63,10 +61,9 @@ onUnmounted(() => {
   height: 100vh;
   background-color: var(--bg-primary);
   overflow: hidden;
-  min-width: 0; // 防止 flex 子元素溢出
+  min-width: 0;
   transition: background-color 0.3s ease;
   
-  // 移动端响应式
   @media (max-width: 768px) {
     width: 100%;
     position: relative;
@@ -101,4 +98,3 @@ onUnmounted(() => {
   }
 }
 </style>
-

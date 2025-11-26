@@ -61,22 +61,23 @@ public class AiRagController {
     @GetMapping(value = "/rag")
     @Loggable
     public Flux<String> generate(@RequestParam(value = "message", defaultValue = "你好") String message,
-                                  @RequestParam(value = "conversationId", required = false) String conversationId,
-                                  @RequestParam(value = "enableWebSearch", required = false, defaultValue = "false") Boolean enableWebSearch) throws IOException {
+                                 @RequestParam(value = "conversationId", required = false) String conversationId,
+                                 @RequestParam(value = "enableWebSearch", required = false, defaultValue = "false") Boolean enableWebSearch)
+            throws IOException {
         // 敏感词检查
         List<SensitiveWord> list = sensitiveWordService.list();
-        for(SensitiveWord sensitiveWord: list){
-            if (message.contains(sensitiveWord.getWord())){
-                throw new BusinessException(ErrorCode.PARAMS_ERROR,"包含敏感词:" + sensitiveWord.getWord());
+        for (SensitiveWord sensitiveWord : list) {
+            if (message.contains(sensitiveWord.getWord())) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "包含敏感词:" + sensitiveWord.getWord());
             }
         }
-        
+
         // 网络搜索（可选）
         if (Boolean.TRUE.equals(enableWebSearch)) {
             List<Map<String, String>> maps = searchUtils.tavilySearch(message);
-            if (!maps.isEmpty()){
+            if (!maps.isEmpty()) {
                 for (Map<String, String> map : maps) {
-                    message = message + "网络来源:"+ "\n" + map.get("title") + "\n" + map.get("content");
+                    message = message + "网络来源:" + "\n" + map.get("title") + "\n" + map.get("content");
                 }
             }
         }
@@ -84,11 +85,23 @@ public class AiRagController {
         // RAG检索：从向量数据库检索相关知识库内容
         SearchRequest ragSearchRequest = SearchRequest.builder()
                 .query(message)
-                .topK(8)
-                .similarityThreshold(0.7)
+                .topK(5)
+                .similarityThreshold(0.2)
                 .build();
-        
+
         List<Document> ragDocuments = vectorStore.similaritySearch(ragSearchRequest);
+        log.info("检索到的文档数量: {}", (ragDocuments != null ? ragDocuments.size() : 0));
+
+        if (ragDocuments != null && !ragDocuments.isEmpty()) {
+            for (int i = 0; i < ragDocuments.size(); i++) {
+                Document doc = ragDocuments.get(i);
+                String title = doc.getText().split("\n")[0];
+                log.info("{}、文档标题: {}, 相似度: {}", (i + 1), title, doc.getScore());
+            }
+        } else {
+            log.info("未检索到相关文档");
+        }
+
         if (!ragDocuments.isEmpty()) {
             StringBuilder knowledgeBaseContent = new StringBuilder("\n\n知识库来源:\n");
             for (Document doc : ragDocuments) {
@@ -100,8 +113,8 @@ public class AiRagController {
         ChatClient chatClient = ChatClient.builder(chatModel).build();
 
         // 设置对话ID，默认使用"0"
-        String finalConversationId = (conversationId != null && !conversationId.trim().isEmpty()) 
-                ? conversationId 
+        String finalConversationId = (conversationId != null && !conversationId.trim().isEmpty())
+                ? conversationId
                 : "0";
 
         // 流式返回对话结果

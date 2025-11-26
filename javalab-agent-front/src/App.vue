@@ -4,6 +4,7 @@
 
 <script setup>
 // 导入 highlight.js 的 CSS
+// 使用 github 主题（浅色）
 import 'highlight.js/styles/github.css'
 </script>
 
@@ -18,7 +19,7 @@ html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  font-family: 
+  font-family:
     "Inter",
     -apple-system,
     BlinkMacSystemFont,
@@ -41,7 +42,7 @@ html, body {
   width: 100%;
 }
 
-// 浅色主题变量
+// 浅色主题变量 - ChatGPT风格
 :root {
   --bg-primary: #ffffff;
   --bg-secondary: #f7f7f8;
@@ -54,9 +55,9 @@ html, body {
   --text-secondary: #6e6e80;
   --text-tertiary: #8e8ea0;
   --accent-color: #10a37f;
-  --user-message-bg: #f7f7f8;
+  --user-message-bg: #f0f0f0;
   --user-message-text: #353740;
-  --assistant-message-bg: #f9f9f9;
+  --assistant-message-bg: #ffffff;
   --assistant-message-text: #353740;
   --input-bg: #ffffff;
   --input-text: #353740;
@@ -70,9 +71,9 @@ html, body {
   .hljs {
     display: block;
     overflow-x: auto;
-    padding: 0.5em;
-    background: #f6f8fa;
-    color: #24292e;
+    padding: 0;
+    background: transparent;
+    color: inherit;
   }
 }
 </style>

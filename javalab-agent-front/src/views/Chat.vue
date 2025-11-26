@@ -14,15 +14,12 @@ import ChatMain from '../components/ChatMain.vue'
 const chatStore = useChatStore()
 
 onMounted(() => {
-  // 初始化对话 store，从 localStorage 加载数据
   chatStore.initialize()
   
-  // 移动端默认折叠侧边栏
   if (window.innerWidth <= 768) {
     chatStore.sidebarCollapsed = true
   }
   
-  // 如果没有当前对话ID，创建一个新对话（但不添加到列表，直到用户发送第一条消息）
   if (!chatStore.currentConversationId) {
     chatStore.createConversation()
   }

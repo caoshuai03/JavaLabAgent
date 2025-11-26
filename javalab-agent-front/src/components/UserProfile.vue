@@ -301,4 +301,3 @@ const vClickOutside = {
   transform: translateY(10px);
 }
 </style>
-
