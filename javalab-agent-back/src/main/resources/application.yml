@@ -1,5 +1,5 @@
 server:
-  port: 6787
+  port: 8989
 
 spring:
   servlet:

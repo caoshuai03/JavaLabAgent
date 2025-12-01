@@ -38,6 +38,15 @@ import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvis
 @RestController
 @RequestMapping(ApplicationConstant.API_VERSION + "/ai")
 public class AiRagController {
+    // 相似度阈值
+    public static final double SIMILARITY = 0.7;
+
+    // 检索数量
+    public static final int TOP_K = 5;
+
+    // 记忆检索大小
+    public static final int MEMORY_SIZE = 10;
+
     @Autowired
     private PromptService promptService;
 
@@ -85,9 +94,11 @@ public class AiRagController {
         // RAG检索：从向量数据库检索相关知识库内容
         SearchRequest ragSearchRequest = SearchRequest.builder()
                 .query(message)
-                .topK(5)
-                .similarityThreshold(0.2)
+                .topK(TOP_K)
+                .similarityThreshold(SIMILARITY)
                 .build();
+
+        log.info("相似度阈值: {}, 检索数量: {}", SIMILARITY, TOP_K);
 
         List<Document> ragDocuments = vectorStore.similaritySearch(ragSearchRequest);
         log.info("检索到的文档数量: {}", (ragDocuments != null ? ragDocuments.size() : 0));
@@ -123,7 +134,7 @@ public class AiRagController {
                 .advisors(new MessageChatMemoryAdvisor(chatMemory))
                 .advisors(a -> a
                         .param(CHAT_MEMORY_CONVERSATION_ID_KEY, finalConversationId)
-                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 20))
+                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, MEMORY_SIZE))
                 .user(message)
                 .stream()
                 .content();

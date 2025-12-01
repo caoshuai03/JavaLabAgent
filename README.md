@@ -115,7 +115,71 @@ mvn spring-boot:run
 
 
 
-### 4. 验证运行
 
-启动成功后，服务默认运行在 `http://localhost:8989`
+## 🎨 前端部署
+
+### 1. 环境要求
+
+- **Node.js**: ^20.19.0 或 >=22.12.0
+- **Docker Desktop**: 用于容器化部署
+
+### 2. 安装依赖
+
+```bash
+# 进入前端项目目录
+cd javalab-agent-front
+
+# 安装依赖
+npm install
+```
+
+### 3. 启动服务
+
+#### 3.1 Windows 环境
+
+1. 打开 Docker Desktop
+2. 进入项目目录：
+   ```bash
+   cd javalab-agent-front
+   ```
+3. 启动 nginx 容器：
+   ```bash
+   docker-compose up -d
+   ```
+
+启动成功后，前端服务运行在 `http://localhost`
+
+### 4. 开发流程
+
+#### 4.1 代码更新
+
+代码修改后需要重新构建：
+
+```bash
+npm run build
+```
+
+#### 4.2 应用更新
+
+由于使用了 Docker volume 挂载，构建完成后新文件会自动生效。如遇缓存问题：
+
+- 清除浏览器缓存（Ctrl+F5 强制刷新）
+- 或重启容器：`docker-compose restart nginx`
+
+#### 4.3 停止服务
+
+```bash
+docker-compose down
+```
+
+## ✨ 功能特性
+
+### 前端功能
+
+- 🔐 **用户认证**：登录和权限管理
+- 💬 **实时聊天**：流畅的对话界面
+- 📡 **SSE 流式传输**：实时消息推送
+- 📱 **响应式设计**：适配多种设备
+- 🛡️ **路由保护**：认证用户访问控制
+- 📚 **知识库管理**：文档上传和管理界面
 
