@@ -5,12 +5,7 @@
       ref="messageListRef"
       @scroll="handleScroll"
     >
-      <div v-if="chatStore.messages.length === 0" class="empty-state">
-        <div class="empty-content">
-          <h2>开始新的对话</h2>
-          <p>在下方输入框中输入您的问题，AI 助手将为您提供帮助。</p>
-        </div>
-      </div>
+
       
       <MessageItem
         v-for="message in chatStore.messages"
@@ -198,28 +193,7 @@ onMounted(() => {
     }
   }
   
-  .empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    
-    .empty-content {
-      text-align: center;
-      color: var(--text-secondary);
-      
-      h2 {
-        color: var(--text-primary);
-        font-size: 24px;
-        margin-bottom: 8px;
-        font-weight: 600;
-      }
-      
-      p {
-        font-size: 16px;
-      }
-    }
-  }
+
   
   .typing-indicator {
     display: flex;

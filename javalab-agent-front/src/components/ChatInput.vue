@@ -19,7 +19,7 @@
           class="action-button stop-button"
           title="停止生成"
         >
-          停止
+          <svg stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
         </button>
         <button
           v-else
@@ -28,7 +28,7 @@
           class="action-button send-button"
           title="发送 (Enter)"
         >
-          发送
+          <svg stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
         </button>
       </div>
     </div>
@@ -46,8 +46,8 @@ const inputRef = ref(null)
 const showScrollbar = ref(false)
 
 // 高度常量配置
-const MIN_HEIGHT = 52 // 最小高度 (padding上下各14px + 一行文字高度24px)
-const MAX_HEIGHT = 200 // 最大高度 (约6-7行，包含padding)
+const MIN_HEIGHT = 24 // 文字行高
+const MAX_HEIGHT = 200 // 最大高度
 
 const canSend = computed(() => {
   return inputText.value.trim().length > 0 && !chatStore.isStreaming
@@ -59,7 +59,8 @@ const handleInput = () => {
   if (inputRef.value) {
     inputRef.value.style.height = 'auto'
     const scrollHeight = inputRef.value.scrollHeight
-
+    
+    // 这里的24是基础高度，根据内容调整
     let newHeight = Math.max(MIN_HEIGHT, Math.min(scrollHeight, MAX_HEIGHT))
     inputRef.value.style.height = newHeight + 'px'
 
@@ -180,7 +181,7 @@ watch(() => chatStore.shouldFocusInput, (shouldFocus) => {
 
 onMounted(() => {
   if (inputRef.value) {
-    inputRef.value.style.height = '52px'
+    inputRef.value.style.height = MIN_HEIGHT + 'px'
   }
 })
 
@@ -193,9 +194,9 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 .chat-input-container {
-  padding: 16px 24px;
+  padding: 0 24px 0 24px; // 底部padding移除，留给footer
   background-color: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
+  // border-top: 1px solid var(--border-color); // Removed border-top
   transition: background-color 0.3s ease, border-color 0.3s ease;
 
   .input-wrapper {
@@ -205,42 +206,43 @@ onUnmounted(() => {
     gap: 12px;
     align-items: flex-end;
     position: relative;
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 26px; // 圆角
+    padding: 10px 10px 10px 16px; // 内边距
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
   
   @media (max-width: 768px) {
-    padding: 12px 16px;
+    padding: 0 16px 0 16px;
     
     .input-wrapper {
       gap: 8px;
+      padding: 8px 8px 8px 12px;
     }
   }
 }
 
 .chat-input {
   flex: 1;
-  padding: 14px 20px;
-  background-color: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: 26px;
+  padding: 0;
+  background-color: transparent;
+  border: none;
   color: var(--input-text);
   font-size: 16px;
   font-family: inherit;
   line-height: 1.5;
   resize: none;
-  min-height: 52px;
+  min-height: 24px;
   max-height: 200px;
   overflow-y: hidden; // 默认隐藏滚动条
-  transition: height 0.2s ease, border-color 0.2s ease, background-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease;
+  outline: none;
+  margin-bottom: 2px; // 对齐按钮
 
   // 当需要显示滚动条时
   &.has-scrollbar {
     overflow-y: auto;
-  }
-
-  &:focus {
-    outline: none;
-    border-color: var(--input-border);
-    box-shadow: none;
   }
 
   &:disabled {
@@ -254,27 +256,22 @@ onUnmounted(() => {
   }
   
   @media (max-width: 768px) {
-    padding: 12px 16px;
     font-size: 15px;
-    min-height: 48px;
-    border-radius: 24px;
   }
 
-  // 滚动条样式优化 - 更细更精致
+  // 滚动条样式优化
   &::-webkit-scrollbar {
     width: 6px;
   }
 
   &::-webkit-scrollbar-track {
     background: transparent;
-    border-radius: 3px;
   }
 
   &::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
-    transition: background 0.2s ease;
-
+    
     &:hover {
       background: rgba(0, 0, 0, 0.3);
     }
@@ -285,55 +282,43 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-
+  
   .action-button {
-    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     border: none;
-    border-radius: 22px;
-    font-size: 14px;
-    font-weight: 500;
+    border-radius: 50%; // 圆形
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-
-    &:active {
-      transform: scale(0.98);
-    }
+    color: white;
 
     &.send-button {
-      background-color: #10a37f;
-      color: white;
-
+      background-color: #19c37d; // ChatGPT 绿色
+      
       &:hover:not(:disabled) {
-        background-color: #0d8f6e;
-        box-shadow: 0 2px 6px rgba(16, 163, 127, 0.25);
-        transform: translateY(-1px);
+        background-color: #1a7f64;
       }
 
       &:disabled {
-        background-color: var(--border-color-hover);
-        color: var(--text-secondary);
+        background-color: #e5e5e5; // 禁用时灰色
+        color: #acacac;
         cursor: not-allowed;
-        box-shadow: none;
-        transform: none;
       }
     }
 
     &.stop-button {
-      background-color: #dc3545;
-      color: white;
+      background-color: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 50%;
 
       &:hover {
-        background-color: #c82333;
-        box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
-        transform: translateY(-1px);
+        background-color: var(--bg-hover);
       }
-    }
-    
-    @media (max-width: 768px) {
-      padding: 8px 16px;
-      font-size: 13px;
-      border-radius: 20px;
     }
   }
 }
