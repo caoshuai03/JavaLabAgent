@@ -3,7 +3,11 @@ package com.cs.rag.controller;
 import com.cs.rag.common.ApplicationConstant;
 import com.cs.rag.entity.ChatMessage;
 import com.cs.rag.entity.ChatSession;
+import com.cs.rag.pojo.dto.ChatRequestDTO;
+import com.cs.rag.pojo.dto.HistoryRequestDTO;
+import com.cs.rag.pojo.dto.SessionListRequestDTO;
 import com.cs.rag.service.RagService;
+import org.springframework.http.MediaType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -44,24 +48,25 @@ public class AiRagController {
     /**
      * 持久化RAG对话接口
      * 
-     * <p>支持数据库持久化和滑动窗口上下文管理。
-     * 适用于需要保存对话历史的场景。</p>
+     * <p>使用POST请求体传递参数，支持更长的消息内容，更安全。
+     * 支持数据库持久化和滑动窗口上下文管理。</p>
      * 
      * <p>响应格式: 第一条消息为[SESSION_ID:xxx]，后续为LLM流式响应</p>
      * 
-     * @param message 用户消息
-     * @param sessionId 会话ID，为空时创建新会话
-     * @param userId 用户ID，默认为1
-     * @return 流式响应，首条消息包含sessionId
+     * @param request 对话请求参数（JSON请求体）
+     * @return SSE流式响应，首条消息包含sessionId
      */
-    @Operation(summary = "rag", description = "持久化RAG对话接口（数据库会话管理）")
-    @GetMapping(value = "/rag")
-    public Flux<String> chat(
-            @RequestParam(value = "message", defaultValue = "你好") String message,
-            @RequestParam(value = "sessionId", required = false) String sessionId,
-            @RequestParam(value = "userId", required = false, defaultValue = "1") Long userId) {
+    @Operation(summary = "chat", description = "持久化RAG对话接口")
+    @PostMapping(value = "/rag", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> chat(@RequestBody ChatRequestDTO request) {
         
-        log.info("持久化RAG对话请求: message={}, sessionId={}, userId={}", message, sessionId, userId);
+        // 参数校验与默认值处理
+        String message = (request.getMessage() != null) ? request.getMessage() : "你好";
+        String sessionId = request.getSessionId();
+        Long userId = (request.getUserId() != null) ? request.getUserId() : 1L;
+        
+        log.info("持久化RAG对话请求: message={}, sessionId={}, userId={}", 
+                 message, sessionId, userId);
         
         // 委托给Service层处理业务逻辑
         return ragService.chat(message, sessionId, userId);
@@ -72,28 +77,34 @@ public class AiRagController {
     /**
      * 获取会话历史消息列表
      * 
-     * @param sessionId 会话ID
+     * @param request 请求参数（JSON请求体）
      * @return 消息列表，按时间正序排列
      */
     @Operation(summary = "getHistory", description = "获取会话历史消息")
-    @GetMapping(value = "/rag/history")
+    @PostMapping(value = "/rag/history")
     public List<ChatMessage> getHistory(
-            @RequestParam(value = "sessionId") String sessionId) {
+            @RequestBody HistoryRequestDTO request) {
+        
+        String sessionId = request.getSessionId();
         
         log.info("获取会话历史: sessionId={}", sessionId);
         return ragService.getHistory(sessionId);
     }
+
     
     /**
      * 获取用户的会话列表
      * 
-     * @param userId 用户ID
+     * @param request 请求参数（JSON请求体）
      * @return 会话列表，按更新时间倒序排列
      */
     @Operation(summary = "getSessions", description = "获取用户会话列表")
-    @GetMapping(value = "/rag/sessions")
+    @PostMapping(value = "/rag/sessions")
     public List<ChatSession> listSessions(
-            @RequestParam(value = "userId", defaultValue = "1") Long userId) {
+            @RequestBody SessionListRequestDTO request) {
+        
+        // 获取userId，DTO中已设置默认值为1
+        Long userId = request.getUserId();
         
         log.info("获取用户会话列表: userId={}", userId);
         return ragService.listSessions(userId);

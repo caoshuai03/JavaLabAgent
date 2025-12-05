@@ -1,41 +1,38 @@
 package com.cs.rag.pojo.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 /**
- * 聊天请求DTO
- * 用于接收前端发送的对话请求
+ * RAG对话请求体
+ * 
+ * <p>用于POST方式的对话请求，封装用户消息和会话信息。
+ * 相比GET请求，POST方式支持更长的消息内容且更安全。</p>
  * 
  * @author caoshuai
+ * @since 1.0
  */
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-@Schema(description = "聊天请求DTO")
+@Schema(description = "RAG对话请求参数")
 public class ChatRequestDTO {
     
     /**
      * 用户消息内容
      */
-    @Schema(description = "用户消息内容", example = "你好，请介绍一下Java")
+    @Schema(description = "用户消息", example = "你好，请介绍一下你自己", requiredMode = Schema.RequiredMode.REQUIRED)
     private String message;
     
     /**
-     * 会话ID (可选)
-     * 如果为空，将创建新会话
+     * 会话ID
+     * 为空时创建新会话，后端会返回新的sessionId
      */
-    @Schema(description = "会话ID，为空时创建新会话", example = "550e8400-e29b-41d4-a716-446655440000")
+    @Schema(description = "会话ID，为空时创建新会话", example = "abc123")
     private String sessionId;
     
     /**
-     * 用户ID (可选)
-     * 如果为空，使用默认用户
+     * 用户ID
+     * 默认为1
      */
-    @Schema(description = "用户ID", example = "1")
+    @Schema(description = "用户ID", example = "1", defaultValue = "1")
     private Long userId;
 }

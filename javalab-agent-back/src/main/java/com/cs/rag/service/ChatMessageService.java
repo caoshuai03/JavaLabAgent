@@ -2,6 +2,7 @@ package com.cs.rag.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.cs.rag.entity.ChatMessage;
+import com.cs.rag.pojo.dto.ChatMessageDTO;
 import org.springframework.ai.chat.messages.Message;
 
 import java.util.List;
@@ -54,6 +55,15 @@ public interface ChatMessageService extends IService<ChatMessage> {
      * @return Spring AI Message列表
      */
     List<Message> convertToAiMessages(List<ChatMessage> messages);
+    
+    /**
+     * 将数据库消息列表转换为ChatMessageDTO列表
+     * 用于构建发送给LLM的上下文，仅包含role和content字段
+     * 
+     * @param messages 数据库消息列表
+     * @return ChatMessageDTO列表
+     */
+    List<ChatMessageDTO> convertToMessageDTOs(List<ChatMessage> messages);
     
     /**
      * 获取指定会话的所有消息

@@ -3,6 +3,7 @@ package com.cs.rag.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cs.rag.entity.ChatMessage;
 import com.cs.rag.mapper.ChatMessageMapper;
+import com.cs.rag.pojo.dto.ChatMessageDTO;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;
 import lombok.extern.slf4j.Slf4j;
@@ -102,15 +103,7 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
     public List<ChatMessage> getRecentMessages(String sessionId, int limit) {
         // 从数据库获取最近N条消息 (时间倒序)
         List<ChatMessage> messages = chatMessageMapper.selectRecentMessages(sessionId, limit);
-        
-        log.info("滑动窗口查询: sessionId={}, limit={}, actualCount={}", 
-                sessionId, limit, messages.size());
-        
-        // ===== 关键步骤: 反转为时间正序 =====
-        // 数据库查询结果是 DESC (新->旧)
-        // LLM需要 ASC (旧->新) 才能正确理解对话顺序
-        Collections.reverse(messages);
-        
+
         return messages;
     }
     
@@ -124,30 +117,95 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
     @Override
     public List<Message> convertToAiMessages(List<ChatMessage> messages) {
         List<Message> aiMessages = new ArrayList<>();
-        
-        for (ChatMessage msg : messages) {
-            Message aiMessage;
+
+        Message aiMessageUser = null;
+        Message aiMessageAssistant = null;
+        for (int i=0; i < messages.size(); i++) {
+
+            // 跳过第一个用户消息
+            ChatMessage msg = messages.get(i);
+            if (i == 0 && ChatMessage.ROLE_USER.equals(msg.getRole())) {
+                continue;
+            }
+
             
             // 根据角色类型创建对应的Spring AI Message对象
             switch (msg.getRole()) {
                 case ChatMessage.ROLE_USER:
-                    aiMessage = new UserMessage(msg.getContent());
+                    aiMessageUser = new UserMessage(msg.getContent());
                     break;
                 case ChatMessage.ROLE_ASSISTANT:
-                    aiMessage = new AssistantMessage(msg.getContent());
+                    aiMessageAssistant = new AssistantMessage(msg.getContent());
                     break;
-                case ChatMessage.ROLE_SYSTEM:
-                    aiMessage = new SystemMessage(msg.getContent());
+//                case ChatMessage.ROLE_SYSTEM:
+//                    aiMessage = new SystemMessage(msg.getContent());
+//                    break;
+                default:
+                    log.warn("未知的消息角色: {}", msg.getRole());
+                    continue;
+            }
+
+            if (aiMessageUser != null && aiMessageAssistant != null) {
+                aiMessages.add(aiMessageUser);
+                aiMessages.add(aiMessageAssistant);
+                aiMessageUser = null;
+                aiMessageAssistant = null;
+            }
+        }
+        
+        return aiMessages;
+    }
+    
+    /**
+     * 将数据库消息列表转换为ChatMessageDTO列表
+     * 逻辑与convertToAiMessages相同，但返回DTO形式
+     * 
+     * @param messages 数据库消息列表
+     * @return ChatMessageDTO列表，仅包含role和content
+     */
+    @Override
+    public List<ChatMessageDTO> convertToMessageDTOs(List<ChatMessage> messages) {
+        List<ChatMessageDTO> dtoList = new ArrayList<>();
+        
+        ChatMessageDTO userDTO = null;
+        ChatMessageDTO assistantDTO = null;
+        
+        for (int i = 0; i < messages.size(); i++) {
+            // 跳过第一个用户消息
+            ChatMessage msg = messages.get(i);
+            if (i == 0 && ChatMessage.ROLE_USER.equals(msg.getRole())) {
+                continue;
+            }
+            
+            // 根据角色类型创建对应的DTO
+            switch (msg.getRole()) {
+                case ChatMessage.ROLE_USER:
+                    userDTO = ChatMessageDTO.builder()
+                            .role(msg.getRole())
+                            .content(msg.getContent())
+                            .build();
+                    break;
+                case ChatMessage.ROLE_ASSISTANT:
+                    assistantDTO = ChatMessageDTO.builder()
+                            .role(msg.getRole())
+                            .content(msg.getContent())
+                            .build();
                     break;
                 default:
                     log.warn("未知的消息角色: {}", msg.getRole());
                     continue;
             }
             
-            aiMessages.add(aiMessage);
+            // 成对收集user和assistant消息
+            if (userDTO != null && assistantDTO != null) {
+                dtoList.add(userDTO);
+                dtoList.add(assistantDTO);
+                userDTO = null;
+                assistantDTO = null;
+            }
         }
         
-        return aiMessages;
+        return dtoList;
     }
     
     /**

@@ -39,6 +39,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useUserStore } from '../stores/user'
+import { sendChatMessage } from '../api/chat'
 
 const chatStore = useChatStore()
 const inputText = ref('')
@@ -53,7 +54,8 @@ const canSend = computed(() => {
   return inputText.value.trim().length > 0 && !chatStore.isStreaming
 })
 
-let eventSource = null
+// AbortController 用于取消 POST 请求
+let abortController = null
 
 const handleInput = () => {
   if (inputRef.value) {
@@ -77,14 +79,6 @@ const handleKeyDown = (event) => {
   }
 }
 
-const getApiBaseUrl = () => {
-  if (import.meta.env.DEV) {
-    return ''
-  } else {
-    return ''
-  }
-}
-
 // 获取用户 Store
 const userStore = useUserStore()
 
@@ -94,7 +88,8 @@ let sessionIdReceived = false
 let currentUserMessage = ''
 
 /**
- * 发送消息到后端持久化接口
+ * 发送消息到后端持久化接口（POST方式）
+ * 使用 fetch + ReadableStream 处理 SSE 流式响应
  * 后端会将消息存储到数据库中
  */
 const handleSend = async () => {
@@ -124,80 +119,79 @@ const handleSend = async () => {
   chatStore.isLoading = true
 
   // 构建请求参数
-  const baseUrl = getApiBaseUrl()
   const sessionId = chatStore.currentConversationId || ''
   const userId = userStore.userInfo?.id || 1
 
-  // 使用持久化接口
-  // 构建请求 URL（持久化 RAG 对话接口）
-  const url = `${baseUrl}/api/v1/ai/rag?message=${encodeURIComponent(message)}&sessionId=${encodeURIComponent(sessionId)}&userId=${userId}`
-  
-  eventSource = new EventSource(url)
+  // 使用 POST 方式发送请求（通过 sendChatMessage API）
+  abortController = sendChatMessage(
+    { message, sessionId, userId },
+    {
+      // 收到消息的回调
+      onMessage: (data) => {
+        const lastMessage = chatStore.messages[chatStore.messages.length - 1]
+        if (!lastMessage) return
 
-  eventSource.onmessage = (event) => {
-    const lastMessage = chatStore.messages[chatStore.messages.length - 1]
-
-    if (!lastMessage) return
-
-    // 检查是否是错误消息
-    if (event.data.startsWith('[ERROR]')) {
-      lastMessage.content = '错误：' + event.data.substring(7)
-      handleStop()
-      return
-    }
-
-    // 检查是否是结束标记
-    if (event.data === '[DONE]' || event.data.trim() === '') {
-      handleStop()
-      return
-    }
-
-    // 检查是否是 SessionId 响应（第一条消息）
-    // 格式: [SESSION_ID:xxx]
-    if (!sessionIdReceived && event.data.startsWith('[SESSION_ID:')) {
-      const match = event.data.match(/\[SESSION_ID:(.+?)\]/)
-      if (match) {
-        const newSessionId = match[1]
-        sessionIdReceived = true
-        
-        // 如果是新会话，更新 sessionId 并添加到会话列表
-        if (chatStore.isNewConversation || !chatStore.currentConversationId) {
-          chatStore.setCurrentSessionId(newSessionId)
-          chatStore.addNewConversationToList(newSessionId, currentUserMessage)
+        // 检查是否是错误消息
+        if (data.startsWith('[ERROR]')) {
+          lastMessage.content = '错误：' + data.substring(7)
+          handleStop()
+          return
         }
+
+        // 检查是否是结束标记
+        if (data === '[DONE]' || data.trim() === '') {
+          handleStop()
+          return
+        }
+
+        // 检查是否是 SessionId 响应（第一条消息）
+        // 格式: [SESSION_ID:xxx]
+        if (!sessionIdReceived && data.startsWith('[SESSION_ID:')) {
+          const match = data.match(/\[SESSION_ID:(.+?)\]/)
+          if (match) {
+            const newSessionId = match[1]
+            sessionIdReceived = true
+            
+            // 如果是新会话，更新 sessionId 并添加到会话列表
+            if (chatStore.isNewConversation || !chatStore.currentConversationId) {
+              chatStore.setCurrentSessionId(newSessionId)
+              chatStore.addNewConversationToList(newSessionId, currentUserMessage)
+            }
+          }
+          return // 不把 sessionId 消息显示到 UI
+        }
+
+        // 更新最后一条消息
+        lastMessage.content += data
+        chatStore.updateLastMessage(lastMessage.content)
+      },
+      // 发生错误的回调
+      onError: (error) => {
+        console.error('请求错误:', error)
+        const lastMessage = chatStore.messages[chatStore.messages.length - 1]
+        if (lastMessage && !lastMessage.content.trim()) {
+          lastMessage.content = '连接错误，请重试'
+        }
+        handleStop()
+      },
+      // 完成的回调
+      onComplete: () => {
+        handleStop()
       }
-      return // 不把 sessionId 消息显示到 UI
     }
-
-    // 更新最后一条消息
-    lastMessage.content += event.data
-    chatStore.updateLastMessage(lastMessage.content)
-  }
-
-  eventSource.onerror = (error) => {
-    console.error('SSE连接错误:', error)
-    const lastMessage = chatStore.messages[chatStore.messages.length - 1]
-
-    if (eventSource.readyState === EventSource.CLOSED) {
-      handleStop()
-      return
-    }
-
-    if (lastMessage && !lastMessage.content.trim()) {
-      lastMessage.content = '连接错误，请重试'
-    }
-    handleStop()
-  }
+  )
 }
 
 /**
  * 停止流式响应
+ * 使用 AbortController 取消 POST 请求
  * 完成后刷新会话列表，同步数据库的更新时间
  */
 const handleStop = async () => {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
+  // 使用 AbortController 取消请求
+  if (abortController) {
+    abortController.abort()
+    abortController = null
   }
 
   if (chatStore.isStreaming) {
@@ -227,8 +221,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (eventSource) {
-    eventSource.close()
+  // 组件卸载时取消请求
+  if (abortController) {
+    abortController.abort()
   }
 })
 </script>
