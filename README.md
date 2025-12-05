@@ -8,7 +8,6 @@
 
 - 🤖 **智能对话**：基于 RAG 技术的上下文问答，支持流式响应
 - 📚 **知识库管理**：文档上传、向量化存储、智能检索
-- 🔍 **网络搜索增强**：集成 Tavily 搜索，扩展知识范围
 - 🛡️ **敏感词过滤**：内置敏感词检测机制
 - 📊 **数据分析**：词频统计、日志记录
 - 👤 **用户管理**：JWT 认证、用户权限管理
@@ -94,7 +93,6 @@ spring:
 export OSS_ACCESS_KEY_ID="your-access-key-id"
 export OSS_ACCESS_KEY_SECRET="your-access-key-secret"
 export DASHSCOPE_API_KEY="your-dashscope-api-key"
-export SEARCHAPI_API_KEY="your-searchapi-key"
 ```
 
 

@@ -129,7 +129,8 @@ const handleSend = async () => {
   const userId = userStore.userInfo?.id || 1
 
   // 使用持久化接口
-  const url = `${baseUrl}/api/v1/ai/rag/persistent?message=${encodeURIComponent(message)}&sessionId=${encodeURIComponent(sessionId)}&userId=${userId}&enableWebSearch=false`
+  // 构建请求 URL（持久化 RAG 对话接口）
+  const url = `${baseUrl}/api/v1/ai/rag?message=${encodeURIComponent(message)}&sessionId=${encodeURIComponent(sessionId)}&userId=${userId}`
   
   eventSource = new EventSource(url)
 

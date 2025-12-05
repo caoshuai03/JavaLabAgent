@@ -19,7 +19,3 @@ kinghy:
       embedding:
         options:
           model: text-embedding-v2
-
-  # Web搜索API密钥
-  websearch:
-    api-key: ${SEARCHAPI_API_KEY}             # 环境变量: 搜索API密钥

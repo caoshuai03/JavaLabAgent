@@ -38,10 +38,4 @@ public class ChatRequestDTO {
      */
     @Schema(description = "用户ID", example = "1")
     private Long userId;
-    
-    /**
-     * 是否启用网络搜索
-     */
-    @Schema(description = "是否启用网络搜索", example = "false")
-    private Boolean enableWebSearch;
 }

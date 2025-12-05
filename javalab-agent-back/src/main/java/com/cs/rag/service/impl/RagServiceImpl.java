@@ -4,12 +4,8 @@ import com.cs.rag.constant.RagConstant;
 import com.cs.rag.entity.ChatMessage;
 import com.cs.rag.entity.ChatSession;
 import com.cs.rag.service.*;
-import com.cs.rag.utils.SearchUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -20,13 +16,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_RETRIEVE_SIZE_KEY;
 
 /**
  * RAG服务实现类
@@ -35,7 +27,6 @@ import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvis
  * <p>该类负责:</p>
  * <ul>
  *   <li>RAG向量检索增强</li>
- *   <li>网络搜索增强</li>
  *   <li>会话管理与消息持久化</li>
  *   <li>LLM流式对话生成</li>
  * </ul>
@@ -55,16 +46,9 @@ public class RagServiceImpl implements RagService {
     /** 聊天模型 */
     private final ChatModel chatModel;
     
-    /** 内存对话记忆（用于非持久化模式） */
-    private final ChatMemory chatMemory = new InMemoryChatMemory();
-    
     /** 提示词服务 */
     @Autowired
     private PromptService promptService;
-    
-    /** 网络搜索工具 */
-    @Autowired
-    private SearchUtils searchUtils;
     
     /** 会话服务 */
     @Autowired
@@ -88,40 +72,11 @@ public class RagServiceImpl implements RagService {
     // ==================== 核心业务方法 ====================
     
     /**
-     * 基础RAG对话（无持久化）
-     * 使用内存对话记忆管理上下文
-     */
-    @Override
-    public Flux<String> generateResponse(String message, String conversationId, Boolean enableWebSearch) throws IOException {
-        // Step 1: 消息增强（网络搜索 + RAG）
-        String enhancedMessage = message;
-        if (Boolean.TRUE.equals(enableWebSearch)) {
-            enhancedMessage = enhanceWithWebSearch(enhancedMessage);
-        }
-        enhancedMessage = enhanceWithRag(enhancedMessage);
-        
-        // Step 2: 构建ChatClient并流式返回
-        ChatClient chatClient = ChatClient.builder(chatModel).build();
-        String finalConversationId = (conversationId != null && !conversationId.trim().isEmpty())
-                ? conversationId : "0";
-        
-        return chatClient.prompt()
-                .system(promptService.getChatDefaultPrompt())
-                .advisors(new MessageChatMemoryAdvisor(chatMemory))
-                .advisors(a -> a
-                        .param(CHAT_MEMORY_CONVERSATION_ID_KEY, finalConversationId)
-                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, MEMORY_SIZE))
-                .user(enhancedMessage)
-                .stream()
-                .content();
-    }
-    
-    /**
      * 持久化RAG对话
      * 将会话和消息存储到数据库，支持跨请求的上下文管理
      */
     @Override
-    public Flux<String> generateWithPersistence(String message, String sessionId, Long userId, Boolean enableWebSearch) throws IOException {
+    public Flux<String> chat(String message, String sessionId, Long userId) {
         // ===== Step 1: 创建/获取会话 =====
         String title = message.length() > 20 ? message.substring(0, 20) + "..." : message;
         ChatSession session = chatSessionService.getOrCreateSession(sessionId, userId, title);
@@ -139,12 +94,8 @@ public class RagServiceImpl implements RagService {
         List<Message> contextMessages = chatMessageService.convertToAiMessages(recentMessages);
         log.info("滑动窗口上下文: 获取最近{}条消息，实际获取{}条", MEMORY_SIZE, contextMessages.size());
         
-        // ===== Step 4: 消息增强（网络搜索 + RAG） =====
-        String enhancedMessage = message;
-        if (Boolean.TRUE.equals(enableWebSearch)) {
-            enhancedMessage = enhanceWithWebSearch(enhancedMessage);
-        }
-        enhancedMessage = enhanceWithRag(enhancedMessage);
+        // ===== Step 4: RAG消息增强 =====
+        String enhancedMessage = enhance(message);
         
         // ===== Step 5: 构建消息列表并调用LLM =====
         ChatClient chatClient = ChatClient.builder(chatModel).build();
@@ -189,12 +140,12 @@ public class RagServiceImpl implements RagService {
     // ==================== 会话管理方法 ====================
     
     @Override
-    public List<ChatMessage> getSessionHistory(String sessionId) {
+    public List<ChatMessage> getHistory(String sessionId) {
         return chatMessageService.getMessagesBySessionId(sessionId);
     }
     
     @Override
-    public List<ChatSession> getUserSessions(Long userId) {
+    public List<ChatSession> listSessions(Long userId) {
         return chatSessionService.getSessionsByUserId(userId);
     }
     
@@ -205,35 +156,11 @@ public class RagServiceImpl implements RagService {
      * @return 是否删除成功
      */
     @Override
-    public boolean deleteSession(String sessionId) {
+    public boolean delete(String sessionId) {
         return chatSessionService.deleteSession(sessionId);
     }
     
     // ==================== 辅助方法 ====================
-    
-    /**
-     * 网络搜索增强
-     * 调用Tavily API搜索相关内容，并附加到消息中
-     * 
-     * @param message 原始消息
-     * @return 增强后的消息
-     */
-    @Override
-    public String enhanceWithWebSearch(String message) throws IOException {
-        List<Map<String, String>> searchResults = searchUtils.tavilySearch(message);
-        if (!searchResults.isEmpty()) {
-            StringBuilder webContent = new StringBuilder();
-            for (Map<String, String> result : searchResults) {
-                webContent.append(RagConstant.WEB_SOURCE_LABEL)
-                        .append(result.get("title"))
-                        .append("\n")
-                        .append(result.get("content"))
-                        .append("\n");
-            }
-            return message + webContent.toString();
-        }
-        return message;
-    }
     
     /**
      * RAG向量检索增强
@@ -243,7 +170,7 @@ public class RagServiceImpl implements RagService {
      * @return 增强后的消息
      */
     @Override
-    public String enhanceWithRag(String message) {
+    public String enhance(String message) {
         // 构建检索请求
         SearchRequest ragSearchRequest = SearchRequest.builder()
                 .query(message)

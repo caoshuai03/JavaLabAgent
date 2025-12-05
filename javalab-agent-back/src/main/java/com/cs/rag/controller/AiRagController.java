@@ -11,7 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
-import java.io.IOException;
 import java.util.List;
 
 /**
@@ -22,7 +21,6 @@ import java.util.List;
  * 
  * <p>主要功能:</p>
  * <ul>
- *   <li>基础RAG对话（内存会话记忆）</li>
  *   <li>持久化RAG对话（数据库会话管理）</li>
  *   <li>会话历史查询</li>
  *   <li>用户会话列表查询</li>
@@ -44,33 +42,6 @@ public class AiRagController {
     // ==================== 对话接口 ====================
     
     /**
-     * 基础RAG对话接口
-     * 
-     * <p>使用内存会话记忆管理上下文，不持久化到数据库。
-     * 适用于临时对话场景。</p>
-     * 
-     * @param message 用户消息
-     * @param conversationId 会话ID，用于内存中的对话记忆，默认为"0"
-     * @param enableWebSearch 是否启用网络搜索增强，默认false
-     * @return 流式响应内容
-     * @throws IOException 网络搜索失败时抛出
-     */
-    @Operation(summary = "rag", description = "基础RAG对话接口（内存会话记忆）")
-    @GetMapping(value = "/rag")
-    public Flux<String> generate(
-            @RequestParam(value = "message", defaultValue = "你好") String message,
-            @RequestParam(value = "conversationId", required = false) String conversationId,
-            @RequestParam(value = "enableWebSearch", required = false, defaultValue = "false") Boolean enableWebSearch)
-            throws IOException {
-        
-        log.info("RAG对话请求: message={}, conversationId={}, enableWebSearch={}", 
-                message, conversationId, enableWebSearch);
-        
-        // 委托给Service层处理业务逻辑
-        return ragService.generateResponse(message, conversationId, enableWebSearch);
-    }
-    
-    /**
      * 持久化RAG对话接口
      * 
      * <p>支持数据库持久化和滑动窗口上下文管理。
@@ -81,24 +52,19 @@ public class AiRagController {
      * @param message 用户消息
      * @param sessionId 会话ID，为空时创建新会话
      * @param userId 用户ID，默认为1
-     * @param enableWebSearch 是否启用网络搜索增强，默认false
      * @return 流式响应，首条消息包含sessionId
-     * @throws IOException 网络搜索失败时抛出
      */
-    @Operation(summary = "ragPersistent", description = "持久化RAG对话接口（数据库会话管理）")
-    @GetMapping(value = "/rag/persistent")
-    public Flux<String> generateWithPersistence(
+    @Operation(summary = "rag", description = "持久化RAG对话接口（数据库会话管理）")
+    @GetMapping(value = "/rag")
+    public Flux<String> chat(
             @RequestParam(value = "message", defaultValue = "你好") String message,
             @RequestParam(value = "sessionId", required = false) String sessionId,
-            @RequestParam(value = "userId", required = false, defaultValue = "1") Long userId,
-            @RequestParam(value = "enableWebSearch", required = false, defaultValue = "false") Boolean enableWebSearch)
-            throws IOException {
+            @RequestParam(value = "userId", required = false, defaultValue = "1") Long userId) {
         
-        log.info("持久化RAG对话请求: message={}, sessionId={}, userId={}, enableWebSearch={}", 
-                message, sessionId, userId, enableWebSearch);
+        log.info("持久化RAG对话请求: message={}, sessionId={}, userId={}", message, sessionId, userId);
         
         // 委托给Service层处理业务逻辑
-        return ragService.generateWithPersistence(message, sessionId, userId, enableWebSearch);
+        return ragService.chat(message, sessionId, userId);
     }
     
     // ==================== 会话管理接口 ====================
@@ -111,11 +77,11 @@ public class AiRagController {
      */
     @Operation(summary = "getHistory", description = "获取会话历史消息")
     @GetMapping(value = "/rag/history")
-    public List<ChatMessage> getSessionHistory(
+    public List<ChatMessage> getHistory(
             @RequestParam(value = "sessionId") String sessionId) {
         
         log.info("获取会话历史: sessionId={}", sessionId);
-        return ragService.getSessionHistory(sessionId);
+        return ragService.getHistory(sessionId);
     }
     
     /**
@@ -126,11 +92,11 @@ public class AiRagController {
      */
     @Operation(summary = "getSessions", description = "获取用户会话列表")
     @GetMapping(value = "/rag/sessions")
-    public List<ChatSession> getUserSessions(
+    public List<ChatSession> listSessions(
             @RequestParam(value = "userId", defaultValue = "1") Long userId) {
         
         log.info("获取用户会话列表: userId={}", userId);
-        return ragService.getUserSessions(userId);
+        return ragService.listSessions(userId);
     }
     
     /**
@@ -141,9 +107,9 @@ public class AiRagController {
      */
     @Operation(summary = "deleteSession", description = "删除会话（逻辑删除）")
     @DeleteMapping(value = "/rag/sessions/{sessionId}")
-    public boolean deleteSession(@PathVariable("sessionId") String sessionId) {
+    public boolean delete(@PathVariable("sessionId") String sessionId) {
         
         log.info("删除会话请求: sessionId={}", sessionId);
-        return ragService.deleteSession(sessionId);
+        return ragService.delete(sessionId);
     }
 }

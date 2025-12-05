@@ -12,14 +12,6 @@ spring:
     active: dev
 
   ai:
-    # Web搜索配置 (使用SearXNG聚合搜索引擎)
-    websearch:
-      api-key: ${kinghy.ai.websearch.api-key}
-      searxng:
-        url: "http://127.0.0.1:8080/search"   # SearXNG服务地址
-        nums: 10                               # 返回结果数量
-        engines: "duckduckgo,google,bing,brave,mojeek,presearch,qwant,startpage,yahoo,arxiv,crossref,google_scholar,internetarchivescholar,semantic_scholar"  # 启用的搜索引擎
-
     # 阿里云灵积AI服务 (用于大模型API调用)
     dashscope:
       api-key: ${kinghy.dashscope.api-key}
