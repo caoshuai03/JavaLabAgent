@@ -4,17 +4,28 @@
       <div class="message-content">
         <div class="message-text" v-html="formatContent(message.content)" ref="messageTextRef" @click="handleCodeBlockClick"></div>
 
-        <div v-if="message.sender === 'assistant'" class="message-actions">
-          <button
-            @click="handleCopy"
-            class="action-button"
-            title="复制"
-          >
-            📋
-          </button>
+        <!-- 消息底部区域：操作按钮 + 时间 -->
+        <div class="message-footer">
+          <!-- 助手消息显示复制按钮 -->
+          <div v-if="message.sender === 'assistant'" class="message-actions">
+            <button
+              @click="handleCopy"
+              :class="['action-button', { copied: copied }]"
+              :title="copied ? '已复制' : '复制'"
+            >
+              <!-- 复制成功显示勾选图标，否则显示复制图标 -->
+              <svg v-if="copied" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>
+          <!-- 时间显示 -->
+          <div class="message-time">{{ formatTime(message.timestamp) }}</div>
         </div>
-
-        <div class="message-time">{{ formatTime(message.timestamp) }}</div>
       </div>
     </div>
   </div>
@@ -34,6 +45,7 @@ const props = defineProps({
 
 const chatStore = useChatStore()
 const messageTextRef = ref(null)
+const copied = ref(false) // 复制成功状态
 
 const formatContent = (content) => {
   if (!content) return ''
@@ -69,21 +81,30 @@ const formatTime = (timestamp) => {
   })
 }
 
+// 处理复制按钮点击 - 复制整条消息内容
 const handleCopy = async () => {
   try {
     await navigator.clipboard.writeText(props.message.content)
-    // 可以添加一个提示
-    alert('已复制到剪贴板')
+    // 显示复制成功状态
+    copied.value = true
+    // 2秒后恢复原状态
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
   } catch (err) {
     console.error('复制失败:', err)
-    // 降级方案
+    // 降级方案：使用旧的 execCommand
     const textArea = document.createElement('textarea')
     textArea.value = props.message.content
     document.body.appendChild(textArea)
     textArea.select()
     document.execCommand('copy')
     document.body.removeChild(textArea)
-    alert('已复制到剪贴板')
+    // 显示复制成功状态
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
   }
 }
 
@@ -230,12 +251,13 @@ watch(() => props.message.content, () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0px; // 减小间距，让复制按钮更靠近文本
   min-width: 0;
 }
 
 .message-text {
   padding: 16px 20px;
+  padding-bottom: 12px; // 减小底部内边距，让复制按钮更靠近文本
   border-radius: 12px;
   line-height: 1.75;
   font-size: 16px;
@@ -244,11 +266,15 @@ watch(() => props.message.content, () => {
 
   @media (max-width: 768px) {
     padding: 12px 16px;
+    padding-bottom: 10px;
     font-size: 15px;
     border-radius: 10px;
   }
 
-  
+  // 移除最后一个子元素的底部 margin
+  :deep(> *:last-child) {
+    margin-bottom: 0 !important;
+  }
 
   // Markdown 样式
   :deep(p) {
@@ -447,31 +473,48 @@ watch(() => props.message.content, () => {
   }
 }
 
+// 消息底部区域：复制按钮 + 时间
+.message-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -2px; // 负边距让内容更靠近文本
+  padding-left: 20px; // 与 .message-text 的左内边距对齐
+}
+
+// 操作按钮区域 - ChatGPT 风格
 .message-actions {
   display: flex;
-  gap: 8px;
-  opacity: 0;
-  transition: opacity 0.2s;
-  margin-top: 4px;
+  gap: 4px;
 
-  .message-item:hover & {
-    opacity: 1;
-  }
-
+  // ChatGPT 风格的操作按钮
   .action-button {
-    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
     background: transparent;
-    border: 1px solid var(--border-color);
+    border: none;
     border-radius: 6px;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 13px;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
 
     &:hover {
       background-color: var(--bg-hover);
-      border-color: var(--border-color-hover);
       color: var(--text-primary);
+    }
+
+    // 复制成功时的状态
+    &.copied {
+      color: #10a37f;
     }
   }
 }
@@ -479,6 +522,6 @@ watch(() => props.message.content, () => {
 .message-time {
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 0 4px;
+  line-height: 28px; // 与按钮高度对齐
 }
 </style>

@@ -132,4 +132,18 @@ public class AiRagController {
         log.info("获取用户会话列表: userId={}", userId);
         return ragService.getUserSessions(userId);
     }
+    
+    /**
+     * 删除会话（逻辑删除）
+     * 
+     * @param sessionId 会话ID
+     * @return 删除结果，true表示成功，false表示失败
+     */
+    @Operation(summary = "deleteSession", description = "删除会话（逻辑删除）")
+    @DeleteMapping(value = "/rag/sessions/{sessionId}")
+    public boolean deleteSession(@PathVariable("sessionId") String sessionId) {
+        
+        log.info("删除会话请求: sessionId={}", sessionId);
+        return ragService.deleteSession(sessionId);
+    }
 }

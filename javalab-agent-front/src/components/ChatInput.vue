@@ -191,8 +191,9 @@ const handleSend = async () => {
 
 /**
  * 停止流式响应
+ * 完成后刷新会话列表，同步数据库的更新时间
  */
-const handleStop = () => {
+const handleStop = async () => {
   if (eventSource) {
     eventSource.close()
     eventSource = null
@@ -201,6 +202,9 @@ const handleStop = () => {
   if (chatStore.isStreaming) {
     chatStore.isStreaming = false
     chatStore.isLoading = false
+    
+    // 刷新会话列表，获取数据库最新的 updatedAt 时间
+    await chatStore.loadConversationsFromDB()
   }
 }
 

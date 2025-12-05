@@ -34,4 +34,13 @@ public interface ChatSessionMapper extends BaseMapper<ChatSession> {
      * @param sessionId 会话ID
      */
     void updateSessionTime(@Param("sessionId") String sessionId);
+    
+    /**
+     * 逻辑删除会话
+     * 将 deleted 标记设为 1
+     * 
+     * @param sessionId 会话ID
+     * @return 影响的行数
+     */
+    int logicalDelete(@Param("sessionId") String sessionId);
 }

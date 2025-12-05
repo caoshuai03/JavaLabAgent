@@ -26,3 +26,12 @@ export const getSessionHistory = (sessionId) => {
     params: { sessionId }
   })
 }
+
+/**
+ * 删除会话（逻辑删除）
+ * @param {string} sessionId - 会话ID
+ * @returns {Promise} 删除结果，true表示成功
+ */
+export const deleteSession = (sessionId) => {
+  return apiClient.delete(`/v1/ai/rag/sessions/${sessionId}`)
+}

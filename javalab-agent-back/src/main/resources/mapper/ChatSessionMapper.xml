@@ -16,11 +16,12 @@
         <result property="title" column="title"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
+        <result property="deleted" column="deleted"/>
     </resultMap>
 
     <!-- 基础列定义 -->
     <sql id="Base_Column_List">
-        id, user_id, title, created_at, updated_at
+        id, user_id, title, created_at, updated_at, deleted
     </sql>
 
     <!-- 
@@ -32,7 +33,7 @@
     <select id="selectByUserId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM chat_session 
-        WHERE user_id = #{userId}
+        WHERE user_id = #{userId} AND (deleted = 0 OR deleted IS NULL)
         ORDER BY updated_at DESC
     </select>
 
@@ -55,8 +56,9 @@
         @param chatSession 会话对象
     -->
     <insert id="insert" parameterType="com.cs.rag.entity.ChatSession">
-        INSERT INTO chat_session (id, user_id, title, created_at, updated_at)
-        VALUES (#{id}::uuid, #{userId}, #{title}, #{createdAt}, #{updatedAt})
+        <!-- 使用数据库CURRENT_TIMESTAMP确保时间一致性 -->
+        INSERT INTO chat_session (id, user_id, title, created_at, updated_at, deleted)
+        VALUES (#{id}::uuid, #{userId}, #{title}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
     </insert>
 
     <!-- 
@@ -68,7 +70,20 @@
     <select id="selectById" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM chat_session 
-        WHERE id = #{id}::uuid
+        WHERE id = #{id}::uuid AND (deleted = 0 OR deleted IS NULL)
     </select>
+    
+    <!-- 
+        逻辑删除会话
+        将 deleted 标记设为 1
+        
+        @param sessionId 会话ID
+        @return 影响的行数
+    -->
+    <update id="logicalDelete">
+        UPDATE chat_session 
+        SET deleted = 1, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = #{sessionId}::uuid
+    </update>
 
 </mapper>

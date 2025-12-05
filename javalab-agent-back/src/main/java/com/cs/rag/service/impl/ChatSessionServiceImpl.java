@@ -8,7 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,15 +37,13 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     public ChatSession createSession(Long userId, String title) {
         // 生成UUID作为会话ID
         String sessionId = UUID.randomUUID().toString();
-        LocalDateTime now = LocalDateTime.now();
+        // 不再手动设置时间，由数据库CURRENT_TIMESTAMP自动生成，确保时间一致性
         
         // 构建会话对象
         ChatSession session = ChatSession.builder()
                 .id(sessionId)
                 .userId(userId)
                 .title(title != null ? title : "新对话")
-                .createdAt(now)
-                .updatedAt(now)
                 .build();
         
         // 保存到数据库
@@ -109,5 +106,32 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
         }
         
         return session;
+    }
+    
+    /**
+     * 逻辑删除会话
+     * 将 deleted 标记设为 1，不实际删除数据库记录
+     * 
+     * @param sessionId 会话ID
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean deleteSession(String sessionId) {
+        // 参数校验
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            log.warn("删除会话失败: sessionId为空");
+            return false;
+        }
+        
+        // 执行逻辑删除
+        int rows = chatSessionMapper.logicalDelete(sessionId);
+        
+        if (rows > 0) {
+            log.info("逻辑删除会话成功: sessionId={}", sessionId);
+            return true;
+        } else {
+            log.warn("逻辑删除会话失败: sessionId={}, 会话可能不存在", sessionId);
+            return false;
+        }
     }
 }

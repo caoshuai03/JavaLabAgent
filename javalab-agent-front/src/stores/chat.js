@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getUserSessions, getSessionHistory } from '../api/chat'
+import { getUserSessions, getSessionHistory, deleteSession } from '../api/chat'
 import { useUserStore } from './user'
 
 export const useChatStore = defineStore('chat', () => {
@@ -92,41 +92,61 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
-   * 删除对话
-   * TODO: 后续可以添加后端删除接口
+   * 删除对话（调用后端API进行逻辑删除）
    * @param {string} conversationId - 会话ID
+   * @returns {Promise<boolean>} 删除是否成功
    */
-  const deleteConversation = (conversationId) => {
-    const index = conversations.value.findIndex(conv => conv.id === conversationId)
-    if (index !== -1) {
-      conversations.value.splice(index, 1)
-
-      if (conversationId === currentConversationId.value) {
-        if (conversations.value.length > 0) {
-          switchConversation(conversations.value[0].id)
-        } else {
-          currentConversationId.value = null
-          messages.value = []
-          isNewConversation.value = true
+  const deleteConversation = async (conversationId) => {
+    try {
+      // 调用后端API删除会话
+      const response = await deleteSession(conversationId)
+      
+      // 删除成功后更新本地状态
+      if (response.data === true) {
+        const index = conversations.value.findIndex(conv => conv.id === conversationId)
+        if (index !== -1) {
+          conversations.value.splice(index, 1)
         }
+
+        // 如果删除的是当前会话，切换到其他会话
+        if (conversationId === currentConversationId.value) {
+          if (conversations.value.length > 0) {
+            await switchConversation(conversations.value[0].id)
+          } else {
+            currentConversationId.value = null
+            messages.value = []
+            isNewConversation.value = true
+          }
+        }
+        
+        console.log('会话删除成功:', conversationId)
+        return true
+      } else {
+        console.error('删除会话失败: 后端返回false')
+        return false
       }
+    } catch (error) {
+      console.error('删除会话失败:', error)
+      return false
     }
   }
 
   /**
    * 重命名会话
+   * 注意：仅更新前端显示标题，不修改 updatedAt（时间由数据库管理）
    * TODO: 后续可以添加后端更新接口
    */
   const renameConversation = (conversationId, newTitle) => {
     const conversation = conversations.value.find(conv => conv.id === conversationId)
     if (conversation) {
       conversation.title = newTitle || '新对话'
-      conversation.updatedAt = new Date().toISOString()
+      // 不更新 updatedAt，保持数据库时间
     }
   }
 
   /**
    * 更新会话标题（根据第一条消息）
+   * 注意：仅更新前端显示标题，不修改 updatedAt（时间由数据库管理）
    */
   const updateConversationTitle = (conversationId, firstMessage) => {
     const conversation = conversations.value.find(conv => conv.id === conversationId)
@@ -135,7 +155,7 @@ export const useChatStore = defineStore('chat', () => {
         ? firstMessage.substring(0, 30) + '...'
         : firstMessage
       conversation.title = title
-      conversation.updatedAt = new Date().toISOString()
+      // 不更新 updatedAt，保持数据库时间
     }
   }
 
@@ -160,6 +180,7 @@ export const useChatStore = defineStore('chat', () => {
 
   /**
    * 将当前新对话添加到会话列表
+   * 注意：时间使用null占位，会在下次刷新会话列表时从数据库同步
    * @param {string} sessionId - 后端返回的会话ID
    * @param {string} title - 会话标题（通常是第一条消息）
    */
@@ -167,8 +188,8 @@ export const useChatStore = defineStore('chat', () => {
     const newConversation = {
       id: sessionId,
       title: title.length > 30 ? title.substring(0, 30) + '...' : title,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: null, // 时间由数据库管理，下次刷新会话列表时同步
+      updatedAt: null  // 时间由数据库管理，下次刷新会话列表时同步
     }
 
     // 添加到列表顶部
@@ -201,7 +222,7 @@ export const useChatStore = defineStore('chat', () => {
         id: msg.id || generateMessageId(),
         sender: msg.role === 'user' ? 'user' : 'assistant',
         content: msg.content,
-        timestamp: msg.createTime || new Date().toISOString()
+        timestamp: msg.createdAt || new Date().toISOString() // 字段名与后端 ChatMessage.createdAt 对应
       }))
     } catch (error) {
       console.error('加载会话历史失败:', error)
@@ -221,11 +242,12 @@ export const useChatStore = defineStore('chat', () => {
       const dbSessions = response.data || []
       
       // 转换后端会话格式为前端格式
+      // 注意：后端字段名是 createdAt/updatedAt（驼峰命名）
       conversations.value = dbSessions.map(session => ({
         id: session.id,
         title: session.title || '新对话',
-        createdAt: session.createTime || new Date().toISOString(),
-        updatedAt: session.updateTime || new Date().toISOString()
+        createdAt: session.createdAt || null,
+        updatedAt: session.updatedAt || null
       }))
     } catch (error) {
       console.error('加载会话列表失败:', error)

@@ -12,13 +12,6 @@
     
     <div v-if="showActions" class="actions" @click.stop>
       <button 
-        @click="handleRename" 
-        class="action-button rename"
-        title="重命名"
-      >
-        <EditIcon :size="16" />
-      </button>
-      <button 
         @click="handleDelete" 
         class="action-button delete"
         title="删除"
@@ -43,7 +36,6 @@
 <script setup>
 import { ref, nextTick } from 'vue'
 import { useChatStore } from '../stores/chat'
-import EditIcon from './icons/EditIcon.vue'
 import TrashIcon from './icons/TrashIcon.vue'
 
 const props = defineProps({
@@ -227,15 +219,6 @@ const formatTime = (timestamp) => {
         background-color: var(--border-color-hover);
         color: var(--text-primary);
         transform: scale(1.05);
-      }
-      
-      &.rename {
-        color: var(--text-primary);
-        opacity: 0.8;
-        
-        &:hover {
-          opacity: 1;
-        }
       }
       
       &.delete {

@@ -50,4 +50,11 @@ public class ChatSession {
      * 每次新增消息时更新此字段
      */
     private LocalDateTime updatedAt;
+    
+    /**
+     * 逻辑删除标记
+     * 0: 未删除（正常状态）
+     * 1: 已删除
+     */
+    private Integer deleted;
 }

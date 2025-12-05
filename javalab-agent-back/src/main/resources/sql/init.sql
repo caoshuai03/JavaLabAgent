@@ -108,7 +108,8 @@ CREATE TABLE "public"."chat_session" (
     "user_id" "pg_catalog"."int8",                          -- 用户标识
     "title" "pg_catalog"."varchar"(255) COLLATE "pg_catalog"."default", -- 会话标题
     "created_at" "pg_catalog"."timestamp" DEFAULT CURRENT_TIMESTAMP,    -- 创建时间
-    "updated_at" "pg_catalog"."timestamp" DEFAULT CURRENT_TIMESTAMP     -- 更新时间
+    "updated_at" "pg_catalog"."timestamp" DEFAULT CURRENT_TIMESTAMP,    -- 更新时间
+    "deleted" "pg_catalog"."int2" DEFAULT 0                              -- 逻辑删除标记: 0-未删除, 1-已删除
 );
 COMMENT ON TABLE "public"."chat_session" IS '对话会话表';
 COMMENT ON COLUMN "public"."chat_session"."id" IS '会话ID (UUID)';
@@ -116,11 +117,15 @@ COMMENT ON COLUMN "public"."chat_session"."user_id" IS '用户ID';
 COMMENT ON COLUMN "public"."chat_session"."title" IS '会话标题';
 COMMENT ON COLUMN "public"."chat_session"."created_at" IS '创建时间';
 COMMENT ON COLUMN "public"."chat_session"."updated_at" IS '更新时间';
+COMMENT ON COLUMN "public"."chat_session"."deleted" IS '逻辑删除标记: 0-未删除, 1-已删除';
 
 ALTER TABLE "public"."chat_session" ADD CONSTRAINT "chat_session_pkey" PRIMARY KEY ("id");
 
 -- chat_session 表索引：用户ID索引，便于按用户查询会话列表
 CREATE INDEX idx_chat_session_user_id ON "public"."chat_session" ("user_id");
+
+-- chat_session 表索引：逻辑删除字段索引，提升查询性能
+CREATE INDEX idx_chat_session_deleted ON "public"."chat_session" ("deleted");
 
 
 -- ============================================

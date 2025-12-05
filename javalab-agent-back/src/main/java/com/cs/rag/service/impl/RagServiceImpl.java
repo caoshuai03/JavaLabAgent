@@ -198,6 +198,17 @@ public class RagServiceImpl implements RagService {
         return chatSessionService.getSessionsByUserId(userId);
     }
     
+    /**
+     * 删除会话（逻辑删除）
+     * 
+     * @param sessionId 会话ID
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean deleteSession(String sessionId) {
+        return chatSessionService.deleteSession(sessionId);
+    }
+    
     // ==================== 辅助方法 ====================
     
     /**

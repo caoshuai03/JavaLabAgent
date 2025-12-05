@@ -102,4 +102,12 @@ public interface RagService {
      * @return 增强后的消息（附加知识库内容）
      */
     String enhanceWithRag(String message);
+    
+    /**
+     * 删除会话（逻辑删除）
+     * 
+     * @param sessionId 会话ID
+     * @return 是否删除成功
+     */
+    boolean deleteSession(String sessionId);
 }
