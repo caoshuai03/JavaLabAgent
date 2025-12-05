@@ -1,6 +1,7 @@
 package com.cs.rag.controller;
 
 import com.cs.rag.common.*;
+import com.cs.rag.constant.UserMessageConstant;
 import com.cs.rag.config.JwtProperties;
 import com.cs.rag.constant.JwtClaimsConstant;
 import com.cs.rag.entity.User;
@@ -23,20 +24,30 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @Title: UserController
- * @author  caoshuai
- * @Package com.cs.rag.controller
- * @date 2025/11/05 18:18
- * @description: 用户控制层
+ * 用户管理控制器
+ * 
+ * <p>负责处理用户相关的HTTP请求，包括:</p>
+ * <ul>
+ *   <li>用户认证（登录/登出/注册）</li>
+ *   <li>用户信息管理（查询/更新）</li>
+ *   <li>密码管理</li>
+ *   <li>账号状态管理（启用/禁用）</li>
+ * </ul>
+ * 
+ * @author caoshuai
+ * @since 1.0
  */
-
-@Tag(name="UserController",description = "用户管理")
+@Tag(name = "UserController", description = "用户管理")
 @Slf4j
 @RestController
 @RequestMapping(ApplicationConstant.API_VERSION + "/user")
 public class UserController {
+    
+    /** 用户业务服务 */
     @Autowired
     private UserService userService;
+    
+    /** JWT配置属性 */
     @Autowired
     private JwtProperties jwtProperties;
 
@@ -49,16 +60,16 @@ public class UserController {
     public BaseResponse updatePassword(@RequestBody PasswordDTO passwordDTO) {
         log.info("修改密码：{}", passwordDTO.toString());
         if (!passwordDTO.getNewPassword().equals(passwordDTO.getConfirmPassword())) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, "新密码与确认密码不一致");
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.PASSWORD_NOT_MATCH);
         }
         User user = userService.getById(passwordDTO.getId());
         String s = DigestUtils.md5DigestAsHex(passwordDTO.getOldPassword().getBytes());
         if (!user.getPassword().equals(s)) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, "旧密码错误");
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.OLD_PASSWORD_ERROR);
         }
         user.setPassword(DigestUtils.md5DigestAsHex(passwordDTO.getNewPassword().getBytes()));
         userService.updateById(user);
-        return ResultUtils.success("修改密码成功");
+        return ResultUtils.success(UserMessageConstant.PASSWORD_EDIT_SUCCESS);
     }
 
     /**
@@ -71,13 +82,13 @@ public class UserController {
         log.info("注册：{}", user.toString());
 
         if (userService.getByUsername(user.getUserName())) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, "用户名已存在");
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.USERNAME_ALREADY_EXISTS);
         } else {
             // 在注册前对密码进行MD5加密
             user.setPassword(DigestUtils.md5DigestAsHex(user.getPassword().getBytes()));
             userService.register(user);
         }
-        return ResultUtils.success("注册成功");
+        return ResultUtils.success(UserMessageConstant.REGISTER_SUCCESS);
     }
 
 
@@ -121,7 +132,7 @@ public class UserController {
     @PostMapping("/logout")
     @Operation(summary = "logout",description = "退出")
     public BaseResponse<String> logout() {
-        return ResultUtils.success("退出成功");
+        return ResultUtils.success(UserMessageConstant.LOGOUT_SUCCESS);
     }
 
     /**
@@ -134,7 +145,7 @@ public class UserController {
     public BaseResponse save(@RequestBody UserDTO userDTO){
         log.info("新增员工：{}",userDTO);
         userService.saveUser(userDTO);
-        return ResultUtils.success("新增成功");
+        return ResultUtils.success(UserMessageConstant.ADD_SUCCESS);
     }
 
     /**
@@ -161,7 +172,7 @@ public class UserController {
     public BaseResponse startOrStop(@PathVariable Integer status,Integer id){
         log.info("启用禁用员工账号：{},{}",status,id);
         userService.startOrStop(status,id);
-        return ResultUtils.success("禁用成功");
+        return ResultUtils.success(UserMessageConstant.DISABLE_SUCCESS);
     }
 
     /**
@@ -186,7 +197,7 @@ public class UserController {
     public BaseResponse update(@RequestBody User user){
         log.info("编辑员工信息：{}", user);
         userService.updateById(user);
-        return ResultUtils.success("编辑成功");
+        return ResultUtils.success(UserMessageConstant.EDIT_SUCCESS);
     }
     
     /**
@@ -214,10 +225,10 @@ public class UserController {
         log.info("更新用户信息：{}", userDTO);
         try {
             userService.updateUser(userDTO);
-            return ResultUtils.success("更新成功");
+            return ResultUtils.success(UserMessageConstant.UPDATE_SUCCESS);
         } catch (Exception e) {
             log.error("更新用户信息失败：", e);
-            return ResultUtils.error(ErrorCode.UPDATE_ERROR, "更新失败: " + e.getMessage());
+            return ResultUtils.error(ErrorCode.UPDATE_ERROR, UserMessageConstant.UPDATE_FAILED + ": " + e.getMessage());
         }
     }
 }

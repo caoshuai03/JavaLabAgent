@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 
+    会话表Mapper XML配置
+    针对表【chat_session】的数据库操作
+    @author caoshuai
+-->
+<mapper namespace="com.cs.rag.mapper.ChatSessionMapper">
+
+    <!-- 结果映射：ChatSession实体 -->
+    <resultMap id="BaseResultMap" type="com.cs.rag.entity.ChatSession">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="title" column="title"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <!-- 基础列定义 -->
+    <sql id="Base_Column_List">
+        id, user_id, title, created_at, updated_at
+    </sql>
+
+    <!-- 
+        根据用户ID查询会话列表，按更新时间倒序
+        
+        @param userId 用户ID
+        @return 会话列表
+    -->
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM chat_session 
+        WHERE user_id = #{userId}
+        ORDER BY updated_at DESC
+    </select>
+
+    <!-- 
+        更新会话的更新时间
+        每次新增消息时调用此方法，保持会话列表按最新活动排序
+        
+        @param sessionId 会话ID
+    -->
+    <update id="updateSessionTime">
+        UPDATE chat_session 
+        SET updated_at = CURRENT_TIMESTAMP 
+        WHERE id = #{sessionId}::uuid
+    </update>
+
+</mapper>

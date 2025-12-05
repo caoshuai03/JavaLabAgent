@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 
+    消息表Mapper XML配置
+    针对表【chat_message】的数据库操作
+    @author caoshuai
+-->
+<mapper namespace="com.cs.rag.mapper.ChatMessageMapper">
+
+    <!-- 结果映射：ChatMessage实体 -->
+    <resultMap id="BaseResultMap" type="com.cs.rag.entity.ChatMessage">
+        <id property="id" column="id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="role" column="role"/>
+        <result property="content" column="content"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <!-- 基础列定义 -->
+    <sql id="Base_Column_List">
+        id, session_id, role, content, created_at
+    </sql>
+
+    <!-- 
+        滑动窗口查询：获取指定会话的最近N条消息
+        
+        滑动窗口策略说明：
+        1. 查询时按创建时间倒序(DESC)获取最近N条
+        2. 返回结果在Service层需反转为时间正序，以符合LLM对话顺序要求
+        
+        @param sessionId 会话ID
+        @param limit 获取消息条数 (滑动窗口大小)
+        @return 最近N条消息列表 (按时间倒序)
+    -->
+    <select id="selectRecentMessages" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM chat_message 
+        WHERE session_id = #{sessionId}::uuid
+        ORDER BY created_at DESC 
+        LIMIT #{limit}
+    </select>
+
+    <!-- 
+        查询指定会话的所有消息，按时间正序
+        
+        @param sessionId 会话ID
+        @return 消息列表 (按时间正序)
+    -->
+    <select id="selectBySessionId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM chat_message 
+        WHERE session_id = #{sessionId}::uuid
+        ORDER BY created_at ASC
+    </select>
+
+</mapper>

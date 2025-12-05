@@ -40,11 +40,15 @@ public class AliOssFileServiceImpl extends ServiceImpl<AliOssFileMapper, AliOssF
 
     /**
      * 查询文件
-     * @param request
-     * @return
+     * @param request 查询请求参数
+     * @return 分页文件列表
      */
     @Override
     public BaseResponse queryPage(QueryFileDTO request) {
+        // 参数校验
+        if (request.getPage() == null || request.getPageSize() == null) {
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, "分页参数不能为空");
+        }
         Page<AliOssFile> page = new Page<>(request.getPage(), request.getPageSize());
         IPage<AliOssFile> fileList = aliOssFileMapper.findByFileNameContaining(page, request.getFileName());
         return ResultUtils.success(fileList);

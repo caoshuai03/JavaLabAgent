@@ -1,59 +1,26 @@
 package com.cs.rag.service;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.stereotype.Service;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-
 /**
- * @author  caoshuai
- * @date 2025/11/06 18:29
- * @description: Prompt 管理服务，统一管理所有提示词
+ * 提示词管理服务接口
+ * 
+ * <p>统一管理应用程序中使用的所有提示词模板，
+ * 从资源文件中加载并处理提示词内容。</p>
+ * 
+ * <p>提示词文件存放位置: resources/prompts/</p>
+ * 
+ * @author caoshuai
+ * @since 1.0
  */
-@Slf4j
-@Service
-public class PromptService {
-
-    @Value("classpath:/prompts/chat-default.md")
-    private Resource chatDefaultPrompt;
+public interface PromptService {
 
     /**
      * 获取默认对话提示词
+     * 
+     * <p>用于RAG对话时设置系统提示词，
+     * 指导LLM的回复风格和行为规范。</p>
+     * 
+     * @return 处理后的提示词内容
      */
-    public String getChatDefaultPrompt() {
-        return readFile(chatDefaultPrompt);
-    }
-
-    /**
-     * 读取文件内容，去除 Markdown 标题和描述行
-     */
-    private String readFile(Resource resource) {
-        try {
-            String content = resource.getContentAsString(StandardCharsets.UTF_8);
-            String[] lines = content.split("\n");
-            StringBuilder result = new StringBuilder();
-            boolean foundContent = false;
-            
-            for (String line : lines) {
-                String trimmedLine = line.trim();
-                if (trimmedLine.startsWith("#") || trimmedLine.startsWith("用于")) {
-                    continue;
-                }
-                if (!foundContent && trimmedLine.isEmpty()) {
-                    continue;
-                }
-                foundContent = true;
-                result.append(line).append("\n");
-            }
-            
-            return result.toString().trim();
-        } catch (IOException e) {
-            log.error("读取 prompt 文件失败: {}", resource.getFilename(), e);
-            return "";
-        }
-    }
+    String getChatDefaultPrompt();
 }
 

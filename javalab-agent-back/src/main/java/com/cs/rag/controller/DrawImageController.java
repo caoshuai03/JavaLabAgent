@@ -17,7 +17,6 @@
 package com.cs.rag.controller;
 
 import com.cs.rag.common.ApplicationConstant;
-import com.cs.rag.annotation.Loggable;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.ai.image.ImageModel;
 import org.springframework.ai.image.ImagePrompt;
@@ -45,7 +44,6 @@ public class DrawImageController {
 	}
 
 	@GetMapping("/image")
-	@Loggable
 	public void image(HttpServletResponse response, @RequestParam(value = "prompt") String prompt) {
 		ImageResponse imageResponse = imageModel.call(new ImagePrompt(prompt));
 		String imageUrl = imageResponse.getResult().getOutput().getUrl();

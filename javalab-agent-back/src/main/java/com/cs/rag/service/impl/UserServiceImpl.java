@@ -2,7 +2,7 @@ package com.cs.rag.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cs.rag.common.PageResult;
-import com.cs.rag.constant.MessageConstant;
+import com.cs.rag.constant.UserMessageConstant;
 import com.cs.rag.context.BaseContext;
 import com.cs.rag.entity.User;
 import com.cs.rag.mapper.UserMapper;
@@ -46,7 +46,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //2、处理各种异常情况（用户名不存在、密码不对、账号被锁定）
         if (user == null) {
             //账号不存在
-            throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);
+            throw new AccountNotFoundException(UserMessageConstant.ACCOUNT_NOT_FOUND);
         }
 
         //密码比对
@@ -54,12 +54,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         password = DigestUtils.md5DigestAsHex(password.getBytes());
         if (!password.equals(user.getPassword())) {
             //密码错误
-            throw new PasswordErrorException(MessageConstant.PASSWORD_ERROR);
+            throw new PasswordErrorException(UserMessageConstant.PASSWORD_ERROR);
         }
 
         if (user.getStatus() == StatusConstant.DISABLE) {
             //账号被锁定
-            throw new AccountLockedException(MessageConstant.ACCOUNT_LOCKED);
+            throw new AccountLockedException(UserMessageConstant.ACCOUNT_LOCKED);
         }
 
         //3、返回实体对象
@@ -124,7 +124,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 检查更新结果
         Integer result = userMapper.updateUser(user);
         if (result == null || result <= 0) {
-            throw new RuntimeException("更新用户信息失败，未找到对应的用户记录");
+            throw new RuntimeException(UserMessageConstant.USER_UPDATE_FAILED);
         }
     }
 
