@@ -48,4 +48,27 @@
         WHERE id = #{sessionId}::uuid
     </update>
 
+    <!-- 
+        插入新会话
+        使用 ::uuid 将字符串转换为 PostgreSQL UUID 类型
+        
+        @param chatSession 会话对象
+    -->
+    <insert id="insert" parameterType="com.cs.rag.entity.ChatSession">
+        INSERT INTO chat_session (id, user_id, title, created_at, updated_at)
+        VALUES (#{id}::uuid, #{userId}, #{title}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <!-- 
+        根据ID查询会话
+        使用 ::uuid 将字符串转换为 PostgreSQL UUID 类型
+        
+        @param id 会话ID
+    -->
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM chat_session 
+        WHERE id = #{id}::uuid
+    </select>
+
 </mapper>

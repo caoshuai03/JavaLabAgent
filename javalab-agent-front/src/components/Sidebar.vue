@@ -58,11 +58,13 @@ const router = useRouter()
 const route = useRoute()
 const chatStore = useChatStore()
 
+/**
+ * 创建新对话
+ * 新对话的 sessionId 由后端在第一次发送消息时生成
+ */
 const handleNewConversation = () => {
-  // 创建新对话
+  // 创建新对话（此时不会生成ID，等待后端返回）
   chatStore.createConversation()
-  // 立即保存新对话ID到 localStorage，防止被 initialize() 覆盖
-  localStorage.setItem('chat_current_conversation_id', chatStore.currentConversationId)
 
   // 如果当前在知识库页面，导航回对话界面
   if (route.path === '/knowledge') {

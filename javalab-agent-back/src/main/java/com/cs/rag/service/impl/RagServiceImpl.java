@@ -262,8 +262,8 @@ public class RagServiceImpl implements RagService {
             return message + knowledgeContent.toString();
         } else {
             log.info("未检索到相关文档");
+            // 明确告知LLM没有检索到知识库内容，使用情况C的回答方式
+            return message + RagConstant.NO_KNOWLEDGE_FOUND_LABEL;
         }
-        
-        return message;
     }
 }

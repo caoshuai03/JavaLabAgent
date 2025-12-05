@@ -1,60 +1,72 @@
 server:
-  port: 8989
+  port: 8989                    # 应用服务端口
 
 spring:
+  # 文件上传配置
   servlet:
     multipart:
-      max-file-size: 100MB
-      max-request-size: 100MB
+      max-file-size: 100MB      # 单个文件最大大小
+      max-request-size: 100MB   # 单次请求最大大小
+
   profiles:
     active: dev
+
   ai:
+    # Web搜索配置 (使用SearXNG聚合搜索引擎)
     websearch:
-      api-key:  ${kinghy.ai.websearch.api-key}
+      api-key: ${kinghy.ai.websearch.api-key}
       searxng:
-        url: "http://127.0.0.1:8080/search"
-        nums: 10
-        engines: "duckduckgo,google,bing,brave,mojeek,presearch,qwant,startpage,yahoo,arxiv,crossref,google_scholar,internetarchivescholar,semantic_scholar"
+        url: "http://127.0.0.1:8080/search"   # SearXNG服务地址
+        nums: 10                               # 返回结果数量
+        engines: "duckduckgo,google,bing,brave,mojeek,presearch,qwant,startpage,yahoo,arxiv,crossref,google_scholar,internetarchivescholar,semantic_scholar"  # 启用的搜索引擎
+
+    # 阿里云灵积AI服务 (用于大模型API调用)
     dashscope:
       api-key: ${kinghy.dashscope.api-key}
 
+    # 向量数据库配置
     vectorstore:
       pgvector:
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1536
-  datasource:
-      username: postgres
-      password: admin
-      url: jdbc:postgresql://localhost:5433/postgres
-      driver-class-name: org.postgresql.Driver
+        index-type: HNSW                # 索引类型: HNSW高效近似最近邻搜索
+        distance-type: COSINE_DISTANCE  # 距离度量: 余弦相似度
+        dimensions: 1536                # 向量维度 (需与Embedding模型输出维度一致)
 
+  # -------------------- 数据库配置 --------------------
+  datasource:
+    username: postgres
+    password: admin
+    url: jdbc:postgresql://localhost:5433/postgres
+    driver-class-name: org.postgresql.Driver
+
+  # -------------------- Redis 缓存配置 --------------------
   data:
     redis:
-      port: 6379              # Redis 服务器端口，默认为 6379
-#      password:               # Redis 密码，默认为空
+      port: 6379              # Redis 服务器端口
+#      password:              # Redis 密码 (如需要请取消注释)
       timeout: 5000ms         # 连接超时时间
       lettuce:
         pool:
           max-active: 8       # 最大连接数
           max-idle: 4         # 最大空闲连接数
           min-idle: 1         # 最小空闲连接数
-          max-wait: 2000ms
+          max-wait: 2000ms    # 获取连接最大等待时间
+
+# ==================== 阿里云OSS对象存储配置 ====================
 aliyun:
   alioss:
-    endpoint: ${kinghy.alioss.endpoint}
-    access-key-id: ${kinghy.alioss.access-key-id}
-    access-key-secret: ${kinghy.alioss.access-key-secret}
-    bucket-name: ${kinghy.alioss.bucket-name}
+    endpoint: ${kinghy.alioss.endpoint}               # OSS服务端点
+    access-key-id: ${kinghy.alioss.access-key-id}     # 访问密钥ID
+    access-key-secret: ${kinghy.alioss.access-key-secret}  # 访问密钥Secret
+    bucket-name: ${kinghy.alioss.bucket-name}         # 存储桶名称
 
+# ==================== 自定义配置 (敏感信息占位符) ====================
 kinghy:
   jwt:
-    # 设置jwt签名加密时使用的秘钥
-    admin-secret-key: kinghy
-    # 设置jwt过期时间
-    admin-ttl: 86400000
-    # 设置前端传递过来的令牌名称
-    admin-token-name: token
+    # 管理员JWT配置
+    admin-secret-key: kinghy      # JWT签名密钥
+    admin-ttl: 86400000           # 过期时间 (24小时, 单位毫秒)
+    admin-token-name: token       # 请求头中的令牌名称
+    # 用户JWT配置
     user-secret-key: kinghy
     user-ttl: 86400000
     user-token-name: authentication

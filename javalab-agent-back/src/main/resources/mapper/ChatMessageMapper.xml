@@ -55,4 +55,16 @@
         ORDER BY created_at ASC
     </select>
 
+    <!-- 
+        插入新消息
+        使用 ::uuid 将 session_id 字符串转换为 PostgreSQL UUID 类型
+        id 使用 ASSIGN_ID 策略自动生成，不需要转换
+        
+        @param chatMessage 消息对象
+    -->
+    <insert id="insert" parameterType="com.cs.rag.entity.ChatMessage">
+        INSERT INTO chat_message (id, session_id, role, content, created_at)
+        VALUES (#{id}, #{sessionId}::uuid, #{role}, #{content}, #{createdAt})
+    </insert>
+
 </mapper>

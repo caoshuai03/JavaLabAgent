@@ -38,7 +38,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chat'
-import apiClient from '../api'
+import { useUserStore } from '../stores/user'
 
 const chatStore = useChatStore()
 const inputText = ref('')
@@ -85,35 +85,53 @@ const getApiBaseUrl = () => {
   }
 }
 
+// 获取用户 Store
+const userStore = useUserStore()
+
+// 是否已经接收到 sessionId
+let sessionIdReceived = false
+// 当前用户消息（用于设置会话标题）
+let currentUserMessage = ''
+
+/**
+ * 发送消息到后端持久化接口
+ * 后端会将消息存储到数据库中
+ */
 const handleSend = async () => {
   if (!canSend.value) return
 
   const message = inputText.value.trim()
   if (!message) return
 
-  // 确保有当前会话，如果没有则创建新会话
-  if (!chatStore.currentConversationId) {
-    chatStore.createConversation()
-  }
+  // 保存当前用户消息，用于设置会话标题
+  currentUserMessage = message
+  sessionIdReceived = false
 
+  // 添加用户消息到 UI
   chatStore.addMessage('user', message)
 
+  // 清空输入框
   inputText.value = ''
   if (inputRef.value) {
     inputRef.value.style.height = MIN_HEIGHT + 'px'
     showScrollbar.value = false
   }
 
+  // 添加空的助手消息用于流式更新
   chatStore.addMessage('assistant', '')
 
   chatStore.isStreaming = true
   chatStore.isLoading = true
 
+  // 构建请求参数
   const baseUrl = getApiBaseUrl()
-  const conversationId = chatStore.currentConversationId || ''
-  eventSource = new EventSource(
-    `${baseUrl}/api/v1/ai/rag?message=${encodeURIComponent(message)}&conversationId=${encodeURIComponent(conversationId)}`
-  )
+  const sessionId = chatStore.currentConversationId || ''
+  const userId = userStore.userInfo?.id || 1
+
+  // 使用持久化接口
+  const url = `${baseUrl}/api/v1/ai/rag/persistent?message=${encodeURIComponent(message)}&sessionId=${encodeURIComponent(sessionId)}&userId=${userId}&enableWebSearch=false`
+  
+  eventSource = new EventSource(url)
 
   eventSource.onmessage = (event) => {
     const lastMessage = chatStore.messages[chatStore.messages.length - 1]
@@ -131,6 +149,23 @@ const handleSend = async () => {
     if (event.data === '[DONE]' || event.data.trim() === '') {
       handleStop()
       return
+    }
+
+    // 检查是否是 SessionId 响应（第一条消息）
+    // 格式: [SESSION_ID:xxx]
+    if (!sessionIdReceived && event.data.startsWith('[SESSION_ID:')) {
+      const match = event.data.match(/\[SESSION_ID:(.+?)\]/)
+      if (match) {
+        const newSessionId = match[1]
+        sessionIdReceived = true
+        
+        // 如果是新会话，更新 sessionId 并添加到会话列表
+        if (chatStore.isNewConversation || !chatStore.currentConversationId) {
+          chatStore.setCurrentSessionId(newSessionId)
+          chatStore.addNewConversationToList(newSessionId, currentUserMessage)
+        }
+      }
+      return // 不把 sessionId 消息显示到 UI
     }
 
     // 更新最后一条消息
@@ -154,6 +189,9 @@ const handleSend = async () => {
   }
 }
 
+/**
+ * 停止流式响应
+ */
 const handleStop = () => {
   if (eventSource) {
     eventSource.close()
@@ -163,8 +201,6 @@ const handleStop = () => {
   if (chatStore.isStreaming) {
     chatStore.isStreaming = false
     chatStore.isLoading = false
-
-    chatStore.saveCurrentConversationMessages()
   }
 }
 

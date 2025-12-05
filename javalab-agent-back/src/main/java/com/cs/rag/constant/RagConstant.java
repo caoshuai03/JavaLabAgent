@@ -25,5 +25,8 @@ public class RagConstant {
     public static final String SESSION_ID_SUFFIX = "]";
     public static final String WEB_SOURCE_LABEL = "网络来源:\n";
     public static final String KNOWLEDGE_SOURCE_LABEL = "\n\n知识库来源:\n";
+    
+    /** 无知识库命中时的提示标签 */
+    public static final String NO_KNOWLEDGE_FOUND_LABEL = "\n\n[系统提示: 知识库中未检索到相关内容，请基于通用知识回答]\n";
 
 }
