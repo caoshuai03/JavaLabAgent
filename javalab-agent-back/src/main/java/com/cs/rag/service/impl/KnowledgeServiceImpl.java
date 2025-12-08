@@ -77,7 +77,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 List<Document> documents = tkReader.get();
                 log.info("文档解析成功，原始文档数: {}", documents.size());
 
-                // 2. 文档分割：根据文档内容智能选择分割器
+                // 2. 文档分割：自定义QA对分割器
                 List<Document> splitDocuments = splitDocuments(documents);
 
                 // 3. 向量化存储
@@ -100,7 +100,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     /**
-     * 根据文档内容智能选择分割器进行文档分割
+     * 自定义QA对分割
      *
      * @param documents 原始文档列表
      * @return 分割后的文档列表

@@ -1,6 +1,5 @@
 package com.cs.rag.config;
 
-import com.alibaba.cloud.ai.advisor.RetrievalRerankAdvisor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
@@ -49,20 +48,7 @@ public class ApplicationConfig {
     public TokenTextSplitter tokenTextSplitter() {
         // 当前配置：使用默认值
         // 默认值通常是：chunkSize=1000, overlap=200
-        // 如需自定义，可以查看Spring AI文档了解具体构造函数
         return new TokenTextSplitter();
-        
-        // ========== 自定义配置示例（根据实际API调整）==========
-        // 如果TokenTextSplitter支持构造函数参数，可以参考以下配置：
-        // 
-        // 配置1：标准配置（推荐用于大多数场景）
-        // return new TokenTextSplitter(512, 50);  // chunkSize=512, overlap=50
-        // 
-        // 配置2：精确模式（适合技术文档、法律文档）
-        // return new TokenTextSplitter(768, 100); // chunkSize=768, overlap=100
-        // 
-        // 配置3：平衡模式（适合一般问答）
-        // return new TokenTextSplitter(256, 25);  // chunkSize=256, overlap=25
     }
 
     @Bean

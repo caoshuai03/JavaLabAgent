@@ -113,7 +113,12 @@ public class RagServiceImpl implements RagService {
         String enhancedMessage = enhance(message);
 
         // ===== Step 5: 构建消息列表并调用LLM =====
+        long llmStartTime = System.currentTimeMillis();
+        log.info("LLM调用开始: sessionId={}", finalSessionId);
+        
+				// 构建大模型客户端
         ChatClient chatClient = ChatClient.builder(chatModel).build();
+
         StringBuilder fullResponse = new StringBuilder();
         final String currentSessionId = finalSessionId;
 
@@ -160,8 +165,9 @@ public class RagServiceImpl implements RagService {
                             String aiResponse = fullResponse.toString();
                             if (!aiResponse.isEmpty()) {
                                 chatMessageService.saveAssistantMessage(currentSessionId, aiResponse);
-                                log.info("已保存AI回复: sessionId={}, length={}",
-                                        currentSessionId, aiResponse.length());
+                                long llmEndTime = System.currentTimeMillis();
+                                log.info("LLM调用完成: sessionId={}, 回复长度={}, 耗时{}ms",
+                                        currentSessionId, aiResponse.length(), llmEndTime - llmStartTime);
                             }
                         })
                         .doOnError(error -> {
@@ -205,6 +211,8 @@ public class RagServiceImpl implements RagService {
      */
     @Override
     public String enhance(String message) {
+        long startTime = System.currentTimeMillis();
+        
         // 构建检索请求
         SearchRequest ragSearchRequest = SearchRequest.builder()
                 .query(message)
@@ -212,11 +220,15 @@ public class RagServiceImpl implements RagService {
                 .similarityThreshold(SIMILARITY_THRESHOLD)
                 .build();
 
-        log.info("RAG检索: 相似度阈值={}, 检索数量={}", SIMILARITY_THRESHOLD, TOP_K);
+        log.info("RAG检索开始: 相似度阈值={}, 检索数量={}", SIMILARITY_THRESHOLD, TOP_K);
 
         // 执行向量检索
         List<Document> ragDocuments = vectorStore.similaritySearch(ragSearchRequest);
-        log.info("RAG检索结果: 命中{}条文档", ragDocuments != null ? ragDocuments.size() : 0);
+        
+        long endTime = System.currentTimeMillis();
+        log.info("RAG检索完成: 命中{}条文档, 耗时{}ms", 
+                ragDocuments != null ? ragDocuments.size() : 0, 
+                endTime - startTime);
 
         // 记录检索到的文档信息
         if (ragDocuments != null && !ragDocuments.isEmpty()) {
