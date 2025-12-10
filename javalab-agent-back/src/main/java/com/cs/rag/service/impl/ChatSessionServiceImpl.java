@@ -109,28 +109,35 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     }
     
     /**
-     * 逻辑删除会话
-     * 将 deleted 标记设为 1，不实际删除数据库记录
+     * 逻辑删除会话（带用户归属校验）
+     * 将 deleted 标记设为 1，仅删除属于指定用户的会话
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @return 是否删除成功
      */
     @Override
-    public boolean deleteSession(String sessionId) {
+    public boolean deleteSession(String sessionId, Long userId) {
         // 参数校验
         if (sessionId == null || sessionId.trim().isEmpty()) {
             log.warn("删除会话失败: sessionId为空");
             return false;
         }
         
-        // 执行逻辑删除
-        int rows = chatSessionMapper.logicalDelete(sessionId);
+        if (userId == null) {
+            log.warn("删除会话失败: userId为空");
+            return false;
+        }
+        
+        // 执行逻辑删除（带用户校验）
+        int rows = chatSessionMapper.logicalDeleteWithUser(sessionId, userId);
         
         if (rows > 0) {
-            log.info("逻辑删除会话成功: sessionId={}", sessionId);
+            log.info("逻辑删除会话成功: sessionId={}, userId={}", sessionId, userId);
             return true;
         } else {
-            log.warn("逻辑删除会话失败: sessionId={}, 会话可能不存在", sessionId);
+            log.warn("逻辑删除会话失败: sessionId={}, userId={}, 会话可能不存在或不属于该用户", 
+                    sessionId, userId);
             return false;
         }
     }

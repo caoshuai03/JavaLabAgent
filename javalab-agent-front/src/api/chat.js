@@ -18,20 +18,23 @@ export const getUserSessions = (userId) => {
 /**
  * 获取会话的历史消息
  * @param {string} sessionId - 会话ID
+ * @param {number} userId - 用户ID（用于权限校验）
  * @returns {Promise} 消息列表
  */
-export const getSessionHistory = (sessionId) => {
-  // 使用 POST 请求获取会话历史消息
-  return apiClient.post('/v1/ai/rag/history', { sessionId })
+export const getSessionHistory = (sessionId, userId = 1) => {
+  // 使用 POST 请求获取会话历史消息，增加用户ID校验
+  return apiClient.post('/v1/ai/rag/history', { sessionId, userId })
 }
 
 /**
  * 删除会话（逻辑删除）
  * @param {string} sessionId - 会话ID
+ * @param {number} userId - 用户ID（用于权限校验）
  * @returns {Promise} 删除结果，true表示成功
  */
-export const deleteSession = (sessionId) => {
-  return apiClient.delete(`/v1/ai/rag/sessions/${sessionId}`)
+export const deleteSession = (sessionId, userId = 1) => {
+  // 改为 POST 请求，增加用户ID校验
+  return apiClient.post('/v1/ai/rag/sessions/delete', { sessionId, userId })
 }
 
 /**

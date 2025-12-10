@@ -36,6 +36,11 @@ public class ChatMessage {
     private String sessionId;
     
     /**
+     * 用户ID，用于消息级别的用户隔离
+     */
+    private Long userId;
+    
+    /**
      * 消息角色
      * user: 用户消息
      * assistant: AI助手回复

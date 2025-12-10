@@ -49,11 +49,13 @@ public interface RagService {
     
     /**
      * 获取会话的历史消息列表
+     * 增加用户ID校验，确保用户只能访问自己的消息
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @return 消息列表，按时间正序排列
      */
-    List<ChatMessage> getHistory(String sessionId);
+    List<ChatMessage> getHistory(String sessionId, Long userId);
     
     /**
      * 获取用户的所有会话列表
@@ -73,9 +75,11 @@ public interface RagService {
     
     /**
      * 删除会话（逻辑删除）
+     * 增加用户ID校验，确保用户只能删除自己的会话
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @return 是否删除成功
      */
-    boolean delete(String sessionId);
+    boolean delete(String sessionId, Long userId);
 }

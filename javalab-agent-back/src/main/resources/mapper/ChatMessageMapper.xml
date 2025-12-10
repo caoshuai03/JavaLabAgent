@@ -13,6 +13,7 @@
     <resultMap id="BaseResultMap" type="com.cs.rag.entity.ChatMessage">
         <id property="id" column="id"/>
         <result property="sessionId" column="session_id"/>
+        <result property="userId" column="user_id"/>
         <result property="role" column="role"/>
         <result property="content" column="content"/>
         <result property="createdAt" column="created_at"/>
@@ -20,7 +21,7 @@
 
     <!-- 基础列定义 -->
     <sql id="Base_Column_List">
-        id, session_id, role, content, created_at
+        id, session_id, user_id, role, content, created_at
     </sql>
 
     <!-- 
@@ -29,8 +30,10 @@
         滑动窗口策略说明：
         1. 查询时按创建时间倒序(DESC)获取最近N条
         2. 返回结果在Service层需反转为时间正序，以符合LLM对话顺序要求
+        3. 增加用户ID校验，确保用户只能访问自己的消息
         
         @param sessionId 会话ID
+        @param userId 用户ID（用于权限校验）
         @param limit 获取消息条数 (滑动窗口大小)
         @return 最近N条消息列表 (按时间倒序)
     -->
@@ -38,20 +41,24 @@
         SELECT <include refid="Base_Column_List"/>
         FROM chat_message 
         WHERE session_id = #{sessionId}::uuid
+          AND user_id = #{userId}
         ORDER BY created_at DESC 
         LIMIT #{limit}
     </select>
 
     <!-- 
         查询指定会话的所有消息，按时间正序
+        增加用户ID校验，确保用户只能访问自己的消息
         
         @param sessionId 会话ID
+        @param userId 用户ID（用于权限校验）
         @return 消息列表 (按时间正序)
     -->
     <select id="selectBySessionId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM chat_message 
         WHERE session_id = #{sessionId}::uuid
+          AND user_id = #{userId}
         ORDER BY created_at ASC
     </select>
 
@@ -59,12 +66,13 @@
         插入新消息
         使用 ::uuid 将 session_id 字符串转换为 PostgreSQL UUID 类型
         id 使用 ASSIGN_ID 策略自动生成，不需要转换
+        增加 user_id 字段，实现消息级别的用户隔离
         
-        @param chatMessage 消息对象
+        @param chatMessage 消息对象（包含 userId）
     -->
     <insert id="insert" parameterType="com.cs.rag.entity.ChatMessage">
-        INSERT INTO chat_message (id, session_id, role, content, created_at)
-        VALUES (#{id}, #{sessionId}::uuid, #{role}, #{content}, #{createdAt})
+        INSERT INTO chat_message (id, session_id, user_id, role, content, created_at)
+        VALUES (#{id}, #{sessionId}::uuid, #{userId}, #{role}, #{content}, #{createdAt})
     </insert>
 
 </mapper>

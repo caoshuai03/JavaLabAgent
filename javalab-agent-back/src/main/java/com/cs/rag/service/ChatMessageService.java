@@ -2,7 +2,6 @@ package com.cs.rag.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.cs.rag.entity.ChatMessage;
-import com.cs.rag.pojo.dto.ChatMessageDTO;
 import org.springframework.ai.chat.messages.Message;
 
 import java.util.List;
@@ -20,19 +19,21 @@ public interface ChatMessageService extends IService<ChatMessage> {
      * 保存用户消息
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @param content 消息内容
      * @return 保存的消息对象
      */
-    ChatMessage saveUserMessage(String sessionId, String content);
+    ChatMessage saveUserMessage(String sessionId, Long userId, String content);
     
     /**
      * 保存AI助手回复
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @param content 消息内容
      * @return 保存的消息对象
      */
-    ChatMessage saveAssistantMessage(String sessionId, String content);
+    ChatMessage saveAssistantMessage(String sessionId, Long userId, String content);
     
     /**
      * 滑动窗口：获取最近N条消息作为上下文
@@ -40,12 +41,14 @@ public interface ChatMessageService extends IService<ChatMessage> {
      * 滑动窗口策略说明：
      * 1. 从数据库查询最近N条消息 (按时间倒序)
      * 2. 将结果反转为时间正序，符合LLM对话顺序要求
+     * 3. 增加用户ID校验，确保用户只能访问自己的消息
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @param limit 滑动窗口大小 (获取消息条数)
      * @return 时间正序的消息列表
      */
-    List<ChatMessage> getRecentMessages(String sessionId, int limit);
+    List<ChatMessage> getRecentMessages(String sessionId, Long userId, int limit);
     
     /**
      * 将数据库消息列表转换为Spring AI的Message列表
@@ -57,19 +60,12 @@ public interface ChatMessageService extends IService<ChatMessage> {
     List<Message> convertToAiMessages(List<ChatMessage> messages);
     
     /**
-     * 将数据库消息列表转换为ChatMessageDTO列表
-     * 用于构建发送给LLM的上下文，仅包含role和content字段
-     * 
-     * @param messages 数据库消息列表
-     * @return ChatMessageDTO列表
-     */
-    List<ChatMessageDTO> convertToMessageDTOs(List<ChatMessage> messages);
-    
-    /**
      * 获取指定会话的所有消息
+     * 增加用户ID校验，确保用户只能访问自己的消息
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @return 消息列表，按时间正序
      */
-    List<ChatMessage> getMessagesBySessionId(String sessionId);
+    List<ChatMessage> getMessagesBySessionId(String sessionId, Long userId);
 }

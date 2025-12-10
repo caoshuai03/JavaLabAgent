@@ -36,11 +36,24 @@ public interface ChatSessionMapper extends BaseMapper<ChatSession> {
     void updateSessionTime(@Param("sessionId") String sessionId);
     
     /**
-     * 逻辑删除会话
-     * 将 deleted 标记设为 1
+     * 根据ID和用户ID查询会话（带用户归属校验）
+     * 用于验证会话是否属于指定用户，防止越权访问
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
+     * @return 会话对象，如果不存在或不属于该用户则返回null
+     */
+    ChatSession selectByIdAndUserId(@Param("sessionId") String sessionId, 
+                                     @Param("userId") Long userId);
+    
+    /**
+     * 逻辑删除会话（带用户归属校验）
+     * 将 deleted 标记设为 1，仅删除属于指定用户的会话
+     * 
+     * @param sessionId 会话ID
+     * @param userId 用户ID
      * @return 影响的行数
      */
-    int logicalDelete(@Param("sessionId") String sessionId);
+    int logicalDeleteWithUser(@Param("sessionId") String sessionId, 
+                               @Param("userId") Long userId);
 }

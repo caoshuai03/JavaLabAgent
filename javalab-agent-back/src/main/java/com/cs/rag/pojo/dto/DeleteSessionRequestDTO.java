@@ -4,14 +4,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 /**
- * 获取会话历史消息请求体
+ * 删除会话请求体
  * 
  * @author caoshuai
  * @since 1.0
  */
 @Data
-@Schema(description = "获取会话历史消息请求参数")
-public class HistoryRequestDTO {
+@Schema(description = "删除会话请求参数")
+public class DeleteSessionRequestDTO {
     
     /**
      * 会话ID

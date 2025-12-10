@@ -98,8 +98,11 @@ export const useChatStore = defineStore('chat', () => {
    */
   const deleteConversation = async (conversationId) => {
     try {
-      // 调用后端API删除会话
-      const response = await deleteSession(conversationId)
+      const userStore = useUserStore()
+      const userId = userStore.userInfo?.id || 1
+      
+      // 调用后端API删除会话，传递 userId 进行权限校验
+      const response = await deleteSession(conversationId, userId)
       
       // 删除成功后更新本地状态
       if (response.data === true) {
@@ -214,7 +217,10 @@ export const useChatStore = defineStore('chat', () => {
    */
   const loadConversationMessagesFromDB = async (sessionId) => {
     try {
-      const response = await getSessionHistory(sessionId)
+      const userStore = useUserStore()
+      const userId = userStore.userInfo?.id || 1
+      
+      const response = await getSessionHistory(sessionId, userId)
       const dbMessages = response.data || []
       
       // 转换后端消息格式为前端格式

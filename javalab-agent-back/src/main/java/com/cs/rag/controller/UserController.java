@@ -9,6 +9,7 @@ import com.cs.rag.pojo.dto.PasswordDTO;
 import com.cs.rag.pojo.dto.UserDTO;
 import com.cs.rag.pojo.dto.UserPageQueryDTO;
 import com.cs.rag.pojo.vo.UserLoginVO;
+import com.cs.rag.pojo.vo.UserInfoVO;
 import com.cs.rag.service.UserService;
 import com.cs.rag.utils.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -178,13 +179,22 @@ public class UserController {
     /**
      * 根据id查询员工信息
      * @param id
-     * @return
+     * @return 返回 UserInfoVO，隐藏敏感信息（密码、身份证号等）
      */
     @GetMapping("/{id}")
     @Operation(summary = "info",description = "根据id查询user信息")
-    public BaseResponse<User> getById(@PathVariable Long id){
-        User employee = userService.getById(id);
-        return ResultUtils.success(employee);
+    public BaseResponse<UserInfoVO> getById(@PathVariable Long id){
+        User user = userService.getById(id);
+        // 转换为 VO，隐藏敏感字段
+        UserInfoVO userInfoVO = UserInfoVO.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .userName(user.getUserName())
+                .phone(user.getPhone())
+                .sex(user.getSex())
+                .status(user.getStatus())
+                .build();
+        return ResultUtils.success(userInfoVO);
     }
 
     /**
@@ -203,15 +213,24 @@ public class UserController {
     /**
      * 验证token有效性
      * @param id
-     * @return
+     * @return 返回 UserInfoVO，隐藏敏感信息
      */
     @GetMapping("/validate")
     @Operation(summary = "validate", description = "验证用户token有效性")
-    public BaseResponse<User> validateToken(@RequestParam Long id) {
+    public BaseResponse<UserInfoVO> validateToken(@RequestParam Long id) {
         // JwtTokenUserInterceptor 会自动验证token有效性
         // 如果能执行到这里，说明token有效
         User user = userService.getById(id);
-        return ResultUtils.success(user);
+        // 转换为 VO，隐藏敏感字段
+        UserInfoVO userInfoVO = UserInfoVO.builder()
+                .id(user.getId())
+                .name(user.getName())
+                .userName(user.getUserName())
+                .phone(user.getPhone())
+                .sex(user.getSex())
+                .status(user.getStatus())
+                .build();
+        return ResultUtils.success(userInfoVO);
     }
     
     /**

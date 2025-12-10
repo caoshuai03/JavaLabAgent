@@ -1,0 +1,74 @@
+server:
+  port: 8989                    # 应用服务端口
+
+spring:
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 100MB      # 单个文件最大大小
+      max-request-size: 100MB   # 单次请求最大大小
+
+  profiles:
+    active: dev
+
+#  ai:
+#    # 阿里云灵积AI服务 (用于大模型API调用)
+#    dashscope:
+#      api-key: ${cs.dashscope.api-key}
+  ai:
+    # 使用 Ollama 本地模型
+    ollama:
+      base-url: ${cs.ollama.base-url}  # Ollama 服务地址
+      chat:
+        model: qwen3:8b                 # 聊天模型
+        options:
+          temperature: 0.7              # 生成温度
+      embedding:
+        model: turingdance/gte-large-zh:latest  # 嵌入模型
+
+    # 向量数据库配置
+    vectorstore:
+      pgvector:
+        index-type: HNSW                # 索引类型: HNSW高效近似最近邻搜索
+        distance-type: COSINE_DISTANCE  # 距离度量: 余弦相似度
+        dimensions: 1536                # 向量维度 (需与Embedding模型输出维度一致)
+
+  # -------------------- 数据库配置 --------------------
+  datasource:
+    username: postgres
+    password: admin
+    url: jdbc:postgresql://localhost:5433/postgres
+    driver-class-name: org.postgresql.Driver
+
+  # -------------------- Redis 缓存配置 --------------------
+  data:
+    redis:
+      port: 6379              # Redis 服务器端口
+#      password:              # Redis 密码 (如需要请取消注释)
+      timeout: 5000ms         # 连接超时时间
+      lettuce:
+        pool:
+          max-active: 8       # 最大连接数
+          max-idle: 4         # 最大空闲连接数
+          min-idle: 1         # 最小空闲连接数
+          max-wait: 2000ms    # 获取连接最大等待时间
+
+# ==================== 阿里云OSS对象存储配置 ====================
+aliyun:
+  alioss:
+    endpoint: ${cs.alioss.endpoint}               # OSS服务端点
+    access-key-id: ${cs.alioss.access-key-id}     # 访问密钥ID
+    access-key-secret: ${cs.alioss.access-key-secret}  # 访问密钥Secret
+    bucket-name: ${cs.alioss.bucket-name}         # 存储桶名称
+
+# ==================== 自定义配置 (敏感信息占位符) ====================
+cs:
+  jwt:
+    # 管理员JWT配置
+    admin-secret-key: cssecret      # JWT签名密钥
+    admin-ttl: 86400000           # 过期时间 (24小时, 单位毫秒)
+    admin-token-name: token       # 请求头中的令牌名称
+    # 用户JWT配置
+    user-secret-key: cssecret
+    user-ttl: 86400000
+    user-token-name: authentication

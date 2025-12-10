@@ -26,11 +26,7 @@ logs/
 .DS_Store
 Thumbs.db
 
-# 敏感配置文件 (重要!)
-application.yml
-application-local.yml
-application-dev.yml
-application-prod.yml
+# 敏感配置文件
 *-local.properties
 *-dev.properties
 *-prod.properties

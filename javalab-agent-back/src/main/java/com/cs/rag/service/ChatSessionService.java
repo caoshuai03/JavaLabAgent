@@ -49,11 +49,12 @@ public interface ChatSessionService extends IService<ChatSession> {
     ChatSession getOrCreateSession(String sessionId, Long userId, String title);
     
     /**
-     * 逻辑删除会话
-     * 将 deleted 标记设为 1，不实际删除数据
+     * 逻辑删除会话（带用户归属校验）
+     * 将 deleted 标记设为 1，仅删除属于指定用户的会话
      * 
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @return 是否删除成功
      */
-    boolean deleteSession(String sessionId);
+    boolean deleteSession(String sessionId, Long userId);
 }

@@ -3,7 +3,6 @@ package com.cs.rag.service.impl;
 import com.cs.rag.constant.RagConstant;
 import com.cs.rag.entity.ChatMessage;
 import com.cs.rag.entity.ChatSession;
-import com.cs.rag.pojo.dto.ChatMessageDTO;
 import com.cs.rag.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -13,7 +12,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -98,11 +96,11 @@ public class RagServiceImpl implements RagService {
         log.info("会话信息: sessionId={}, isNew={}, userId={}", finalSessionId, isNewSession, userId);
 
         // ===== Step 2: 保存用户消息 =====
-        chatMessageService.saveUserMessage(finalSessionId, message);
-        log.info("已保存用户消息: sessionId={}", finalSessionId);
+        chatMessageService.saveUserMessage(finalSessionId, userId, message);
+        log.info("已保存用户消息: sessionId={}, userId={}", finalSessionId, userId);
 
         // ===== Step 3: 构建滑动窗口上下文 =====
-        List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(finalSessionId, MEMORY_SIZE);
+        List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(finalSessionId, userId, MEMORY_SIZE);
         // 转换为DTO形式
 //        List<ChatMessageDTO> contextMessageDTOs = chatMessageService.convertToMessageDTOs(recentMessages);
         // 同时保留AI Message用于LLM调用
@@ -164,7 +162,7 @@ public class RagServiceImpl implements RagService {
                             // 流结束后保存AI回复
                             String aiResponse = fullResponse.toString();
                             if (!aiResponse.isEmpty()) {
-                                chatMessageService.saveAssistantMessage(currentSessionId, aiResponse);
+                                chatMessageService.saveAssistantMessage(currentSessionId, userId, aiResponse);
                                 long llmEndTime = System.currentTimeMillis();
                                 log.info("LLM调用完成: sessionId={}, 回复长度={}, 耗时{}ms",
                                         currentSessionId, aiResponse.length(), llmEndTime - llmStartTime);
@@ -180,8 +178,8 @@ public class RagServiceImpl implements RagService {
     // ==================== 会话管理方法 ====================
 
     @Override
-    public List<ChatMessage> getHistory(String sessionId) {
-        return chatMessageService.getMessagesBySessionId(sessionId);
+    public List<ChatMessage> getHistory(String sessionId, Long userId) {
+        return chatMessageService.getMessagesBySessionId(sessionId, userId);
     }
 
     @Override
@@ -191,13 +189,15 @@ public class RagServiceImpl implements RagService {
 
     /**
      * 删除会话（逻辑删除）
+     * 增加用户ID校验，确保用户只能删除自己的会话
      *
      * @param sessionId 会话ID
+     * @param userId 用户ID
      * @return 是否删除成功
      */
     @Override
-    public boolean delete(String sessionId) {
-        return chatSessionService.deleteSession(sessionId);
+    public boolean delete(String sessionId, Long userId) {
+        return chatSessionService.deleteSession(sessionId, userId);
     }
 
     // ==================== 辅助方法 ====================

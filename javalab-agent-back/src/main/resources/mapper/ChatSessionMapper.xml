@@ -74,16 +74,34 @@
     </select>
     
     <!-- 
-        逻辑删除会话
-        将 deleted 标记设为 1
+        根据ID和用户ID查询会话（带用户归属校验）
+        用于验证会话是否属于指定用户，防止越权访问
         
         @param sessionId 会话ID
+        @param userId 用户ID
+        @return 会话对象，如果不存在或不属于该用户则返回null
+    -->
+    <select id="selectByIdAndUserId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM chat_session 
+        WHERE id = #{sessionId}::uuid 
+          AND user_id = #{userId} 
+          AND (deleted = 0 OR deleted IS NULL)
+    </select>
+    
+    <!-- 
+        逻辑删除会话（带用户归属校验）
+        将 deleted 标记设为 1，仅删除属于指定用户的会话
+        
+        @param sessionId 会话ID
+        @param userId 用户ID
         @return 影响的行数
     -->
-    <update id="logicalDelete">
+    <update id="logicalDeleteWithUser">
         UPDATE chat_session 
         SET deleted = 1, updated_at = CURRENT_TIMESTAMP 
-        WHERE id = #{sessionId}::uuid
+        WHERE id = #{sessionId}::uuid 
+          AND user_id = #{userId}
     </update>
 
 </mapper>
