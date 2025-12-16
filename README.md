@@ -142,7 +142,7 @@ npm install
    ```
 3. 启动 nginx 容器：
    ```bash
-
+docker-compose up -d
       ```
 
 启动成功后，前端服务运行在 `http://localhost`
@@ -154,7 +154,8 @@ npm install
 代码修改后需要重新构建：
 
 ```bash
-npm run build
+
+
 ```
 
 #### 4.2 应用更新
