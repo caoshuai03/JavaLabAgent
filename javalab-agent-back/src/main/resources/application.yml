@@ -31,7 +31,7 @@ spring:
       pgvector:
         index-type: HNSW                # 索引类型: HNSW高效近似最近邻搜索
         distance-type: COSINE_DISTANCE  # 距离度量: 余弦相似度
-        dimensions: 1536                # 向量维度 (需与Embedding模型输出维度一致)
+        dimensions: 1024                # 向量维度 (需与Embedding模型输出维度一致)
 
   # -------------------- 数据库配置 --------------------
   datasource:

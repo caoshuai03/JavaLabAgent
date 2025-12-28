@@ -1,15 +1,15 @@
 package com.cs.rag.controller;
 
 import com.cs.rag.common.*;
-import com.cs.rag.constant.UserMessageConstant;
 import com.cs.rag.config.JwtProperties;
 import com.cs.rag.constant.JwtClaimsConstant;
+import com.cs.rag.constant.UserMessageConstant;
 import com.cs.rag.entity.User;
 import com.cs.rag.pojo.dto.PasswordDTO;
 import com.cs.rag.pojo.dto.UserDTO;
 import com.cs.rag.pojo.dto.UserPageQueryDTO;
-import com.cs.rag.pojo.vo.UserLoginVO;
 import com.cs.rag.pojo.vo.UserInfoVO;
+import com.cs.rag.pojo.vo.UserLoginVO;
 import com.cs.rag.service.UserService;
 import com.cs.rag.utils.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,7 +26,7 @@ import java.util.Map;
 
 /**
  * 用户管理控制器
- * 
+ *
  * <p>负责处理用户相关的HTTP请求，包括:</p>
  * <ul>
  *   <li>用户认证（登录/登出/注册）</li>
@@ -34,7 +34,7 @@ import java.util.Map;
  *   <li>密码管理</li>
  *   <li>账号状态管理（启用/禁用）</li>
  * </ul>
- * 
+ *
  * @author caoshuai
  * @since 1.0
  */
@@ -43,12 +43,16 @@ import java.util.Map;
 @RestController
 @RequestMapping(ApplicationConstant.API_VERSION + "/user")
 public class UserController {
-    
-    /** 用户业务服务 */
+
+    /**
+     * 用户业务服务
+     */
     @Autowired
     private UserService userService;
-    
-    /** JWT配置属性 */
+
+    /**
+     * JWT配置属性
+     */
     @Autowired
     private JwtProperties jwtProperties;
 
@@ -57,7 +61,7 @@ public class UserController {
      * 修改密码
      */
     @PostMapping("/updatePassword")
-    @Operation(summary = "updatePassword",description = "修改密码")
+    @Operation(summary = "updatePassword", description = "修改密码")
     public BaseResponse updatePassword(@RequestBody PasswordDTO passwordDTO) {
         log.info("修改密码：{}", passwordDTO.toString());
         if (!passwordDTO.getNewPassword().equals(passwordDTO.getConfirmPassword())) {
@@ -75,18 +79,15 @@ public class UserController {
 
     /**
      * 注册
-     *
      */
     @PostMapping("/register")
-    @Operation(summary = "register",description = "注册")
+    @Operation(summary = "register", description = "注册")
     public BaseResponse register(@RequestBody User user) {
         log.info("注册：{}", user.toString());
 
         if (userService.getByUsername(user.getUserName())) {
             return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.USERNAME_ALREADY_EXISTS);
         } else {
-            // 在注册前对密码进行MD5加密
-            user.setPassword(DigestUtils.md5DigestAsHex(user.getPassword().getBytes()));
             userService.register(user);
         }
         return ResultUtils.success(UserMessageConstant.REGISTER_SUCCESS);
@@ -100,10 +101,10 @@ public class UserController {
      * @return
      */
     @PostMapping("/login")
-    @Operation(summary = "login",description = "登录")
+    @Operation(summary = "login", description = "登录")
     public BaseResponse login(@RequestParam(value = "userName", defaultValue = "admin") String userName,
-                                               @RequestParam(value = "password", defaultValue = "123456") String password) throws AccountLockedException, AccountNotFoundException {
-        log.info("登录：{}", userName+":"+password);
+                              @RequestParam(value = "password", defaultValue = "123456") String password) throws AccountLockedException, AccountNotFoundException {
+        log.info("登录：{}", userName + ":" + password);
 
         User user = userService.login(userName, password);
 
@@ -131,32 +132,34 @@ public class UserController {
      * @return
      */
     @PostMapping("/logout")
-    @Operation(summary = "logout",description = "退出")
+    @Operation(summary = "logout", description = "退出")
     public BaseResponse<String> logout() {
         return ResultUtils.success(UserMessageConstant.LOGOUT_SUCCESS);
     }
 
     /**
      * 新增
+     *
      * @param userDTO
      * @return
      */
     @PostMapping("/addUser")
-    @Operation(summary = "logout",description = "新增user")
-    public BaseResponse save(@RequestBody UserDTO userDTO){
-        log.info("新增员工：{}",userDTO);
+    @Operation(summary = "logout", description = "新增user")
+    public BaseResponse save(@RequestBody UserDTO userDTO) {
+        log.info("新增员工：{}", userDTO);
         userService.saveUser(userDTO);
         return ResultUtils.success(UserMessageConstant.ADD_SUCCESS);
     }
 
     /**
      * 员工分页查询
+     *
      * @param userPageQueryDTO
      * @return
      */
     @GetMapping("/page")
-    @Operation(summary = "page",description = "user分页查询")
-    public BaseResponse<PageResult> page(UserPageQueryDTO userPageQueryDTO){
+    @Operation(summary = "page", description = "user分页查询")
+    public BaseResponse<PageResult> page(UserPageQueryDTO userPageQueryDTO) {
         log.info("员工分页查询，参数为：{}", userPageQueryDTO);
         PageResult pageResult = userService.pageQuery(userPageQueryDTO);
         return ResultUtils.success(pageResult);
@@ -164,26 +167,28 @@ public class UserController {
 
     /**
      * 启用禁用员工账号
+     *
      * @param status
      * @param id
      * @return
      */
     @PostMapping("/status/{status}")
-    @Operation(summary = "status",description = "启用禁用账号")
-    public BaseResponse startOrStop(@PathVariable Integer status,Integer id){
-        log.info("启用禁用员工账号：{},{}",status,id);
-        userService.startOrStop(status,id);
+    @Operation(summary = "status", description = "启用禁用账号")
+    public BaseResponse startOrStop(@PathVariable Integer status, Integer id) {
+        log.info("启用禁用员工账号：{},{}", status, id);
+        userService.startOrStop(status, id);
         return ResultUtils.success(UserMessageConstant.DISABLE_SUCCESS);
     }
 
     /**
      * 根据id查询员工信息
+     *
      * @param id
      * @return 返回 UserInfoVO，隐藏敏感信息（密码、身份证号等）
      */
     @GetMapping("/{id}")
-    @Operation(summary = "info",description = "根据id查询user信息")
-    public BaseResponse<UserInfoVO> getById(@PathVariable Long id){
+    @Operation(summary = "info", description = "根据id查询user信息")
+    public BaseResponse<UserInfoVO> getById(@PathVariable Long id) {
         User user = userService.getById(id);
         // 转换为 VO，隐藏敏感字段
         UserInfoVO userInfoVO = UserInfoVO.builder()
@@ -199,19 +204,21 @@ public class UserController {
 
     /**
      * 编辑员工信息
+     *
      * @param user
      * @return
      */
     @PutMapping("/update")
-    @Operation(summary = "info",description = "编辑user信息")
-    public BaseResponse update(@RequestBody User user){
+    @Operation(summary = "info", description = "编辑user信息")
+    public BaseResponse update(@RequestBody User user) {
         log.info("编辑员工信息：{}", user);
         userService.updateById(user);
         return ResultUtils.success(UserMessageConstant.EDIT_SUCCESS);
     }
-    
+
     /**
      * 验证token有效性
+     *
      * @param id
      * @return 返回 UserInfoVO，隐藏敏感信息
      */
@@ -232,9 +239,10 @@ public class UserController {
                 .build();
         return ResultUtils.success(userInfoVO);
     }
-    
+
     /**
      * 更新当前用户信息
+     *
      * @param userDTO
      * @return
      */

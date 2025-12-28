@@ -1,0 +1,77 @@
+# 根目录一键部署编排：前端(nginx) + 后端(Spring Boot) + PostgreSQL(pgvector)
+# 使用方式：在仓库根目录执行 `docker compose up -d --build`
+
+services:
+  postgres:
+    # pgvector 已内置到该镜像（对应 PostgreSQL 16 系列）
+    image: ankane/pgvector:latest
+    container_name: javalab-postgres
+    environment:
+      # 数据库初始化账号/库名（与后端连接保持一致）
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    ports:
+      # 映射到宿主机 5433，与你 application.yml 里本地习惯保持一致
+      - "5433:5432"
+    volumes:
+      # 持久化数据
+      - postgres_data:/var/lib/postgresql/data
+      # 首次初始化时自动执行（仅在数据卷为空时执行一次）
+      - ./javalab-agent-back/src/main/resources/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      # 健康检查，避免后端过早启动
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    # 后端使用多阶段构建：先 Maven 打包，再用 JRE 运行
+    build:
+      context: ./javalab-agent-back
+      dockerfile: Dockerfile
+    container_name: javalab-agent-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+
+      # 暂时不启用 Redis：禁用 Redis 自动配置，避免容器内尝试连接 localhost:6379
+      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+      # 数据库连接（容器内通过 service name 访问）
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-postgres}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+
+      # 向量嵌入维度
+      SPRING_AI_VECTORSTORE_PGVECTOR_DIMENSIONS: 1024
+
+      # Ollama 服务地址（你可以填宿主机或容器内 ollama）
+
+      OLlama_BASE_URL: ${OLlama_BASE_URL}
+
+      # OSS 配置（如果你需要知识库上传/下载功能，必须填写）
+      # CS_ALIOSS_ENDPOINT: ${CS_ALIOSS_ENDPOINT}
+      # CS_ALIOSS_BUCKET_NAME: ${CS_ALIOSS_BUCKET_NAME}
+
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET}
+
+    ports:
+      - "8989:8989"
+
+  frontend:
+    # 前端同样使用多阶段构建：node build -> nginx 静态站点
+    build:
+      context: ./javalab-agent-front
+      dockerfile: Dockerfile
+    container_name: javalab-agent-frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:

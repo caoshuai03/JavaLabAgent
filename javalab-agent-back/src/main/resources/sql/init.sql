@@ -8,11 +8,11 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; -- UUID生成扩展
 -- ============================================
 -- 向量存储表 (vector_store) - 用于RAG知识库向量存储
 -- ============================================
-CREATE TABLE IF NOT EXISTS vector_store (
-    id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,  -- 主键ID (UUID)
-    content text,                                     -- 文本内容
-    metadata json,                                    -- 元数据 (JSON格式)
-    embedding vector(1024)                            -- 向量嵌入 (1024维)
+CREATE TABLE public.vector_store (
+                                     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+                                     content text,
+                                     metadata json,
+                                     embedding public.vector(1024)
 );
 COMMENT ON TABLE vector_store IS '向量存储表，用于RAG知识库的向量检索';
 COMMENT ON COLUMN vector_store.id IS '主键ID (UUID)';
@@ -21,28 +21,28 @@ COMMENT ON COLUMN vector_store.metadata IS '元数据信息 (JSON格式)';
 COMMENT ON COLUMN vector_store.embedding IS '向量嵌入 (1024维，用于相似度检索)';
 
 -- 创建HNSW索引，用于向量余弦相似度检索
-CREATE INDEX ON vector_store USING HNSW (embedding vector_cosine_ops);
-
+CREATE INDEX vector_store_embedding_idx ON public.vector_store USING hnsw (embedding public.vector_cosine_ops);
 
 -- ============================================
 -- 用户表 (tb_user) 表结构
 -- ============================================
 DROP TABLE IF EXISTS "public"."tb_user";
-CREATE TABLE "public"."tb_user" (
-                                    "id" "pg_catalog"."int4" NOT NULL,
-                                    "name" "pg_catalog"."varchar" COLLATE "pg_catalog"."default" NOT NULL,
-                                    "user_name" "pg_catalog"."varchar" COLLATE "pg_catalog"."default" NOT NULL,
-                                    "password" "pg_catalog"."varchar" COLLATE "pg_catalog"."default" NOT NULL,
-                                    "phone" "pg_catalog"."varchar" COLLATE "pg_catalog"."default" NOT NULL,
-                                    "sex" "pg_catalog"."varchar" COLLATE "pg_catalog"."default" NOT NULL,
-                                    "id_number" "pg_catalog"."varchar" COLLATE "pg_catalog"."default" NOT NULL,
-                                    "status" "pg_catalog"."int4" NOT NULL DEFAULT 1,
-                                    "create_time" "pg_catalog"."date",
-                                    "update_time" "pg_catalog"."date",
-                                    "create_user" "pg_catalog"."int8",
-                                    "update_user" "pg_catalog"."int8"
-)
-;
+CREATE TABLE public.tb_user (
+                                id integer NOT NULL,
+                                name character varying NOT NULL,
+                                user_name character varying NOT NULL,
+                                password character varying NOT NULL,
+                                phone character varying,
+                                sex character varying,
+                                id_number character varying,
+                                status integer DEFAULT 1 NOT NULL,
+                                create_time date,
+                                update_time date,
+                                create_user bigint,
+                                update_user bigint
+);
+
+
 COMMENT ON TABLE "public"."tb_user" IS '用户信息表，存储系统用户基本信息';
 COMMENT ON COLUMN "public"."tb_user"."id" IS '主键';
 COMMENT ON COLUMN "public"."tb_user"."name" IS '姓名';
@@ -73,15 +73,15 @@ ALTER TABLE "public"."tb_user" ADD CONSTRAINT "user_pkey" PRIMARY KEY ("id");
 -- 阿里云OSS文件表 (ali_oss_file) 表结构
 -- ============================================
 DROP TABLE IF EXISTS "public"."ali_oss_file";
-CREATE TABLE "public"."ali_oss_file" (
-                                         "id" "pg_catalog"."int8" NOT NULL,
-                                         "file_name" "pg_catalog"."varchar" COLLATE "pg_catalog"."default",
-                                         "url" "pg_catalog"."varchar" COLLATE "pg_catalog"."default",
-                                         "vector_id" "pg_catalog"."text" COLLATE "pg_catalog"."default",
-                                         "create_time" "pg_catalog"."timestamp",
-                                         "update_time" "pg_catalog"."timestamp"
-)
-;
+
+CREATE TABLE public.ali_oss_file (
+                                     id bigint NOT NULL,
+                                     file_name character varying,
+                                     url character varying,
+                                     vector_id text,
+                                     create_time timestamp without time zone,
+                                     update_time timestamp without time zone
+);
 COMMENT ON TABLE "public"."ali_oss_file" IS '阿里云OSS文件表，存储上传文件信息及其向量ID';
 COMMENT ON COLUMN "public"."ali_oss_file"."id" IS '主键id';
 COMMENT ON COLUMN "public"."ali_oss_file"."file_name" IS '文件名';
@@ -95,21 +95,18 @@ COMMENT ON COLUMN "public"."ali_oss_file"."update_time" IS '更新时间';
 -- ----------------------------
 ALTER TABLE "public"."ali_oss_file" ADD CONSTRAINT "ali_oss_file_pkey" PRIMARY KEY ("id");
 
-
-
-
-
 -- ============================================
 -- 会话表 (sessions) - 用于存储对话会话信息
 -- ============================================
 DROP TABLE IF EXISTS "public"."chat_session";
-CREATE TABLE "public"."chat_session" (
-    "id" uuid DEFAULT uuid_generate_v4() NOT NULL,          -- 会话ID (UUID主键)
-    "user_id" "pg_catalog"."int8",                          -- 用户标识
-    "title" "pg_catalog"."varchar"(255) COLLATE "pg_catalog"."default", -- 会话标题
-    "created_at" "pg_catalog"."timestamp" DEFAULT CURRENT_TIMESTAMP,    -- 创建时间
-    "updated_at" "pg_catalog"."timestamp" DEFAULT CURRENT_TIMESTAMP,    -- 更新时间
-    "deleted" "pg_catalog"."int2" DEFAULT 0                              -- 逻辑删除标记: 0-未删除, 1-已删除
+
+CREATE TABLE public.chat_session (
+                                     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+                                     user_id bigint,
+                                     title character varying(255),
+                                     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+                                     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+                                     deleted smallint DEFAULT 0
 );
 COMMENT ON TABLE "public"."chat_session" IS '对话会话表';
 COMMENT ON COLUMN "public"."chat_session"."id" IS '会话ID (UUID)';
@@ -121,92 +118,33 @@ COMMENT ON COLUMN "public"."chat_session"."deleted" IS '逻辑删除标记: 0-�
 
 ALTER TABLE "public"."chat_session" ADD CONSTRAINT "chat_session_pkey" PRIMARY KEY ("id");
 
--- chat_session 表索引：用户ID索引，便于按用户查询会话列表
-CREATE INDEX idx_chat_session_user_id ON "public"."chat_session" ("user_id");
-
--- chat_session 表索引：逻辑删除字段索引，提升查询性能
-CREATE INDEX idx_chat_session_deleted ON "public"."chat_session" ("deleted");
+CREATE INDEX idx_chat_session_user_id ON public.chat_session USING btree (user_id);
 
 
 -- ============================================
 -- 消息表 (messages) - 用于存储对话消息记录
 -- ============================================
 DROP TABLE IF EXISTS "public"."chat_message";
-CREATE TABLE "public"."chat_message" (
-    "id" "pg_catalog"."int8" NOT NULL,                      -- 消息ID (自增主键)
-    "session_id" uuid NOT NULL,                              -- 会话ID (外键)
-    "role" "pg_catalog"."varchar"(20) COLLATE "pg_catalog"."default" NOT NULL, -- 角色: user/assistant/system
-    "content" "pg_catalog"."text" COLLATE "pg_catalog"."default", -- 消息内容
-    "embedding" vector(1024),                                -- 向量嵌入 (预留字段，暂不使用)
-    "created_at" "pg_catalog"."timestamp" DEFAULT CURRENT_TIMESTAMP -- 创建时间
+CREATE TABLE public.chat_message (
+                                     id bigint NOT NULL,
+                                     session_id uuid NOT NULL,
+                                     role character varying(20) NOT NULL,
+                                     content text,
+                                     embedding public.vector(1024),
+                                     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+                                     user_id bigint NOT NULL
 );
 COMMENT ON TABLE "public"."chat_message" IS '对话消息表';
 COMMENT ON COLUMN "public"."chat_message"."id" IS '消息ID';
 COMMENT ON COLUMN "public"."chat_message"."session_id" IS '会话ID (外键关联chat_session)';
+COMMENT ON COLUMN "public"."chat_message"."user_id" IS '用户ID (用于消息级别隔离)';
 COMMENT ON COLUMN "public"."chat_message"."role" IS '消息角色: user(用户), assistant(AI助手), system(系统)';
 COMMENT ON COLUMN "public"."chat_message"."content" IS '消息内容';
-COMMENT ON COLUMN "public"."chat_message"."embedding" IS '向量嵌入 (1024维，用于语义检索，预留字段)';
 COMMENT ON COLUMN "public"."chat_message"."created_at" IS '创建时间';
+COMMENT ON COLUMN public.chat_message.embedding IS '向量嵌入 (用于语义检索，预留字段)';
+
 
 ALTER TABLE "public"."chat_message" ADD CONSTRAINT "chat_message_pkey" PRIMARY KEY ("id");
 
--- chat_message 表索引：会话ID索引，便于按会话查询消息列表
-CREATE INDEX idx_chat_message_session_id ON "public"."chat_message" ("session_id");
-
--- chat_message 表索引：创建时间索引，用于滑动窗口查询优化
-CREATE INDEX idx_chat_message_created_at ON "public"."chat_message" ("session_id", "created_at" DESC);
-
-
-
-
--- ============================================
--- 敏感词表 (sensitive_word) 表结构
--- ============================================
-DROP TABLE IF EXISTS "public"."sensitive_word";
-CREATE TABLE "public"."sensitive_word" (
-                                           "id" "pg_catalog"."int4" NOT NULL,
-                                           "word" "pg_catalog"."varchar" COLLATE "pg_catalog"."default",
-                                           "category" "pg_catalog"."varchar" COLLATE "pg_catalog"."default",
-                                           "status" "pg_catalog"."varchar" COLLATE "pg_catalog"."default",
-                                           "created_at" "pg_catalog"."varchar" COLLATE "pg_catalog"."default",
-                                           "updated_at" "pg_catalog"."varchar" COLLATE "pg_catalog"."default"
-)
-;
-COMMENT ON TABLE "public"."sensitive_word" IS '敏感词表，存储系统敏感词过滤规则';
-COMMENT ON COLUMN "public"."sensitive_word"."id" IS 'id';
-COMMENT ON COLUMN "public"."sensitive_word"."word" IS '敏感词内容';
-COMMENT ON COLUMN "public"."sensitive_word"."category" IS '敏感词类别';
-COMMENT ON COLUMN "public"."sensitive_word"."status" IS '敏感词状态';
-COMMENT ON COLUMN "public"."sensitive_word"."created_at" IS '创建时间戳';
-COMMENT ON COLUMN "public"."sensitive_word"."updated_at" IS '更新时间戳';
-
--- ----------------------------
--- sensitive_word 表主键约束
--- ----------------------------
-ALTER TABLE "public"."sensitive_word" ADD CONSTRAINT "sensitive_word_pkey" PRIMARY KEY ("id");
-
-
-
-
--- ============================================
--- 敏感词分类表 (sensitive_category) 表结构
--- ============================================
-DROP TABLE IF EXISTS "public"."sensitive_category";
-CREATE TABLE "public"."sensitive_category" (
-                                               "id" "pg_catalog"."int4" NOT NULL,
-                                               "category_name" "pg_catalog"."varchar" COLLATE "pg_catalog"."default",
-                                               "created_time" "pg_catalog"."date",
-                                               "update_time" "pg_catalog"."date",
-                                               "status" "pg_catalog"."varchar" COLLATE "pg_catalog"."default"
-)
-;
-COMMENT ON TABLE "public"."sensitive_category" IS '敏感词分类表，管理敏感词类别';
-COMMENT ON COLUMN "public"."sensitive_category"."id" IS '主键ID';
-COMMENT ON COLUMN "public"."sensitive_category"."category_name" IS '分类名';
-COMMENT ON COLUMN "public"."sensitive_category"."created_time" IS '创建时间';
-COMMENT ON COLUMN "public"."sensitive_category"."update_time" IS '更新时间';
-
--- ----------------------------
--- sensitive_category 表主键约束
--- ----------------------------
-ALTER TABLE "public"."sensitive_category" ADD CONSTRAINT "sensitive_category_pkey" PRIMARY KEY ("id");
+CREATE INDEX idx_chat_message_user_id ON public.chat_message USING btree (user_id);
+CREATE INDEX idx_chat_message_session_id ON public.chat_message USING btree (session_id);
