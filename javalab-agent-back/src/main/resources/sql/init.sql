@@ -11,13 +11,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp"; -- UUID生成扩展
 CREATE TABLE public.vector_store (
                                      id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
                                      content text,
-                                     metadata json,
-                                     embedding public.vector(1024)
+                                     metadata jsonb,
+                                     embedding public.vector(1024),
+                                     CONSTRAINT vector_store_pkey PRIMARY KEY (id)
 );
 COMMENT ON TABLE vector_store IS '向量存储表，用于RAG知识库的向量检索';
 COMMENT ON COLUMN vector_store.id IS '主键ID (UUID)';
 COMMENT ON COLUMN vector_store.content IS '文本内容';
-COMMENT ON COLUMN vector_store.metadata IS '元数据信息 (JSON格式)';
+COMMENT ON COLUMN vector_store.metadata IS '元数据信息 (JSONB格式)';
 COMMENT ON COLUMN vector_store.embedding IS '向量嵌入 (1024维，用于相似度检索)';
 
 -- 创建HNSW索引，用于向量余弦相似度检索

@@ -43,6 +43,10 @@ docker compose up -d --build
 - **后端接口**: [http://localhost:8989](http://localhost:8989)
 - **数据库**: localhost:5433 (PostgreSQL + pgvector)
 
+重启某个容器
+docker compose restart backend
+删除所有容器和数据卷
+docker compose down -v
 ---
 
 ## 🛠️ 技术栈
