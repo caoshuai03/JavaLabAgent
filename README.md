@@ -16,18 +16,24 @@
 
 ### 1. 环境配置
 
-在项目根目录创建 `.env` 文件，配置以下核心环境变量：
+在项目根目录创建 `.env` 文件，配置以下环境变量：
 
 ```env
-# Ollama 服务地址 (如使用本地 Ollama)
-OLlama_BASE_URL=http://host.docker.internal:11434
+# =================【必需配置】=================
+# Ollama 服务地址
+OLlama_BASE_URL=http://xxx:11434
 
-# 阿里云 OSS 配置 (可选，用于知识库文档存储)
-OSS_ACCESS_KEY_ID=your_access_key
-OSS_ACCESS_KEY_SECRET=your_secret_key
+# 阿里云 OSS 配置 (用于知识库文档存储)
+OSS_ACCESS_KEY_ID=your_access_key_id
+OSS_ACCESS_KEY_SECRET=your_access_key_secret
+
+# =================【可选配置】=================
+# PostgreSQL 数据库配置 (有默认值，可不设置)
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=admin
+POSTGRES_DB=postgres
 ```
 
-还有变量配置待更新...
 
 ### 2. Docker 一键启动
 
