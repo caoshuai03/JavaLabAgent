@@ -10,13 +10,16 @@ import com.cs.rag.common.ResultUtils;
 import com.cs.rag.entity.AliOssFile;
 import com.cs.rag.mapper.AliOssFileMapper;
 import com.cs.rag.pojo.dto.QueryFileDTO;
+import com.cs.rag.pojo.dto.FileDownloadInfo;
 import com.cs.rag.service.AliOssFileService;
-import com.cs.rag.utils.AliOssUtil;
+import com.cs.rag.utils.StorageUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -24,6 +27,7 @@ import java.util.List;
 * @description 针对表【ali_oss_file】的数据库操作Service实现
 * @date 2025/11/05 18:22
 */
+@Slf4j
 @Service
 public class AliOssFileServiceImpl extends ServiceImpl<AliOssFileMapper, AliOssFile>
     implements AliOssFileService {
@@ -35,7 +39,7 @@ public class AliOssFileServiceImpl extends ServiceImpl<AliOssFileMapper, AliOssF
     private VectorStore vectorStore;
 
     @Autowired
-    private AliOssUtil aliOssUtil;
+    private StorageUtil storageUtil;
 
 
     /**
@@ -68,7 +72,7 @@ public class AliOssFileServiceImpl extends ServiceImpl<AliOssFileMapper, AliOssF
         for (AliOssFile aliOssFile : aliOssFiles) {
             List<String> vectorIds = JSON.parseArray(aliOssFile.getVectorId(), String.class);
             vectorStore.delete(vectorIds);
-            aliOssUtil.deleteOss(aliOssFile.getUrl());
+            storageUtil.delete(aliOssFile.getUrl());
         }
 
         return ResultUtils.success("成功删除"+ count + "个文件");
@@ -76,39 +80,88 @@ public class AliOssFileServiceImpl extends ServiceImpl<AliOssFileMapper, AliOssF
 
     @Override
     public BaseResponse downloadFiles(List<Long> ids) {
-        List<AliOssFile> aliOssFiles = aliOssFileMapper.selectByIds(ids);
-        if (ids.isEmpty()) {
+        // 修复参数检查错误：应该先检查ids是否为空
+        if (ids == null || ids.isEmpty()) {
             return ResultUtils.error(ErrorCode.PARAMS_ERROR, "请选择文件");
         }
+        List<AliOssFile> aliOssFiles = aliOssFileMapper.selectByIds(ids);
         for (AliOssFile aliOssFile : aliOssFiles){
             String url = aliOssFile.getUrl();
             String fileName = extractFileName(url);
-            aliOssUtil.download(fileName);
+            storageUtil.download(fileName);
         }
         return ResultUtils.success("下载成功");
     }
-    public static String extractFileName(String url) {
-        // 从完整URL中提取OSS对象路径（包含文件夹前缀）
-        // URL格式：https://bucket.endpoint/java-lab-agent-rag/filename.ext
+
+    @Override
+    public FileDownloadInfo getFileForDownload(Long id) {
+        // 参数校验
+        if (id == null) {
+            throw new RuntimeException("文件ID不能为空");
+        }
+        
+        // 查询文件信息
+        AliOssFile aliOssFile = aliOssFileMapper.selectById(id);
+        if (aliOssFile == null) {
+            throw new RuntimeException("文件不存在");
+        }
+        
         try {
-            java.net.URL urlObj = new java.net.URL(url);
-            String path = urlObj.getPath();
-            // 移除开头的斜杠，返回完整路径（包含文件夹前缀）
-            return path.startsWith("/") ? path.substring(1) : path;
-        } catch (java.net.MalformedURLException e) {
-            // 如果URL格式不正确，尝试直接提取路径
-            int lastSlashIndex = url.lastIndexOf('/');
-            if (lastSlashIndex == -1) {
-                return url;
+            // 从URL中提取文件名
+            String fileName = extractFileName(aliOssFile.getUrl());
+            
+            // 添加调试日志
+            log.info("文件下载调试 - 文件ID: {}, 原始URL: {}, 提取的文件名: {}", 
+                id, aliOssFile.getUrl(), fileName);
+            
+            // 获取文件输入流
+            InputStream inputStream = storageUtil.getObject(fileName);
+            
+            // 返回文件下载信息
+            return new FileDownloadInfo(
+                aliOssFile.getFileName(), 
+                inputStream
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("获取文件失败: " + e.getMessage());
+        }
+    }
+
+    public static String extractFileName(String url) {
+        // 从完整URL中提取MinIO对象路径（包含文件夹前缀）
+        // URL格式：endpoint/bucket/java-lab-agent-rag/filename.ext
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            String path = uri.getPath();
+            // 移除开头的斜杠
+            if (path.startsWith("/")) {
+                path = path.substring(1);
             }
-            // 查找 java-lab-agent-rag 的位置
+            
+            // 查找 java-lab-agent-rag 的位置，直接提取从该前缀开始的部分
+            int folderIndex = path.indexOf("java-lab-agent-rag/");
+            if (folderIndex != -1) {
+                return path.substring(folderIndex);
+            }
+            
+            // 如果没有找到文件夹前缀，可能是bucket/java-lab-agent-rag/filename的格式
+            // 尝试移除第一个路径段（bucket名称）
+            int firstSlashIndex = path.indexOf('/');
+            if (firstSlashIndex != -1) {
+                return path.substring(firstSlashIndex + 1);
+            }
+            
+            return path;
+        } catch (Exception e) {
+            // 如果URL格式不正确，尝试直接提取路径
             int folderIndex = url.indexOf("java-lab-agent-rag/");
             if (folderIndex != -1) {
-                // 提取从文件夹前缀开始的完整路径
                 return url.substring(folderIndex);
             }
-            // 如果没有找到文件夹前缀，返回最后一个斜杠后的部分
-            return url.substring(lastSlashIndex + 1);
+            
+            // 最后的备选方案：返回最后一个斜杠后的部分
+            int lastSlashIndex = url.lastIndexOf('/');
+            return lastSlashIndex != -1 ? url.substring(lastSlashIndex + 1) : url;
         }
     }
 

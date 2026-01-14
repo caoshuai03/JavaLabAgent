@@ -59,13 +59,25 @@ spring:
           min-idle: 1         # 最小空闲连接数
           max-wait: 2000ms    # 获取连接最大等待时间
 
-# ==================== 阿里云OSS对象存储配置 ====================
-aliyun:
-  alioss:
-    endpoint: oss-cn-chengdu.aliyuncs.com              # OSS服务端点
-    access-key-id: ${OSS_ACCESS_KEY_ID}     # 访问密钥ID
-    access-key-secret: ${OSS_ACCESS_KEY_SECRET}  # 访问密钥Secret
-    bucket-name: web-framework-cs         # 存储桶名称
+# ==================== 存储配置 ====================
+# 存储类型：minio 或 alioss
+storage:
+  type: minio  # 切换存储类型：minio / alioss
+
+# -------------------- MinIO 对象存储配置 --------------------
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}  # MinIO 服务地址
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}         # 访问密钥
+  secret-key: ${MINIO_SECRET_KEY:minioadmin123}      # 密钥
+  bucket-name: ${MINIO_BUCKET:javalab}               # 存储桶名称
+
+# -------------------- 阿里云OSS对象存储配置（备用） --------------------
+#aliyun:
+#  alioss:
+#    endpoint: ${OSS_ENDPOINT}              # OSS服务端点
+#    access-key-id: ${OSS_ACCESS_KEY_ID}     # 访问密钥ID
+#    access-key-secret: ${OSS_ACCESS_KEY_SECRET}  # 访问密钥Secret
+#    bucket-name: ${OSS_BUCKET_NAME}         # 存储桶名称
 
 # ==================== 自定义配置 (敏感信息占位符) ====================
 cs:

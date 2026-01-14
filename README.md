@@ -23,9 +23,22 @@
 # Ollama 服务地址
 OLlama_BASE_URL=http://xxx:11434
 
-# 阿里云 OSS 配置 (用于知识库文档存储)
-OSS_ACCESS_KEY_ID=your_access_key_id
-OSS_ACCESS_KEY_SECRET=your_access_key_secret
+# =================【存储配置（二选一）】=================
+# 存储类型：minio（推荐，本地私有化）或 alioss（阿里云）
+STORAGE_TYPE=minio
+
+# ---------- 方式一：MinIO 配置（推荐，无需云服务） ----------
+# MinIO 会随 docker compose 自动启动，以下为默认值，可不修改
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin123
+MINIO_BUCKET=javalab
+
+# ---------- 方式二：阿里云 OSS 配置（需要阿里云账号） ----------
+# 如果使用阿里云 OSS，请将 STORAGE_TYPE 改为 alioss，并填写以下配置
+# OSS_ACCESS_KEY_ID=your_access_key_id
+# OSS_ACCESS_KEY_SECRET=your_access_key_secret
+# OSS_BUCKET_NAME=your_bucket_name
+# OSS_ENDPOINT=your_oss_endpoint
 
 # =================【可选配置】=================
 # PostgreSQL 数据库配置 (有默认值，可不设置)
@@ -33,6 +46,12 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=admin
 POSTGRES_DB=postgres
 ```
+
+> **💡 说明**：
+>
+> - 默认使用 **MinIO** 作为文件存储，无需阿里云账号，Bucket 会自动创建
+> - MinIO 控制台地址：`http://localhost:9001`（用户名/密码见上方配置）
+> - 如需切换回阿里云 OSS，修改 `STORAGE_TYPE=alioss` 并填写 OSS 密钥
 
 
 ### 2. Docker 一键启动
@@ -47,7 +66,8 @@ docker compose up -d --build
 
 - **前端地址**: [http://localhost](http://localhost)
 - **后端接口**: [http://localhost:8989](http://localhost:8989)
-- **数据库**: localhost:5433 (PostgreSQL + pgvector)
+- **MinIO 控制台**: [http://localhost:9001](http://localhost:9001)（用户名：minioadmin，密码：minioadmin123）
+- **数据库**: localhost:5432 (PostgreSQL + pgvector)
 
 重启某个容器
 docker compose restart backend

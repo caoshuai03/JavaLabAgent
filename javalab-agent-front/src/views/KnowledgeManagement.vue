@@ -374,41 +374,50 @@ const handleBatchDownload = async () => {
 const downloadFiles = async (ids) => {
   downloading.value = true
   try {
-    // 先获取文件信息，然后使用OSS URL直接下载
+    // 获取要下载的文件信息
     const filesToDownload = fileList.value.filter(file => ids.includes(file.id))
     
     for (const file of filesToDownload) {
-      if (file.url) {
-        // 直接使用OSS URL下载
-        const link = document.createElement('a')
-        link.href = file.url
-        link.download = file.fileName || `file_${file.id}`
-        link.target = '_blank'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+      try {
+        // 优先使用新的文件流下载API
+        const response = await knowledgeApi.downloadFile(file.id)
         
-        // 添加延迟避免浏览器阻止多个下载
-        await new Promise(resolve => setTimeout(resolve, 200))
-      } else {
-        // 如果没有URL，尝试调用API下载
-        try {
-          const response = await knowledgeApi.downloadFiles([file.id])
-          // 如果API返回blob，处理blob下载
-          if (response.data instanceof Blob) {
-            const blob = response.data
-            const url = window.URL.createObjectURL(blob)
+        // 处理blob下载
+        if (response.data instanceof Blob) {
+          const blob = response.data
+          const url = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = file.fileName || `file_${file.id}`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(url)
+          
+          // 添加延迟避免浏览器阻止多个下载
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+      } catch (apiError) {
+        console.error(`API下载文件 ${file.id} 失败:`, apiError)
+        
+        // API失败时，尝试使用OSS URL作为备选方案
+        if (file.url) {
+          try {
             const link = document.createElement('a')
-            link.href = url
+            link.href = file.url
             link.download = file.fileName || `file_${file.id}`
+            link.target = '_blank'
             document.body.appendChild(link)
             link.click()
             document.body.removeChild(link)
-            window.URL.revokeObjectURL(url)
+            
             await new Promise(resolve => setTimeout(resolve, 200))
+          } catch (urlError) {
+            console.error(`URL下载文件 ${file.id} 也失败:`, urlError)
+            alert(`下载文件 "${file.fileName}" 失败`)
           }
-        } catch (error) {
-          console.error(`下载文件 ${file.id} 失败:`, error)
+        } else {
+          alert(`下载文件 "${file.fileName}" 失败: 无可用下载方式`)
         }
       }
     }

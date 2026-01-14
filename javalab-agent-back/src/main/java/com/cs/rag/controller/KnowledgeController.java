@@ -11,8 +11,13 @@ package com.cs.rag.controller;
 import com.cs.rag.common.ApplicationConstant;
 import com.cs.rag.common.BaseResponse;
 import com.cs.rag.pojo.dto.QueryFileDTO;
+import com.cs.rag.pojo.dto.FileDownloadInfo;
 import com.cs.rag.service.AliOssFileService;
 import com.cs.rag.service.KnowledgeService;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +69,37 @@ public class KnowledgeController {
     @GetMapping("/download")
     public BaseResponse downloadFiles(@RequestParam List<Long> ids) {
         return aliOssFileService.downloadFiles(ids);
+    }
+
+    @Operation(summary = "downloadFile", description = "单个文件流下载")
+    @GetMapping("/downloadFile/{id}")
+    public ResponseEntity<InputStreamResource> downloadFile(@PathVariable Long id) {
+        try {
+            // 获取文件下载信息
+            FileDownloadInfo downloadInfo = aliOssFileService.getFileForDownload(id);
+            
+            // 创建输入流资源
+            InputStreamResource resource = new InputStreamResource(downloadInfo.getInputStream());
+            
+            // 设置响应头
+            HttpHeaders headers = new HttpHeaders();
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, 
+                "attachment; filename=\"" + downloadInfo.getFileName() + "\"");
+            headers.add(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate");
+            headers.add(HttpHeaders.PRAGMA, "no-cache");
+            headers.add(HttpHeaders.EXPIRES, "0");
+            
+            // 返回文件流响应
+            return ResponseEntity.ok()
+                .headers(headers)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
+                
+        } catch (Exception e) {
+            log.error("下载文件失败: {}", e.getMessage());
+            // 文件下载失败时返回404
+            return ResponseEntity.notFound().build();
+        }
     }
 
 }

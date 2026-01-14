@@ -5,19 +5,25 @@ import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.OSSException;
 import com.aliyun.oss.model.GetObjectRequest;
+import com.aliyun.oss.model.OSSObject;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 
+/**
+ * 阿里云 OSS 存储工具类
+ * 实现 StorageUtil 接口，提供文件上传、下载、删除等功能
+ */
 @Data
 @AllArgsConstructor
 @Slf4j
-public class AliOssUtil {
+public class AliOssUtil implements StorageUtil {
 
     private static final String RAG_FOLDER_PREFIX = "java-lab-agent-rag/";
 
@@ -79,16 +85,11 @@ public class AliOssUtil {
 
     /**
      * 删除文件
+     * @param objectName 对象名称或完整 URL
+     * @return 是否删除成功
      */
-    /**
-     * @param objectName
-     * @Method deleteOss
-     * @author  caoshuai
-     * @Description 删除oss文件
-     * @date 2025/11/05 18:19
-     * @Return boolean
-     */
-    public boolean deleteOss(String objectName) {
+    @Override
+    public boolean delete(String objectName) {
         // 创建OSSClient实例。
         OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         try {
@@ -109,9 +110,10 @@ public class AliOssUtil {
     }
 
     /**
-     * 下载文件
+     * 下载文件到本地
+     * @param objectName 对象名称
      */
-
+    @Override
     public void download(String objectName) {
         OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         // 填写Object下载到本地的完整路径。
@@ -152,7 +154,50 @@ public class AliOssUtil {
         }
     }
 
+    /**
+     * 获取文件输入流
+     * @param objectName 对象名称
+     * @return 文件输入流
+     */
+    @Override
+    public InputStream getObject(String objectName) {
+        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
+        try {
+            String fullObjectName = objectName.startsWith(RAG_FOLDER_PREFIX)
+                    ? objectName
+                    : RAG_FOLDER_PREFIX + objectName;
+            OSSObject ossObject = ossClient.getObject(bucketName, fullObjectName);
+            return ossObject.getObjectContent();
+        } catch (Exception e) {
+            log.error("OSS 获取文件流失败: {}", e.getMessage());
+            throw new RuntimeException("获取文件流失败", e);
+        }
+    }
 
-
+    /**
+     * 生成预签名下载 URL（临时访问链接）
+     * @param objectName 对象名称
+     * @param expireMinutes 过期时间（分钟）
+     * @return 预签名 URL
+     */
+    @Override
+    public String getPresignedUrl(String objectName, int expireMinutes) {
+        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
+        try {
+            String fullObjectName = objectName.startsWith(RAG_FOLDER_PREFIX)
+                    ? objectName
+                    : RAG_FOLDER_PREFIX + objectName;
+            // 设置过期时间
+            java.util.Date expiration = new java.util.Date(System.currentTimeMillis() + expireMinutes * 60 * 1000L);
+            // 生成预签名 URL
+            java.net.URL url = ossClient.generatePresignedUrl(bucketName, fullObjectName, expiration);
+            return url.toString();
+        } catch (Exception e) {
+            log.error("OSS 生成预签名 URL 失败: {}", e.getMessage());
+            throw new RuntimeException("生成预签名 URL 失败", e);
+        } finally {
+            ossClient.shutdown();
+        }
+    }
 
 }

@@ -8,7 +8,7 @@ import com.cs.rag.constant.FileMessageConstant;
 import com.cs.rag.entity.AliOssFile;
 import com.cs.rag.service.AliOssFileService;
 import com.cs.rag.service.KnowledgeService;
-import com.cs.rag.utils.AliOssUtil;
+import com.cs.rag.utils.StorageUtil;
 import com.cs.rag.utils.QaDocumentSplitter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -41,7 +41,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private VectorStore vectorStore;
 
     @Autowired
-    private AliOssUtil aliOssUtil;
+    private StorageUtil storageUtil;
 
     @Autowired
     private TokenTextSplitter tokenTextSplitter;
@@ -159,11 +159,11 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     /**
-     * 上传文件到阿里云OSS
+     * 上传文件到存储服务（MinIO/OSS）
      *
      * @param file 上传的文件
      * @param originalFilename 原始文件名
-     * @return OSS文件URL
+     * @return 文件访问URL
      * @throws IOException 上传异常
      */
     private String uploadToOss(MultipartFile file, String originalFilename) throws IOException {
@@ -183,9 +183,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         String timestamp = String.valueOf(System.currentTimeMillis());
         String objectName = nameWithoutExt + "_" + timestamp + extension;
 
-        log.info("开始上传文件到OSS: {}", objectName);
-        String url = aliOssUtil.upload(file.getBytes(), objectName);
-        log.info("OSS上传成功，URL: {}", url);
+        log.info("开始上传文件到存储服务: {}", objectName);
+        String url = storageUtil.upload(file.getBytes(), objectName);
+        log.info("文件上传成功，URL: {}", url);
 
         return url;
     }

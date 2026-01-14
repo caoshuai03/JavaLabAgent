@@ -53,6 +53,17 @@ export const knowledgeApi = {
     return apiClient.get(`/v1/knowledge/download?${params.toString()}`, {
       responseType: 'blob'
     })
+  },
+
+  /**
+   * 下载单个文件（使用文件流）
+   * @param {number} id - 文件ID
+   * @returns {Promise} 文件blob数据
+   */
+  downloadFile: (id) => {
+    return apiClient.get(`/v1/knowledge/downloadFile/${id}`, {
+      responseType: 'blob'
+    })
   }
 }
 
