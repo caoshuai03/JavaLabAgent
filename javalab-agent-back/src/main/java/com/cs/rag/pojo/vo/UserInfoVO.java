@@ -31,17 +31,7 @@ public class UserInfoVO {
      * 用户名
      */
     private String userName;
-    
-    /**
-     * 手机号
-     */
-    private String phone;
-    
-    /**
-     * 性别
-     */
-    private String sex;
-    
+
     /**
      * 状态（0：禁用 1：启用）
      */

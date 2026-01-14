@@ -222,23 +222,25 @@ const handleSubmit = async () => {
   }
   
   .error-message {
-    color: #f8d7da;
+    color: #dc3545; // 使用更深的红色，提高可读性
     text-align: center;
     margin-top: 1rem;
     padding: 0.75rem;
     border-radius: 4px;
-    background-color: rgba(220, 53, 69, 0.2);
-    border: 1px solid rgba(220, 53, 69, 0.5);
+    background-color: rgba(220, 53, 69, 0.1);
+    border: 1px solid rgba(220, 53, 69, 0.3);
+    font-weight: 500; // 增加字体粗细
   }
   
   .success-message {
-    color: #d4edda;
+    color: #28a745; // 使用更深的绿色，提高可读性
     text-align: center;
     margin-top: 1rem;
     padding: 0.75rem;
     border-radius: 4px;
-    background-color: rgba(40, 167, 69, 0.2);
-    border: 1px solid rgba(40, 167, 69, 0.5);
+    background-color: rgba(40, 167, 69, 0.1);
+    border: 1px solid rgba(40, 167, 69, 0.3);
+    font-weight: 500; // 增加字体粗细
   }
 }
 </style>

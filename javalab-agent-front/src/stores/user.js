@@ -5,11 +5,11 @@ import apiClient, { userApi } from '../api'
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || null)
   const userInfo = ref(JSON.parse(localStorage.getItem('userInfo')) || null)
-  
+
   // 验证token有效性
   const validateToken = async () => {
     if (!token.value || !userInfo.value) return false
-    
+
     try {
       // 尝试获取用户信息来验证token有效性
       const response = await apiClient.get('/v1/user/validate?id=' + userInfo.value.id)
@@ -24,26 +24,26 @@ export const useUserStore = defineStore('user', () => {
       return true
     }
   }
-  
+
   const login = async (loginData) => {
     try {
       const response = await userApi.login(loginData)
       const { data } = response.data
-      
+
       token.value = data.token
       userInfo.value = {
         id: data.id,
         userName: data.userName,
         name: data.name
       }
-      
+
       // 保存token和用户信息到localStorage
       localStorage.setItem('token', data.token)
       localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
-      
+
       // 设置默认的Authorization头
       apiClient.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
-      
+
       return data
     } catch (error) {
       // 更好地处理后端返回的错误信息
@@ -68,7 +68,7 @@ export const useUserStore = defineStore('user', () => {
       throw new Error('登录失败，请检查用户名和密码')
     }
   }
-  
+
   const register = async (registerData) => {
     try {
       const response = await userApi.register(registerData)
@@ -87,7 +87,7 @@ export const useUserStore = defineStore('user', () => {
       throw new Error('注册失败，请稍后重试')
     }
   }
-  
+
   const logout = () => {
     token.value = null
     userInfo.value = null
@@ -95,17 +95,17 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('userInfo')
     delete apiClient.defaults.headers.common['Authorization']
   }
-  
+
   const isLoggedIn = () => {
     return !!token.value
   }
-  
+
   // 更新用户信息
   const updateUserInfo = async (userData) => {
     try {
       const response = await apiClient.put('/v1/user/update/info', userData)
       const { code, data, message } = response.data
-      
+
       if (code === 0) {
         // 更新成功，更新本地存储的用户信息
         userInfo.value = {
@@ -130,18 +130,18 @@ export const useUserStore = defineStore('user', () => {
       throw new Error('更新失败，请稍后重试')
     }
   }
-  
+
   // 修改密码
   const changePassword = async (passwordData) => {
     try {
       const response = await apiClient.post('/v1/user/updatePassword', {
-        id: userInfo.value.id,
+        // id由后端从Token中获取，不再需要前端传递
         oldPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
         confirmPassword: passwordData.confirmNewPassword
       })
       const { code, data, message } = response.data
-      
+
       if (code === 0) {
         return data
       } else if (code === 40000 && message) {
@@ -161,7 +161,7 @@ export const useUserStore = defineStore('user', () => {
       throw new Error('密码修改失败，请稍后重试')
     }
   }
-  
+
   return {
     token,
     userInfo,

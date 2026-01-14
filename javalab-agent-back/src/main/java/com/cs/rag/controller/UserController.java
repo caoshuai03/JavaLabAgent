@@ -2,6 +2,7 @@ package com.cs.rag.controller;
 
 import com.cs.rag.common.*;
 import com.cs.rag.config.JwtProperties;
+import com.cs.rag.context.BaseContext;
 import com.cs.rag.constant.JwtClaimsConstant;
 import com.cs.rag.constant.UserMessageConstant;
 import com.cs.rag.entity.User;
@@ -64,16 +65,35 @@ public class UserController {
     @Operation(summary = "updatePassword", description = "修改密码")
     public BaseResponse updatePassword(@RequestBody PasswordDTO passwordDTO) {
         log.info("修改密码：{}", passwordDTO.toString());
+        
+        // 1. 校验新密码与确认密码是否一致
         if (!passwordDTO.getNewPassword().equals(passwordDTO.getConfirmPassword())) {
             return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.PASSWORD_NOT_MATCH);
         }
-        User user = userService.getById(passwordDTO.getId());
-        String s = DigestUtils.md5DigestAsHex(passwordDTO.getOldPassword().getBytes());
-        if (!user.getPassword().equals(s)) {
+        
+        // 2. 获取当前登录用户ID
+        Long currentUserId = BaseContext.getCurrentId();
+        log.info("当前登录用户ID：{}", currentUserId);
+        if (currentUserId == null) {
+            return ResultUtils.error(ErrorCode.NOT_LOGIN_ERROR, UserMessageConstant.USER_NOT_LOGIN);
+        }
+        
+        // 3. 查询用户信息
+        User user = userService.getById(currentUserId.intValue());
+        if (user == null) {
+            return ResultUtils.error(ErrorCode.NOT_FOUND_ERROR, UserMessageConstant.ACCOUNT_NOT_FOUND);
+        }
+        
+        // 4. 校验旧密码
+        String encryptedOldPassword = DigestUtils.md5DigestAsHex(passwordDTO.getOldPassword().getBytes());
+        if (!user.getPassword().equals(encryptedOldPassword)) {
             return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.OLD_PASSWORD_ERROR);
         }
+        
+        // 5. 更新密码
         user.setPassword(DigestUtils.md5DigestAsHex(passwordDTO.getNewPassword().getBytes()));
         userService.updateById(user);
+        
         return ResultUtils.success(UserMessageConstant.PASSWORD_EDIT_SUCCESS);
     }
 
@@ -195,9 +215,6 @@ public class UserController {
                 .id(user.getId())
                 .name(user.getName())
                 .userName(user.getUserName())
-                .phone(user.getPhone())
-                .sex(user.getSex())
-                .status(user.getStatus())
                 .build();
         return ResultUtils.success(userInfoVO);
     }
@@ -233,9 +250,6 @@ public class UserController {
                 .id(user.getId())
                 .name(user.getName())
                 .userName(user.getUserName())
-                .phone(user.getPhone())
-                .sex(user.getSex())
-                .status(user.getStatus())
                 .build();
         return ResultUtils.success(userInfoVO);
     }

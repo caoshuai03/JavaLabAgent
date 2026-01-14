@@ -89,4 +89,4 @@ cs:
     # 用户JWT配置
     user-secret-key: cssecret
     user-ttl: 86400000
-    user-token-name: authentication
+    user-token-name: Authorization

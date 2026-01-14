@@ -43,18 +43,25 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
         //1、从请求头中获取令牌
         String token = request.getHeader(jwtProperties.getUserTokenName());
 
-        //2、校验令牌
-        try {
+        if (token != null && token.startsWith("Bearer ")) {
+            // 2. 从第7位开始截取，拿到纯JWT令牌（Bearer 后面有个空格，共7个字符）
+            token = token.substring(7);
             log.info("jwt校验:{}", token);
-            Claims claims = JwtUtil.parseJWT(jwtProperties.getUserSecretKey(), token);
-            Long userId = Long.valueOf(claims.get(JwtClaimsConstant.USER_ID).toString());
-            log.info("当前用户的id：{}", userId);
-            BaseContext.setCurrentId(userId);
-            //3、通过，放行
-            return true;
-        } catch (Exception ex) {
-            //4、不通过，响应401状态码
-            response.setStatus(401);
+            try {
+
+                Claims claims = JwtUtil.parseJWT(jwtProperties.getUserSecretKey(), token);
+                Long userId = Long.valueOf(claims.get(JwtClaimsConstant.USER_ID).toString());
+                log.info("当前用户的id：{}", userId);
+                BaseContext.setCurrentId(userId);
+                //3、通过，放行
+                return true;
+            } catch (Exception ex) {
+                //4、不通过，响应401状态码
+                response.setStatus(ErrorCode.NO_AUTH_ERROR.getCode());
+                return false;
+            }
+        }else {
+            response.setStatus(ErrorCode.NO_AUTH_ERROR.getCode());
             return false;
         }
     }
