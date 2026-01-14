@@ -1,6 +1,15 @@
 <template>
   <div class="login-container">
     <div class="login-form">
+      <button
+        v-if="isRegister"
+        type="button"
+        class="back-arrow"
+        aria-label="返回登录"
+        @click="backToLogin"
+      >
+        <span class="back-arrow-icon">‹</span>
+      </button>
       <h2 v-if="!isRegister">用户登录</h2>
       <h2 v-else>用户注册</h2>
       <form @submit.prevent="handleSubmit">
@@ -39,9 +48,9 @@
             {{ loading ? (isRegister ? '注册中...' : '登录中...') : (isRegister ? '注册' : '登录') }}
           </button>
         </div>
-        <div class="form-group">
-          <button type="button" class="toggle-button" @click="toggleMode">
-            {{ isRegister ? '已有账号？立即登录' : '没有账号？立即注册' }}
+        <div class="form-group" v-if="!isRegister">
+          <button type="button" class="toggle-button" @click="goRegister">
+            注册
           </button>
         </div>
         <div v-if="errorMessage" class="error-message">
@@ -70,15 +79,27 @@ const form = ref({
   confirmPassword: ''
 })
 
-const toggleMode = () => {
-  isRegister.value = !isRegister.value
-  errorMessage.value = ''
+const resetForm = () => {
   // 切换模式时重置表单
   form.value = {
     userName: '',
     password: '',
     confirmPassword: ''
   }
+}
+
+const goRegister = () => {
+  // 从登录切到注册
+  isRegister.value = true
+  errorMessage.value = ''
+  resetForm()
+}
+
+const backToLogin = () => {
+  // 从注册返回登录
+  isRegister.value = false
+  errorMessage.value = ''
+  resetForm()
 }
 
 const handleSubmit = async () => {
@@ -169,10 +190,44 @@ const handleRegister = async () => {
   .login-form {
     background: white;
     padding: 2rem;
-    border-radius: 8px;
+    border-radius: 16px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    position: relative;
     width: 100%;
     max-width: 400px;
+
+    .back-arrow {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0);
+      color: rgba(0, 0, 0, 0.6);
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.1);
+        color: rgba(0, 0, 0, 0.75);
+      }
+
+      &:active {
+        background: rgba(0, 0, 0, 0.14);
+      }
+
+      .back-arrow-icon {
+        font-size: 22px;
+        line-height: 1;
+        transform: translateX(-1px);
+        user-select: none;
+      }
+    }
     
     h2 {
       text-align: center;
