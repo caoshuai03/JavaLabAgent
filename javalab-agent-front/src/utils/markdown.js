@@ -20,22 +20,33 @@ const md = new MarkdownIt({
   linkify: true, // 自动将 URL 转换为链接
   typographer: true, // 启用一些语言中性的替换 + 引号美化
   breaks: false, // 将换行符转换为 <br>
-  highlight: function (str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        const highlighted = hljs.highlight(str, { language: lang, ignoreIllegals: true }).value
-        // 添加语言标签，类似 ChatGPT 的风格
-        return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-block-lang">${lang}</span></div><pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre></div>`
-      } catch (__) {}
-    }
-    
-    // 如果没有语言或语言不支持，也添加包装器
-    // 使用自定义的 escapeHtml 函数
-    const escaped = escapeHtml(str)
-    const langLabel = lang || 'text'
-    return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-block-lang">${langLabel}</span></div><pre class="hljs"><code>${escaped}</code></pre></div>`
-  }
 })
+
+// 自定义代码块渲染规则，避免 markdown-it 自动包裹 <pre>
+md.renderer.rules.fence = function (tokens, idx, options, env, self) {
+  const token = tokens[idx]
+  const info = token.info ? md.utils.unescapeAll(token.info).trim() : ''
+  const lang = info.split(/\s+/g)[0]
+  const content = token.content
+
+  let highlighted = ''
+  if (lang && hljs.getLanguage(lang)) {
+    try {
+      highlighted = hljs.highlight(content, { language: lang, ignoreIllegals: true }).value
+    } catch (__) {}
+  }
+
+  if (!highlighted) {
+    // 使用自定义的 escapeHtml 函数
+    highlighted = escapeHtml(content)
+  }
+
+  const langLabel = lang || 'text'
+  // 添加 highlight.js 的语言类名
+  const codeClass = lang ? `language-${lang}` : ''
+  
+  return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-block-lang">${langLabel}</span></div><pre class="hljs"><code class="${codeClass}">${highlighted}</code></pre></div>\n`
+}
 
 // 渲染 Markdown 为 HTML
 export const renderMarkdown = (content) => {
