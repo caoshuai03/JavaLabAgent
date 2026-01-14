@@ -139,7 +139,7 @@ const handleSend = async () => {
         }
 
         // 检查是否是结束标记
-        if (data === '[DONE]' || data.trim() === '') {
+        if (data === '[DONE]') {
           handleStop()
           return
         }

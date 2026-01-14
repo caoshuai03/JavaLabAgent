@@ -80,14 +80,19 @@ export const sendChatMessage = (params, callbacks) => {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = '' // 缓冲区，用于处理不完整的数据块
+      let eventBuffer = [] // 缓冲区，用于处理 SSE 事件的多行数据
       
       while (true) {
         const { done, value } = await reader.read()
         
         if (done) {
           // 处理缓冲区中剩余的数据
-          if (buffer.trim()) {
-            processSSEData(buffer, onMessage)
+          if (buffer) {
+            processLine(buffer, eventBuffer, onMessage)
+          }
+          // 发送剩余的事件数据
+          if (eventBuffer.length > 0) {
+            onMessage?.(eventBuffer.join('\n'))
           }
           onComplete?.()
           break
@@ -103,7 +108,7 @@ export const sendChatMessage = (params, callbacks) => {
         
         // 处理每一行
         for (const line of lines) {
-          processSSEData(line, onMessage)
+          processLine(line, eventBuffer, onMessage)
         }
       }
     })
@@ -121,21 +126,35 @@ export const sendChatMessage = (params, callbacks) => {
 /**
  * 处理 SSE 数据行
  * @param {string} line - 数据行
+ * @param {string[]} eventBuffer - 事件数据缓存
  * @param {Function} onMessage - 消息回调
  */
-function processSSEData(line, onMessage) {
-  const trimmedLine = line.trim()
+function processLine(line, eventBuffer, onMessage) {
+  // 处理 CR 回车符（兼容 Windows 换行 \r\n）
+  const cleanLine = line.endsWith('\r') ? line.slice(0, -1) : line
   
-  // 跳过空行和注释
-  if (!trimmedLine || trimmedLine.startsWith(':')) {
+  // 空行表示当前事件结束，分发累积的数据
+  if (!cleanLine) {
+    if (eventBuffer.length > 0) {
+      // 将多行 data 合并，中间加换行符
+      const fullMessage = eventBuffer.join('\n')
+      onMessage?.(fullMessage)
+      eventBuffer.length = 0 // 清空缓存
+    }
     return
   }
   
   // 解析 SSE 格式数据（data: xxx）
-  if (trimmedLine.startsWith('data:')) {
-    const data = trimmedLine.slice(5).trim()
-    if (data) {
-      onMessage?.(data)
+  if (cleanLine.startsWith('data:')) {
+    // 去除 "data:" 前缀
+    let data = cleanLine.slice(5)
+    
+    // SSE 规范：如果值以空格开头，去除第一个空格
+    if (data.startsWith(' ')) {
+      data = data.slice(1)
     }
+    
+    // 收集数据（不去除其他空格，保留原始格式）
+    eventBuffer.push(data)
   }
 }
