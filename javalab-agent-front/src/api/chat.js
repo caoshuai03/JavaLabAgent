@@ -39,10 +39,10 @@ export const deleteSession = (sessionId, userId = 1) => {
 
 /**
  * 发送RAG对话消息（POST方式，支持SSE流式响应）
- * 
+ *
  * 使用 fetch + ReadableStream 处理 SSE 流式响应，
  * 相比 EventSource（仅支持GET），POST方式更安全且支持更长的消息内容。
- * 
+ *
  * @param {Object} params - 请求参数
  * @param {string} params.message - 用户消息
  * @param {string} [params.sessionId] - 会话ID，新会话时为空
@@ -56,10 +56,10 @@ export const deleteSession = (sessionId, userId = 1) => {
 export const sendChatMessage = (params, callbacks) => {
   const { message, sessionId = '', userId = 1 } = params
   const { onMessage, onError, onComplete } = callbacks
-  
+
   // 创建 AbortController 用于取消请求
   const controller = new AbortController()
-  
+
   // 发起 POST 请求
   fetch('/api/v1/ai/rag', {
     method: 'POST',
@@ -75,16 +75,16 @@ export const sendChatMessage = (params, callbacks) => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-      
+
       // 使用 ReadableStream 读取 SSE 响应
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = '' // 缓冲区，用于处理不完整的数据块
       let eventBuffer = [] // 缓冲区，用于处理 SSE 事件的多行数据
-      
+
       while (true) {
         const { done, value } = await reader.read()
-        
+
         if (done) {
           // 处理缓冲区中剩余的数据
           if (buffer) {
@@ -92,20 +92,20 @@ export const sendChatMessage = (params, callbacks) => {
           }
           // 发送剩余的事件数据
           if (eventBuffer.length > 0) {
-            onMessage?.(eventBuffer.join('\n'))
+            onMessage?.(eventBuffer.join(''))
           }
           onComplete?.()
           break
         }
-        
+
         // 解码数据并添加到缓冲区
         buffer += decoder.decode(value, { stream: true })
-        
+
         // 按换行符分割，处理完整的消息
         const lines = buffer.split('\n')
         // 保留最后一个可能不完整的行
         buffer = lines.pop() || ''
-        
+
         // 处理每一行
         for (const line of lines) {
           processLine(line, eventBuffer, onMessage)
@@ -119,7 +119,7 @@ export const sendChatMessage = (params, callbacks) => {
         onError?.(error)
       }
     })
-  
+
   return controller
 }
 
@@ -132,29 +132,31 @@ export const sendChatMessage = (params, callbacks) => {
 function processLine(line, eventBuffer, onMessage) {
   // 处理 CR 回车符（兼容 Windows 换行 \r\n）
   const cleanLine = line.endsWith('\r') ? line.slice(0, -1) : line
-  
+
   // 空行表示当前事件结束，分发累积的数据
   if (!cleanLine) {
     if (eventBuffer.length > 0) {
-      // 将多行 data 合并，中间加换行符
-      const fullMessage = eventBuffer.join('\n')
+      // 将多行 data 合并，改为直接连接
+      // 因为后端返回的流式数据中，如果出现连在一起的 data: 行，通常是因为它们属于同一个输出片段
+      // 而之前的换行符处理逻辑会导致额外的换行（如代码块中）或断行（如 ReentrantLock）
+      const fullMessage = eventBuffer.join('')
       onMessage?.(fullMessage)
       eventBuffer.length = 0 // 清空缓存
     }
     return
   }
-  
+
   // 解析 SSE 格式数据（data: xxx）
   if (cleanLine.startsWith('data:')) {
     // 去除 "data:" 前缀
     let data = cleanLine.slice(5)
-    
-    // SSE 规范：如果值以空格开头，去除第一个空格
-    if (data.startsWith(' ')) {
-      data = data.slice(1)
+
+    // 如果 data 为空字符串，说明是换行符
+    if (data.length === 0) {
+      data = '\n'
     }
-    
-    // 收集数据（不去除其他空格，保留原始格式）
+
+    // 收集数据
     eventBuffer.push(data)
   }
 }
