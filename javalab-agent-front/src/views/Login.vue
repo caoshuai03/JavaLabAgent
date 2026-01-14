@@ -21,7 +21,7 @@
             v-model="form.password" 
             type="password" 
             required 
-            placeholder="请输入密码"
+            :placeholder="isRegister ? '请输入密码（至少6位）' : '请输入密码'"
           />
         </div>
         <div class="form-group" v-if="isRegister">
@@ -114,6 +114,13 @@ const handleLogin = async () => {
 const handleRegister = async () => {
   loading.value = true
   errorMessage.value = ''
+  
+  // 检查密码长度
+  if (form.value.password.length < 6) {
+    errorMessage.value = '密码长度不能少于6位'
+    loading.value = false
+    return
+  }
   
   // 检查密码确认
   if (form.value.password !== form.value.confirmPassword) {

@@ -3,7 +3,7 @@
     <div class="profile-content" v-click-outside="closeDropdown">
       <div class="profile-header" @click="toggleDropdown">
         <div class="avatar">
-          {{ userInitial }}
+          <DefaultAvatarIcon :size="32" />
         </div>
         <transition name="fade">
           <div v-show="!chatStore.sidebarCollapsed" class="user-info">
@@ -11,7 +11,7 @@
           </div>
         </transition>
       </div>
-      
+
       <transition name="dropdown">
         <div v-show="showDropdown" :class="['dropdown-menu', { collapsed: chatStore.sidebarCollapsed }]">
           <button @click="handleMenuClick('profile')" class="menu-item">
@@ -24,19 +24,19 @@
           </button>
           <button @click="handleMenuClick('logout')" class="menu-item logout">
             <LogoutIcon :size="18" />
-            <span v-if="!chatStore.sidebarCollapsed">登出</span>
+            <span v-if="!chatStore.sidebarCollapsed">退出登录</span>
           </button>
         </div>
       </transition>
     </div>
-    
-    <ProfileModal 
-      v-if="showProfileModalFlag" 
+
+    <ProfileModal
+      v-if="showProfileModalFlag"
       @close="closeProfileModal"
     />
-    
-    <PasswordModal 
-      v-if="showChangePasswordModalFlag" 
+
+    <PasswordModal
+      v-if="showChangePasswordModalFlag"
       @close="closeChangePasswordModal"
     />
   </div>
@@ -50,6 +50,7 @@ import { useChatStore } from '../stores/chat'
 import ProfileModal from './ProfileModal.vue'
 import PasswordModal from './PasswordModal.vue'
 import UserIcon from './icons/UserIcon.vue'
+import DefaultAvatarIcon from './icons/DefaultAvatarIcon.vue'
 import LockIcon from './icons/LockIcon.vue'
 import LogoutIcon from './icons/LogoutIcon.vue'
 
@@ -131,24 +132,24 @@ const vClickOutside = {
 .user-profile {
   padding: 8px;
   transition: border-color 0.3s ease, padding 0.3s ease;
-  
+
   &.collapsed {
     padding: 0;
     border-top: none;
   }
-  
+
   .profile-content {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
     position: relative;
-    
+
     .user-profile.collapsed & {
       align-items: center;
       justify-content: center;
     }
-    
+
       .profile-header {
       display: flex;
       align-items: center;
@@ -158,47 +159,43 @@ const vClickOutside = {
       padding: 6px;
       border-radius: 8px;
       transition: background-color 0.2s ease;
-      
+
       .user-profile.collapsed & {
         width: auto;
         padding: 0;
         justify-content: center;
         cursor: pointer;
       }
-      
+
       &:hover {
         background-color: var(--bg-hover);
       }
-      
+
       .avatar {
         width: 32px;
         height: 32px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         display: flex;
         align-items: center;
         justify-content: center;
-        color: white;
-        font-weight: bold;
-        font-size: 14px;
         flex-shrink: 0;
         transition: transform 0.2s ease;
-        
+        overflow: hidden;
+
         .profile-header:hover & {
           transform: scale(1.05);
         }
-        
+
         .user-profile.collapsed & {
           width: 32px;
           height: 32px;
-          font-size: 14px;
         }
       }
-      
+
       .user-info {
         flex: 1;
         min-width: 0;
-        
+
         .username {
           color: var(--text-primary);
           font-size: 14px;
@@ -209,14 +206,15 @@ const vClickOutside = {
         }
       }
     }
-    
+
     .dropdown-menu {
       position: absolute;
       bottom: 100%;
       left: 0;
       right: 0;
       background: var(--bg-primary);
-      border: 1px solid var(--border-color);
+      // 去掉下拉菜单外边框线（参考设计稿/截图样式）
+      border: none;
       border-radius: 8px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       padding: 4px;
@@ -224,13 +222,13 @@ const vClickOutside = {
       z-index: 1000;
       min-width: 180px;
       overflow: hidden;
-      
+
       &.collapsed {
         left: auto;
         right: 0;
         min-width: 160px;
       }
-      
+
       .menu-item {
         width: 100%;
         display: flex;
@@ -245,26 +243,27 @@ const vClickOutside = {
         border-radius: 4px;
         transition: background-color 0.15s ease;
         text-align: left;
-        
+
         svg {
           flex-shrink: 0;
           width: 18px;
           height: 18px;
         }
-        
+
         &:not(:last-child) {
-          border-bottom: 1px solid var(--border-color);
-          margin-bottom: 2px;
+          // 去掉菜单项之间的分割线（参考设计稿/截图样式）
+          border-bottom: none;
+          margin-bottom: 0;
           padding-bottom: 10px;
         }
-        
+
         &:hover {
           background-color: var(--bg-hover);
         }
-        
+
         &.logout {
           color: #dc3545;
-          
+
           &:hover {
             background-color: rgba(220, 53, 69, 0.1);
             color: #dc3545;
@@ -272,7 +271,7 @@ const vClickOutside = {
         }
       }
     }
-    
+
   }
 }
 
