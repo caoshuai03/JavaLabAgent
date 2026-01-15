@@ -62,6 +62,10 @@ POSTGRES_DB=postgres
 docker compose up -d --build
 ```
 
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
 启动完成后：
 
 - **前端地址**: [http://localhost](http://localhost)

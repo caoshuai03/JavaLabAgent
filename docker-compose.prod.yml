@@ -1,0 +1,103 @@
+# docker-compose.prod.yml - 服务器生产环境部署配置
+# 用法：docker compose -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: javalab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 生产环境使用独立的 init.sql 文件
+#      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./javalab-agent-back/src/main/resources/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    # 直接使用 Docker Hub 上的镜像
+    image: mailacs/javalabagent-backend:${IMAGE_TAG:-2026011501}
+    container_name: javalab-agent-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      # 禁用 Redis 自动配置
+      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+      # 数据库连接配置
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-postgres}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+
+      # AI 向量配置
+      SPRING_AI_VECTORSTORE_PGVECTOR_DIMENSIONS: 1024
+      OLlama_BASE_URL: ${OLlama_BASE_URL}
+
+      # 存储配置
+      STORAGE_TYPE: ${STORAGE_TYPE:-minio}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-javalab}
+
+      # 阿里云 OSS 备用配置
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
+    ports:
+      - "8989:8989"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    # 直接使用 Docker Hub 上的镜像
+    image: mailacs/javalabagent-frontend:${IMAGE_TAG:-2026011501}
+    container_name: javalab-agent-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  minio:
+    image: minio/minio:latest
+    container_name: javalab-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
+  minio_data:

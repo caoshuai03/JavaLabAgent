@@ -1,4 +1,4 @@
-# 前端 Dockerfile：多阶段构建（Vite build -> Nginx 静态站点）
+# 前端 docker-compose.prod.yml：多阶段构建（Vite build -> Nginx 静态站点）
 
 # ---------- 构建阶段 ----------
 FROM node:22-alpine AS build
