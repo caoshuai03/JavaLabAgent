@@ -15,37 +15,39 @@
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="username">用户名:</label>
-          <input 
-            id="username" 
-            v-model="form.userName" 
-            type="text" 
-            required 
+          <input
+            id="username"
+            v-model="form.userName"
+            type="text"
+            required
             placeholder="请输入用户名"
           />
         </div>
         <div class="form-group">
           <label for="password">密码:</label>
-          <input 
-            id="password" 
-            v-model="form.password" 
-            type="password" 
-            required 
+          <input
+            id="password"
+            v-model="form.password"
+            type="password"
+            required
             :placeholder="isRegister ? '请输入密码（至少6位）' : '请输入密码'"
           />
         </div>
         <div class="form-group" v-if="isRegister">
           <label for="confirmPassword">确认密码:</label>
-          <input 
-            id="confirmPassword" 
-            v-model="form.confirmPassword" 
-            type="password" 
-            required 
+          <input
+            id="confirmPassword"
+            v-model="form.confirmPassword"
+            type="password"
+            required
             placeholder="请再次输入密码"
           />
         </div>
         <div class="form-group">
           <button type="submit" :disabled="loading">
-            {{ loading ? (isRegister ? '注册中...' : '登录中...') : (isRegister ? '注册' : '登录') }}
+            {{
+              loading ? (isRegister ? '注册中...' : '登录中...') : (isRegister ? '注册' : '登录')
+            }}
           </button>
         </div>
         <div class="form-group" v-if="!isRegister">
@@ -62,9 +64,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useUserStore } from '../stores/user'
+import {ref} from 'vue'
+import {useRouter} from 'vue-router'
+import {useUserStore} from '../stores/user'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -113,7 +115,7 @@ const handleSubmit = async () => {
 const handleLogin = async () => {
   loading.value = true
   errorMessage.value = ''
-  
+
   try {
     await userStore.login({
       userName: form.value.userName,
@@ -135,28 +137,28 @@ const handleLogin = async () => {
 const handleRegister = async () => {
   loading.value = true
   errorMessage.value = ''
-  
+
   // 检查密码长度
   if (form.value.password.length < 6) {
     errorMessage.value = '密码长度不能少于6位'
     loading.value = false
     return
   }
-  
+
   // 检查密码确认
   if (form.value.password !== form.value.confirmPassword) {
     errorMessage.value = '两次输入的密码不一致'
     loading.value = false
     return
   }
-  
+
   try {
     // 注册时传递用户输入的用户名和密码
     const registerResult = await userStore.register({
       userName: form.value.userName,
       password: form.value.password
     })
-    
+
     // 检查注册是否成功
     if (registerResult && registerResult.code !== 0) {
       // 注册失败，显示错误信息
@@ -164,7 +166,7 @@ const handleRegister = async () => {
       loading.value = false
       return
     }
-    
+
     // 注册成功后使用用户输入的密码直接登录
     await handleLogin()
   } catch (error) {
@@ -186,7 +188,7 @@ const handleRegister = async () => {
   align-items: center;
   min-height: 100vh;
   background-color: #f0f2f5;
-  
+
   .login-form {
     background: white;
     padding: 2rem;
@@ -228,23 +230,23 @@ const handleRegister = async () => {
         user-select: none;
       }
     }
-    
+
     h2 {
       text-align: center;
       margin-bottom: 1.5rem;
       color: #333;
     }
-    
+
     .form-group {
       margin-bottom: 1rem;
-      
+
       label {
         display: block;
         margin-bottom: 0.5rem;
         font-weight: bold;
         color: #555;
       }
-      
+
       input {
         width: 100%;
         padding: 0.75rem;
@@ -252,43 +254,43 @@ const handleRegister = async () => {
         border-radius: 4px;
         font-size: 1rem;
         box-sizing: border-box;
-        
+
         &:focus {
           outline: none;
           border-color: #007bff;
         }
       }
-      
+
       button {
         width: 100%;
         padding: 0.75rem;
-        background-color: #007bff;
+        background-color: #90138B;
         color: white;
         border: none;
         border-radius: 4px;
         font-size: 1rem;
         cursor: pointer;
         transition: background-color 0.3s;
-        
+
         &:hover:not(:disabled) {
-          background-color: #0056b3;
+          background-color: #9B2A96;
         }
-        
+
         &:disabled {
           background-color: #ccc;
           cursor: not-allowed;
         }
       }
-      
+
       .toggle-button {
-        background-color: #28a745;
-        
+        background-color: #2454FF;
+
         &:hover:not(:disabled) {
-          background-color: #218838;
+          background-color: #204BE5;
         }
       }
     }
-    
+
     .error-message {
       color: #721c24;
       text-align: center;
