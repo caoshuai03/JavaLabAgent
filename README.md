@@ -5,6 +5,8 @@
 
 基于 Spring AI 的智能 RAG（检索增强生成）对话系统，集成本地大模型，支持知识库管理和智能问答。
 
+![img.png](javalab-agent-back/src/main/resources/img.png)
+
 ## 🛠️ 技术栈
 
 | 技术 | 版本 | 说明 |
