@@ -2,8 +2,8 @@
   <div :class="['sidebar', { collapsed: chatStore.sidebarCollapsed }]">
     <div class="sidebar-header">
       <div class="sidebar-top">
-        <div class="logo-area" v-if="!chatStore.sidebarCollapsed">
-          <div class="logo"></div>
+        <div class="logo-area" v-if="!chatStore.sidebarCollapsed" @click="handleNewConversation" title="新聊天">
+          <img src="../assets/logo.png" alt="JavaLab Logo" class="logo-img" />
         </div>
         <button
           @click="chatStore.toggleSidebar"
@@ -138,39 +138,14 @@ const handleKnowledgeManagement = () => {
 
     .logo-area {
       flex: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
 
-      .logo {
-        width: 24px;
-        height: 24px;
-        background: transparent;
-        border: 1.5px solid var(--text-primary);
-        border-radius: 4px;
-        position: relative;
-
-        // 创建类似花朵/齿轮的装饰性图案
-        &::before {
-          content: '';
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%) rotate(45deg);
-          width: 12px;
-          height: 12px;
-          border: 1.5px solid var(--text-primary);
-          border-radius: 2px;
-        }
-
-        &::after {
-          content: '';
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          width: 6px;
-          height: 6px;
-          border: 1.5px solid var(--text-primary);
-          border-radius: 50%;
-        }
+      .logo-img {
+        height: 32px;
+        width: auto;
+        object-fit: contain;
       }
     }
 

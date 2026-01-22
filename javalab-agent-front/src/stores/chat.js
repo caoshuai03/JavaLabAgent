@@ -282,6 +282,11 @@ export const useChatStore = defineStore('chat', () => {
   const initialize = async () => {
     await loadConversationsFromDB()
     
+    // 如果当前已经是新对话状态（比如从其他页面点击“新对话”跳转过来时），则不自动加载历史会话
+    if (isNewConversation.value && currentConversationId.value === null) {
+      return
+    }
+    
     // 如果有保存的当前会话ID，尝试切换到该会话
     const currentId = localStorage.getItem('chat_current_conversation_id')
     if (currentId && conversations.value.find(conv => conv.id === currentId)) {
