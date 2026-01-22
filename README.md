@@ -1,8 +1,8 @@
-
+# JavaLab Agent
 
 <p align="center"> <img src="javalab-agent-front/src/assets/logo.png" alt="Logo" width="200" height="200"> </p>
 
-# JavaLab Agent
+
 基于 Spring AI 的智能 RAG（检索增强生成）对话系统，集成本地大模型，支持知识库管理和智能问答。
 
 ## 🛠️ 技术栈
