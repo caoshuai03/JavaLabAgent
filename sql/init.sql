@@ -167,6 +167,7 @@ CREATE TABLE public.tb_user_feedback (
                                      content text NOT NULL,
                                      status smallint DEFAULT 0 NOT NULL,
                                      priority smallint DEFAULT 1 NOT NULL,
+                                     contact_email character varying(100),
                                      handler_user_id bigint,
                                      handled_at timestamp without time zone,
                                      handle_result text,
@@ -182,6 +183,7 @@ COMMENT ON COLUMN "public"."tb_user_feedback"."title" IS '反馈标题（可选�
 COMMENT ON COLUMN "public"."tb_user_feedback"."content" IS '反馈内容';
 COMMENT ON COLUMN "public"."tb_user_feedback"."status" IS '状态：0-新建 1-处理中 2-已解决 3-已关闭';
 COMMENT ON COLUMN "public"."tb_user_feedback"."priority" IS '优先级：0-低 1-中 2-高';
+COMMENT ON COLUMN "public"."tb_user_feedback"."contact_email" IS '联系邮箱';
 COMMENT ON COLUMN "public"."tb_user_feedback"."handler_user_id" IS '处理人用户ID(tb_user.id)，管理员';
 COMMENT ON COLUMN "public"."tb_user_feedback"."handled_at" IS '处理时间';
 COMMENT ON COLUMN "public"."tb_user_feedback"."handle_result" IS '处理结论/回复';

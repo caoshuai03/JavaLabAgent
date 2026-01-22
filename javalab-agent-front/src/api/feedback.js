@@ -10,6 +10,7 @@ export const feedbackApi = {
    * @param {number} data.type 反馈类型：0-其它 1-BUG 2-建议 3-投诉
    * @param {string} data.title 反馈标题（可选）
    * @param {string} data.content 反馈内容（必填）
+   * @param {string} data.contactEmail 联系邮箱（可选）
    * @param {number} data.priority 优先级：0-低 1-中 2-高（可选）
    * @param {number} data.messageId 关联消息ID（可选）
    * @param {string} data.sessionId 关联会话ID（可选）

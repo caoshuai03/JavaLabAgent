@@ -1,6 +1,6 @@
 <template>
   <!-- 反馈弹窗 -->
-  <div class="modal-overlay" @click.self="handleClose">
+  <div class="modal-overlay">
     <div class="modal-container">
       <!-- 弹窗头部 -->
       <div class="modal-header">
@@ -38,6 +38,18 @@
             type="text"
             class="form-input"
             placeholder="请输入反馈标题"
+            maxlength="100"
+          />
+        </div>
+
+        <!-- 联系邮箱（可选） -->
+        <div class="form-group">
+          <label>联系邮箱 <span class="optional">(可选)</span></label>
+          <input
+            v-model="form.contactEmail"
+            type="email"
+            class="form-input"
+            placeholder="请输入您的邮箱，方便我们回复您"
             maxlength="100"
           />
         </div>
@@ -110,7 +122,8 @@ const feedbackTypes = [
 const form = ref({
   type: 2, // 默认选择"建议"
   title: '',
-  content: ''
+  content: '',
+  contactEmail: ''
 })
 
 // 提交状态
@@ -136,6 +149,7 @@ const handleSubmit = async () => {
       type: form.value.type,
       title: form.value.title.trim() || null,
       content: form.value.content.trim(),
+      contactEmail: form.value.contactEmail.trim() || null,
       priority: 1, // 默认中优先级
     }
 

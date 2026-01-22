@@ -64,6 +64,11 @@ public class UserFeedback {
      */
     private Integer priority;
 
+    /**
+     * 联系邮箱
+     */
+    private String contactEmail;
+
 
     /**
      * 处理人用户ID（管理员）
