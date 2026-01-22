@@ -151,3 +151,44 @@ ALTER TABLE "public"."chat_message" ADD CONSTRAINT "chat_message_pkey" PRIMARY K
 
 CREATE INDEX idx_chat_message_user_id ON public.chat_message USING btree (user_id);
 CREATE INDEX idx_chat_message_session_id ON public.chat_message USING btree (session_id);
+
+-- ============================================
+-- 用户反馈表 (tb_user_feedback) - 用于收集用户反馈并由管理员处理
+-- 状态：0-新建 1-处理中 2-已解决 3-已关闭
+-- 优先级：0-低 1-中 2-高
+-- ============================================
+DROP TABLE IF EXISTS "public"."tb_user_feedback";
+
+CREATE TABLE public.tb_user_feedback (
+                                     id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+                                     user_id bigint NOT NULL,
+                                     type smallint DEFAULT 0 NOT NULL,
+                                     title character varying(200),
+                                     content text NOT NULL,
+                                     status smallint DEFAULT 0 NOT NULL,
+                                     priority smallint DEFAULT 1 NOT NULL,
+                                     handler_user_id bigint,
+                                     handled_at timestamp without time zone,
+                                     handle_result text,
+                                     create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+                                     update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE "public"."tb_user_feedback" IS '用户反馈表，用于收集反馈并支持管理员处理';
+COMMENT ON COLUMN "public"."tb_user_feedback"."id" IS '主键ID';
+COMMENT ON COLUMN "public"."tb_user_feedback"."user_id" IS '反馈提交人用户ID(tb_user.id)，必须登录';
+COMMENT ON COLUMN "public"."tb_user_feedback"."type" IS '反馈类型：0-其它 1-BUG 2-建议 3-投诉';
+COMMENT ON COLUMN "public"."tb_user_feedback"."title" IS '反馈标题（可选）';
+COMMENT ON COLUMN "public"."tb_user_feedback"."content" IS '反馈内容';
+COMMENT ON COLUMN "public"."tb_user_feedback"."status" IS '状态：0-新建 1-处理中 2-已解决 3-已关闭';
+COMMENT ON COLUMN "public"."tb_user_feedback"."priority" IS '优先级：0-低 1-中 2-高';
+COMMENT ON COLUMN "public"."tb_user_feedback"."handler_user_id" IS '处理人用户ID(tb_user.id)，管理员';
+COMMENT ON COLUMN "public"."tb_user_feedback"."handled_at" IS '处理时间';
+COMMENT ON COLUMN "public"."tb_user_feedback"."handle_result" IS '处理结论/回复';
+COMMENT ON COLUMN "public"."tb_user_feedback"."create_time" IS '创建时间';
+COMMENT ON COLUMN "public"."tb_user_feedback"."update_time" IS '更新时间';
+
+ALTER TABLE "public"."tb_user_feedback" ADD CONSTRAINT "tb_user_feedback_pkey" PRIMARY KEY ("id");
+
+CREATE INDEX idx_tb_user_feedback_user_id ON public.tb_user_feedback USING btree (user_id);
+CREATE INDEX idx_tb_user_feedback_status_create_time ON public.tb_user_feedback USING btree (status, create_time DESC);

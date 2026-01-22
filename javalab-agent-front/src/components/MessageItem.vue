@@ -6,7 +6,7 @@
 
         <!-- 消息底部区域：操作按钮 + 时间 -->
         <div class="message-footer">
-          <!-- 助手消息显示复制按钮 -->
+          <!-- 助手消息显示复制按钮和反馈按钮 -->
           <div v-if="message.sender === 'assistant'" class="message-actions">
             <button
               @click="handleCopy"
@@ -22,7 +22,25 @@
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
+            <!-- 反馈按钮 -->
+            <button
+              @click="openFeedbackModal"
+              class="action-button"
+              title="反馈"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </button>
           </div>
+
+          <!-- 反馈弹窗 -->
+          <FeedbackModal
+            v-if="showFeedbackModal"
+            :message-content="message.content"
+            :session-id="chatStore.currentConversationId"
+            @close="closeFeedbackModal"
+          />
           <!-- 时间显示 -->
           <div class="message-time">{{ formatTime(message.timestamp) }}</div>
         </div>
@@ -35,6 +53,7 @@
 import { useChatStore } from '../stores/chat'
 import { renderMarkdown } from '../utils/markdown'
 import { ref, onMounted, nextTick, watch } from 'vue'
+import FeedbackModal from './FeedbackModal.vue'
 
 const props = defineProps({
   message: {
@@ -46,6 +65,17 @@ const props = defineProps({
 const chatStore = useChatStore()
 const messageTextRef = ref(null)
 const copied = ref(false) // 复制成功状态
+const showFeedbackModal = ref(false) // 反馈弹窗状态
+
+// 打开反馈弹窗
+const openFeedbackModal = () => {
+  showFeedbackModal.value = true
+}
+
+// 关闭反馈弹窗
+const closeFeedbackModal = () => {
+  showFeedbackModal.value = false
+}
 
 const formatContent = (content) => {
   if (!content) return ''

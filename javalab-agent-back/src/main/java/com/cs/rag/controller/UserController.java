@@ -124,7 +124,7 @@ public class UserController {
     @Operation(summary = "login", description = "登录")
     public BaseResponse login(@RequestParam(value = "userName") String userName,
                               @RequestParam(value = "password") String password) throws AccountLockedException, AccountNotFoundException {
-        log.info("登录：{}", userName + ":" + password);
+        log.info("登录：{}", userName);
 
         User user = userService.login(userName, password);
 

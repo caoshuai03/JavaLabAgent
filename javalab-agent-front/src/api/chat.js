@@ -60,19 +60,36 @@ export const sendChatMessage = (params, callbacks) => {
   // 创建 AbortController 用于取消请求
   const controller = new AbortController()
 
+  // 从本地存储中读取 token（与 axios 拦截器保持一致）
+  // 注意：后端 JwtTokenUserInterceptor 期望请求头中携带 "Bearer <token>"
+  const token = localStorage.getItem('token')
+
+  // 构建请求头
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'text/event-stream',
+  }
+
+  // 仅在 token 存在时携带 Authorization，避免发送 "Bearer null"
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
   // 发起 POST 请求
   fetch('/api/v1/ai/rag', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
-    },
+    headers,
     body: JSON.stringify({ message, sessionId, userId }),
     signal: controller.signal,
   })
     .then(async (response) => {
       // 检查响应状态
       if (!response.ok) {
+        // 40100/40101 是后端自定义错误码（直接作为 HTTP status 返回）
+        // 这里给出更明确的错误，便于前端提示用户先登录
+        if (response.status === 40100 || response.status === 40101 || response.status === 401) {
+          throw new Error('未登录或无权限，请先登录后再重试')
+        }
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 

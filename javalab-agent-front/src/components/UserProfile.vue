@@ -22,6 +22,10 @@
             <LockIcon :size="18" />
             <span v-if="!chatStore.sidebarCollapsed">修改密码</span>
           </button>
+          <button @click="handleMenuClick('feedback')" class="menu-item">
+            <FeedbackIcon :size="18" />
+            <span v-if="!chatStore.sidebarCollapsed">反馈</span>
+          </button>
           <button @click="handleMenuClick('logout')" class="menu-item logout">
             <LogoutIcon :size="18" />
             <span v-if="!chatStore.sidebarCollapsed">退出登录</span>
@@ -39,6 +43,11 @@
       v-if="showChangePasswordModalFlag"
       @close="closeChangePasswordModal"
     />
+
+    <FeedbackModal
+      v-if="showFeedbackModalFlag"
+      @close="closeFeedbackModal"
+    />
   </div>
 </template>
 
@@ -49,9 +58,11 @@ import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
 import ProfileModal from './ProfileModal.vue'
 import PasswordModal from './PasswordModal.vue'
+import FeedbackModal from './FeedbackModal.vue'
 import UserIcon from './icons/UserIcon.vue'
 import DefaultAvatarIcon from './icons/DefaultAvatarIcon.vue'
 import LockIcon from './icons/LockIcon.vue'
+import FeedbackIcon from './icons/FeedbackIcon.vue'
 import LogoutIcon from './icons/LogoutIcon.vue'
 
 const router = useRouter()
@@ -60,6 +71,7 @@ const chatStore = useChatStore()
 
 const showProfileModalFlag = ref(false)
 const showChangePasswordModalFlag = ref(false)
+const showFeedbackModalFlag = ref(false)
 const showDropdown = ref(false)
 
 const displayName = computed(() => {
@@ -95,6 +107,14 @@ const closeChangePasswordModal = () => {
   showChangePasswordModalFlag.value = false
 }
 
+const showFeedbackModal = () => {
+  showFeedbackModalFlag.value = true
+}
+
+const closeFeedbackModal = () => {
+  showFeedbackModalFlag.value = false
+}
+
 const handleLogout = () => {
   userStore.logout()
   router.push('/login')
@@ -103,6 +123,7 @@ const handleLogout = () => {
 const modalActions = {
   profile: showProfileModal,
   password: showChangePasswordModal,
+  feedback: showFeedbackModal,
   logout: handleLogout
 }
 
