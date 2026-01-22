@@ -63,6 +63,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             return ResultUtils.error(ErrorCode.PARAMS_ERROR, FileMessageConstant.FILE_REQUIRED);
         }
 
+        // 记录失败的文件及原因
+        List<String> failedFiles = new ArrayList<>();
+
         // 遍历处理每个文件
         for (MultipartFile file : files) {
             String originalFilename = file.getOriginalFilename();
@@ -80,23 +83,40 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 // 2. 文档分割：自定义QA对分割器
                 List<Document> splitDocuments = splitDocuments(documents);
 
-                // 3. 向量化存储
+                // 3. 向量化存储（失败时会抛出异常，阻止后续步骤）
                 List<String> vectorIds = storeVectors(splitDocuments, originalFilename);
 
-                // 4. OSS上传
+                // 4. OSS上传（只有向量化成功才会执行）
                 String url = uploadToOss(file, originalFilename);
 
-                // 5. 保存数据库记录
+                // 5. 保存数据库记录（只有向量化成功才会执行）
                 saveFileRecord(originalFilename, vectorIds, url);
 
             } catch (IOException e) {
                 log.error("文件处理IO异常，文件: {}, 错误信息: {}", originalFilename, e.getMessage(), e);
+                failedFiles.add(originalFilename + "（IO异常）");
+            } catch (RuntimeException e) {
+                // 向量化失败等运行时异常
+                log.error("文件上传处理异常，文件: {}, 错误信息: {}", originalFilename, e.getMessage(), e);
+                failedFiles.add(originalFilename + "向量化存储失败");
             } catch (Exception e) {
                 log.error("文件上传处理异常，文件: {}, 错误信息: {}", originalFilename, e.getMessage(), e);
+                failedFiles.add(originalFilename + "（处理异常）");
             }
         }
 
-        return ResultUtils.success(FileMessageConstant.FILE_UPLOAD_SUCCESS);
+        // 根据处理结果返回不同响应
+        if (failedFiles.isEmpty()) {
+            return ResultUtils.success(FileMessageConstant.FILE_UPLOAD_SUCCESS);
+        } else if (failedFiles.size() == files.size()) {
+            // 全部失败
+            String errorMsg = "文件上传失败: " + String.join(", ", failedFiles);
+            return ResultUtils.error(ErrorCode.OPERATION_ERROR, errorMsg);
+        } else {
+            // 部分成功
+            String warnMsg = "部分文件上传成功，失败文件: " + String.join(", ", failedFiles);
+            return ResultUtils.success(warnMsg);
+        }
     }
 
     /**
@@ -132,29 +152,30 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     /**
      * 将分割后的文档进行向量化存储
+     * 向量化失败时抛出运行时异常，阻止后续 OSS 上传和数据库存储
      *
      * @param splitDocuments 分割后的文档列表
      * @param originalFilename 原始文件名（用于日志）
      * @return 向量ID列表
+     * @throws RuntimeException 向量化失败时抛出
      */
     private List<String> storeVectors(List<Document> splitDocuments, String originalFilename) {
-        List<String> vectorIds = new ArrayList<>();
+        log.info("开始向量化存储，文档数量: {}", splitDocuments.size());
         try {
-            log.info("开始向量化存储，文档数量: {}", splitDocuments.size());
             vectorStore.add(splitDocuments);
-
-            // 获取向量ID
-            vectorIds = splitDocuments.stream()
-                    .map(Document::getId)
-                    .collect(Collectors.toList());
-
-            log.info("向量化存储成功，文件: {}, 向量ID数量: {}, 向量ID列表: {}",
-                    originalFilename, vectorIds.size(), vectorIds);
         } catch (Exception e) {
             log.error("向量化存储失败，文件: {}, 错误信息: {}", originalFilename, e.getMessage(), e);
-            // 即使向量化失败，也继续执行OSS上传和数据库保存
-            // 但vectorId将为空，后续可以通过重新上传来修复
+            // 向量化失败时抛出异常，阻止后续 OSS 上传和数据库存储
+            throw new RuntimeException("向量化存储失败: " + e.getMessage(), e);
         }
+
+        // 获取向量ID
+        List<String> vectorIds = splitDocuments.stream()
+                .map(Document::getId)
+                .collect(Collectors.toList());
+
+        log.info("向量化存储成功，文件: {}, 向量ID数量: {}, 向量ID列表: {}",
+                originalFilename, vectorIds.size(), vectorIds);
         return vectorIds;
     }
 

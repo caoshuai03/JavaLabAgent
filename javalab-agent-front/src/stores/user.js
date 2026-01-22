@@ -34,7 +34,8 @@ export const useUserStore = defineStore('user', () => {
       userInfo.value = {
         id: data.id,
         userName: data.userName,
-        name: data.name
+        name: data.name,
+        role: data.role || 0  // 用户角色：0-普通用户，1-管理员
       }
 
       // 保存token和用户信息到localStorage
@@ -162,6 +163,11 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // 判断当前用户是否为管理员
+  const isAdmin = () => {
+    return userInfo.value?.role === 1
+  }
+
   return {
     token,
     userInfo,
@@ -171,6 +177,7 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     validateToken,
     updateUserInfo,
-    changePassword
+    changePassword,
+    isAdmin
   }
 })

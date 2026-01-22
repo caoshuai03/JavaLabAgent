@@ -37,6 +37,7 @@ CREATE TABLE public.tb_user (
                                 sex character varying,
                                 id_number character varying,
                                 status integer DEFAULT 1 NOT NULL,
+                                role integer DEFAULT 0 NOT NULL,
                                 create_time date,
                                 update_time date,
                                 create_user bigint,
@@ -53,6 +54,7 @@ COMMENT ON COLUMN "public"."tb_user"."phone" IS '手机号';
 COMMENT ON COLUMN "public"."tb_user"."sex" IS '性别';
 COMMENT ON COLUMN "public"."tb_user"."id_number" IS '身份证号';
 COMMENT ON COLUMN "public"."tb_user"."status" IS '状态 0：禁用 1：启用';
+COMMENT ON COLUMN "public"."tb_user"."role" IS '用户角色：0-普通用户，1-管理员';
 COMMENT ON COLUMN "public"."tb_user"."create_time" IS '创建时间';
 COMMENT ON COLUMN "public"."tb_user"."update_time" IS '更新时间';
 COMMENT ON COLUMN "public"."tb_user"."create_user" IS '创建人';
@@ -61,7 +63,7 @@ COMMENT ON COLUMN "public"."tb_user"."update_user" IS '修改人';
 -- ----------------------------
 -- tb_user 表初始数据
 -- ----------------------------
-INSERT INTO "public"."tb_user" VALUES (666497, '管理员', 'admin', '0192023a7bbd73250516f069df18b500', '13800138000', '男', '11010519491231002X', 1, '2025-03-03', '2025-03-03', NULL, NULL);
+INSERT INTO "public"."tb_user" VALUES (666497, '管理员', 'admin', '0192023a7bbd73250516f069df18b500', '13800138000', '男', '11010519491231002X', 1, 1, '2025-03-03', '2025-03-03', NULL, NULL);
 
 -- ----------------------------
 -- tb_user 表主键约束

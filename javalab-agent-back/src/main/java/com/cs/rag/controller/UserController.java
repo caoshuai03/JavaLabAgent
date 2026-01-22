@@ -122,8 +122,8 @@ public class UserController {
      */
     @PostMapping("/login")
     @Operation(summary = "login", description = "登录")
-    public BaseResponse login(@RequestParam(value = "userName", defaultValue = "admin") String userName,
-                              @RequestParam(value = "password", defaultValue = "123456") String password) throws AccountLockedException, AccountNotFoundException {
+    public BaseResponse login(@RequestParam(value = "userName") String userName,
+                              @RequestParam(value = "password") String password) throws AccountLockedException, AccountNotFoundException {
         log.info("登录：{}", userName + ":" + password);
 
         User user = userService.login(userName, password);
@@ -141,6 +141,7 @@ public class UserController {
                 .userName(user.getUserName())
                 .name(user.getName())
                 .token(token)
+                .role(user.getRole() != null ? user.getRole() : 0)
                 .build();
 
         return ResultUtils.success(userLoginVO);
@@ -215,6 +216,7 @@ public class UserController {
                 .id(user.getId())
                 .name(user.getName())
                 .userName(user.getUserName())
+                .role(user.getRole() != null ? user.getRole() : 0)
                 .build();
         return ResultUtils.success(userInfoVO);
     }
@@ -250,6 +252,7 @@ public class UserController {
                 .id(user.getId())
                 .name(user.getName())
                 .userName(user.getUserName())
+                .role(user.getRole() != null ? user.getRole() : 0)
                 .build();
         return ResultUtils.success(userInfoVO);
     }

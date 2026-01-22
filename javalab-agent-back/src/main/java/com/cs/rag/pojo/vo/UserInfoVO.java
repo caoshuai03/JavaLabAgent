@@ -33,7 +33,7 @@ public class UserInfoVO {
     private String userName;
 
     /**
-     * 状态（0：禁用 1：启用）
+     * 用户角色：0-普通用户，1-管理员
      */
-    private Integer status;
+    private Integer role;
 }

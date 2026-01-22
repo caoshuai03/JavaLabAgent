@@ -73,10 +73,23 @@ docker compose -f docker-compose.prod.yml up -d
 - **MinIO 控制台**: [http://localhost:9001](http://localhost:9001)（用户名：minioadmin，密码：minioadmin123）
 - **数据库**: localhost:5432 (PostgreSQL + pgvector)
 
-重启某个容器
-docker compose restart backend
+
 删除所有容器和数据卷
 docker compose down -v
+
+推送
+- 后端镜像
+docker build -t mailacs/javalabagent-backend:2026012201 -f javalab-agent-back/Dockerfile javalab-agent-back
+docker push mailacs/javalabagent-backend:2026012201
+
+- 前端镜像
+docker build -t mailacs/javalabagent-frontend:2026012201 -f javalab-agent-front/Dockerfile javalab-agent-front
+docker push mailacs/javalabagent-frontend:2026012201
+
+在.env文件中添加
+IMAGE_TAG=2026012201
+
+
 ---
 
 ## 🛠️ 技术栈

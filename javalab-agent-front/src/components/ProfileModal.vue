@@ -21,15 +21,6 @@
             placeholder="请输入用户名"
           />
         </div>
-        <div class="form-group">
-          <label for="phone">手机号:</label>
-          <input
-            id="phone"
-            v-model="form.phone"
-            type="text"
-            placeholder="请输入手机号"
-          />
-        </div>
         <div class="form-actions">
           <button type="button" @click="handleClose">取消</button>
           <button type="submit" :disabled="updating">
@@ -61,8 +52,7 @@ const successMessage = ref('')
 const form = ref({
   id: null,
   name: '',
-  userName: '',
-  phone: ''
+  userName: ''
 })
 
 onMounted(async () => {
@@ -73,16 +63,14 @@ onMounted(async () => {
     form.value = {
       id: userData.id,
       name: userData.name || '',
-      userName: userData.userName || '',
-      phone: userData.phone || ''
+      userName: userData.userName || ''
     }
   } catch (error) {
     console.error('获取用户信息失败:', error)
     form.value = {
       id: userStore.userInfo?.id || null,
       name: userStore.userInfo?.name || '',
-      userName: userStore.userInfo?.userName || '',
-      phone: userStore.userInfo?.phone || ''
+      userName: userStore.userInfo?.userName || ''
     }
   }
 })

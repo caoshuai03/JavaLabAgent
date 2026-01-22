@@ -1,5 +1,6 @@
 package com.cs.rag.config;
 
+import com.cs.rag.common.AdminInterceptor;
 import com.cs.rag.common.JwtTokenUserInterceptor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,9 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
 
     @Autowired
     private JwtTokenUserInterceptor jwtTokenUserInterceptor;
+
+    @Autowired
+    private AdminInterceptor adminInterceptor;
 
     /**
      * 注册自定义拦截器
@@ -43,5 +47,11 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
                 );
         
         log.info("JWT token拦截器注册完成");
+
+        // 注册管理员权限拦截器 - 只拦截知识库上传接口
+        registry.addInterceptor(adminInterceptor)
+                .addPathPatterns("/api/v1/knowledge/file/upload");  // 只拦截上传路径
+        
+        log.info("管理员权限拦截器注册完成");
     }
 }

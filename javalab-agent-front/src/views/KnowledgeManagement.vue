@@ -3,13 +3,31 @@
     <Sidebar />
     <div class="knowledge-main">
       <div class="knowledge-content">
+        <div v-if="uploading" class="uploading-overlay" role="status" aria-live="polite">
+          <div class="uploading-modal">
+            <div class="uploading-spinner" />
+            <div class="uploading-text">文件上传中，请稍候...</div>
+          </div>
+        </div>
         <!-- 顶部操作栏 -->
         <div class="toolbar">
           <div class="toolbar-left">
-            <button @click="handleUpload" class="upload-button" :disabled="uploading">
-              <UploadIcon :size="18" />
-              <span>上传文件</span>
-            </button>
+            <!-- 上传按钮：管理员可直接上传，普通用户点击显示气泡提示 -->
+            <div class="upload-wrapper">
+              <button 
+                @click="handleUploadClick" 
+                class="upload-button" 
+                :class="{ 'disabled-style': !isAdmin }"
+                :disabled="uploading"
+              >
+                <UploadIcon :size="18" />
+                <span>上传文件</span>
+              </button>
+              <!-- 气泡提示：仅普通用户点击时显示 -->
+              <div v-if="showAdminTip" class="tooltip">
+                仅管理员可上传，请联系管理员
+              </div>
+            </div>
             <input
               ref="fileInput"
               type="file"
@@ -180,6 +198,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { knowledgeApi } from '../api/knowledge'
 import { useChatStore } from '../stores/chat'
+import { useUserStore } from '../stores/user'
 import Sidebar from '../components/Sidebar.vue'
 import UploadIcon from '../components/icons/UploadIcon.vue'
 import DownloadIcon from '../components/icons/DownloadIcon.vue'
@@ -187,8 +206,16 @@ import TrashIcon from '../components/icons/TrashIcon.vue'
 import FolderIcon from '../components/icons/FolderIcon.vue'
 import SearchIcon from '../components/icons/SearchIcon.vue'
 
-// 初始化 chatStore
+// 初始化 chatStore 和 userStore
 const chatStore = useChatStore()
+const userStore = useUserStore()
+
+// 计算属性：是否为管理员
+const isAdmin = computed(() => userStore.isAdmin())
+
+// 气泡提示状态
+const showAdminTip = ref(false)
+let tipTimer = null
 
 // 状态
 const fileList = ref([])
@@ -267,8 +294,29 @@ const formatDate = (dateString) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
+// 上传按钮点击处理：管理员直接上传，普通用户显示气泡提示
+const handleUploadClick = () => {
+  if (isAdmin.value) {
+    // 管理员：打开文件选择
+    fileInput.value?.click()
+  } else {
+    // 普通用户：显示气泡提示
+    showAdminTip.value = true
+    // 3秒后自动隐藏
+    if (tipTimer) clearTimeout(tipTimer)
+    tipTimer = setTimeout(() => {
+      showAdminTip.value = false
+    }, 3000)
+  }
+}
+
 const handleUpload = () => {
   fileInput.value?.click()
+}
+
+// 统一提示方法：当前页面使用 alert，后续如果引入 UI 组件库可在此处替换
+const showMessage = (message) => {
+  alert(message)
 }
 
 const handleFileSelect = async (event) => {
@@ -284,18 +332,35 @@ const handleFileSelect = async (event) => {
 
     const response = await knowledgeApi.uploadFiles(formData)
     if (response.data.code === 0) {
-      alert('文件上传成功')
-      fetchFileList()
+      showMessage(response.data.message || '文件上传成功')
+      await fetchFileList()
       // 清空文件选择
       if (fileInput.value) {
         fileInput.value.value = ''
       }
     } else {
-      alert('文件上传失败: ' + (response.data.message || '未知错误'))
+      showMessage('文件上传失败: ' + (response.data.message || '未知错误'))
+      // 业务失败也清空文件选择，避免用户误以为已上传成功
+      if (fileInput.value) {
+        fileInput.value.value = ''
+      }
     }
   } catch (error) {
     console.error('上传文件错误:', error)
-    alert('文件上传失败: ' + (error.message || '网络错误'))
+    // axios 超时一般会是 ECONNABORTED
+    if (error?.code === 'ECONNABORTED') {
+      showMessage('文件上传超时，请稍后重试')
+    } else if (error?.response?.status === 413) {
+      showMessage('文件过大，上传失败（413）')
+    } else if (error?.response?.status) {
+      showMessage(`文件上传失败（${error.response.status}）: ` + (error.response.data?.message || error.message || '网络错误'))
+    } else {
+      showMessage('文件上传失败: ' + (error.message || '网络错误'))
+    }
+    // 异常情况下也清空文件选择，避免重复触发 change 不生效
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
   } finally {
     uploading.value = false
   }
@@ -479,6 +544,49 @@ onMounted(() => {
   overflow: hidden;
 }
 
+// 上传遮罩层：上传期间阻止用户重复操作，并提供明确的等待反馈
+.uploading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .uploading-modal {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 20px 22px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    max-width: 80vw;
+  }
+
+  .uploading-spinner {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    animation: uploadingSpin 0.9s linear infinite;
+    flex-shrink: 0;
+  }
+
+  .uploading-text {
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+}
+
+@keyframes uploadingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 // 顶部操作栏
 .toolbar {
   display: flex;
@@ -493,6 +601,57 @@ onMounted(() => {
   .toolbar-left {
     display: flex;
     gap: 8px;
+  }
+
+  // 上传按钮包装器（用于定位气泡提示）
+  .upload-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+
+  // 普通用户上传按钮禁用样式
+  .upload-button.disabled-style {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  // 气泡提示样式
+  .tooltip {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 8px;
+    padding: 8px 12px;
+    background-color: #333;
+    color: #fff;
+    font-size: 13px;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 100;
+    animation: fadeIn 0.2s ease;
+
+    // 小三角箭头
+    &::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-bottom-color: #333;
+    }
+  }
+
+  @keyframes fadeIn {
+    from { 
+      opacity: 0; 
+      transform: translateX(-50%) translateY(-4px); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateX(-50%) translateY(0); 
+    }
   }
   
   .toolbar-center {

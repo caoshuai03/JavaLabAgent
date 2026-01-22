@@ -18,7 +18,7 @@ services:
       # 持久化数据
       - postgres_data:/var/lib/postgresql/data
       # 首次初始化时自动执行（仅在数据卷为空时执行一次）
-      - ./javalab-agent-back/src/main/resources/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       # 健康检查，避免后端过早启动
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
