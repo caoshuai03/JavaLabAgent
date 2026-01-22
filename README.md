@@ -101,12 +101,12 @@ docker compose down -v
 镜像推送（用于部署分发）
 ```bash
 # 构建并推送后端镜像
-docker build -t mailacs/javalabagent-backend:2026012201 -f javalab-agent-back/Dockerfile javalab-agent-back
-docker push mailacs/javalabagent-backend:2026012201
+docker build -t mailacs/javalabagent-backend:2026012301 -f javalab-agent-back/Dockerfile javalab-agent-back
+docker push mailacs/javalabagent-backend:2026012301
 
 # 构建并推送前端镜像
-docker build -t mailacs/javalabagent-frontend:2026012201 -f javalab-agent-front/Dockerfile javalab-agent-front
-docker push mailacs/javalabagent-frontend:2026012201
+docker build -t mailacs/javalabagent-frontend:2026012301 -f javalab-agent-front/Dockerfile javalab-agent-front
+docker push mailacs/javalabagent-frontend:2026012301
 ```
 
 ---
