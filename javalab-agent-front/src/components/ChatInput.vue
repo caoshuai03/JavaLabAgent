@@ -61,7 +61,7 @@ const handleInput = () => {
   if (inputRef.value) {
     inputRef.value.style.height = 'auto'
     const scrollHeight = inputRef.value.scrollHeight
-    
+
     // 这里的24是基础高度，根据内容调整
     let newHeight = Math.max(MIN_HEIGHT, Math.min(scrollHeight, MAX_HEIGHT))
     inputRef.value.style.height = newHeight + 'px'
@@ -121,10 +121,11 @@ const handleSend = async () => {
   // 构建请求参数
   const sessionId = chatStore.currentConversationId || ''
   const userId = userStore.userInfo?.id || 1
+  const model = chatStore.selectedModel
 
   // 使用 POST 方式发送请求（通过 sendChatMessage API）
   abortController = sendChatMessage(
-    { message, sessionId, userId },
+    { message, sessionId, userId, model },
     {
       // 收到消息的回调
       onMessage: (data) => {
@@ -151,7 +152,7 @@ const handleSend = async () => {
           if (match) {
             const newSessionId = match[1]
             sessionIdReceived = true
-            
+
             // 如果是新会话，更新 sessionId 并添加到会话列表
             if (chatStore.isNewConversation || !chatStore.currentConversationId) {
               chatStore.setCurrentSessionId(newSessionId)
@@ -197,7 +198,7 @@ const handleStop = async () => {
   if (chatStore.isStreaming) {
     chatStore.isStreaming = false
     chatStore.isLoading = false
-    
+
     // 刷新会话列表，获取数据库最新的 updatedAt 时间
     await chatStore.loadConversationsFromDB()
   }
@@ -249,10 +250,10 @@ onUnmounted(() => {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
-  
+
   @media (max-width: 768px) {
     padding: 0 16px 0 16px;
-    
+
     .input-wrapper {
       gap: 8px;
       padding: 8px 8px 8px 12px;
@@ -290,7 +291,7 @@ onUnmounted(() => {
     color: var(--text-secondary);
     opacity: 0.6;
   }
-  
+
   @media (max-width: 768px) {
     font-size: 15px;
   }
@@ -307,7 +308,7 @@ onUnmounted(() => {
   &::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
-    
+
     &:hover {
       background: rgba(0, 0, 0, 0.3);
     }
@@ -318,7 +319,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  
+
   .action-button {
     display: flex;
     align-items: center;
@@ -334,7 +335,7 @@ onUnmounted(() => {
 
     &.send-button {
       background-color: #19c37d; // ChatGPT 绿色
-      
+
       &:hover:not(:disabled) {
         background-color: #1a7f64;
       }

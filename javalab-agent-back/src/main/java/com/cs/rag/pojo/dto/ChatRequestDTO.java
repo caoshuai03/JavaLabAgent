@@ -35,4 +35,11 @@ public class ChatRequestDTO {
      */
     @Schema(description = "用户ID", example = "1", defaultValue = "1")
     private Long userId;
+
+    /**
+     * 选择的大模型名称
+     * 例如：qwen3:8b, qwen-plus 等
+     */
+    @Schema(description = "大模型名称", example = "qwen3:8b")
+    private String model;
 }

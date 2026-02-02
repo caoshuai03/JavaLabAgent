@@ -2,6 +2,10 @@ server:
   port: 8989                    # 应用服务端口
 
 spring:
+  # 允许 Bean 定义覆盖
+  main:
+    allow-bean-definition-overriding: true
+
   # 文件上传配置
   servlet:
     multipart:
@@ -12,6 +16,16 @@ spring:
     active: dev
 
   ai:
+      # 百度千帆大模型
+    openai:
+      embedding:
+        enabled: false
+      base-url: https://aistudio.baidu.com/llm/lmapi
+      api-key: 28f3df7b28a7d9338e1fdbeba4e4a30babd6df52
+      chat:
+        completions-path: /v3/chat/completions
+
+
     # 使用 Ollama 本地模型
     ollama:
       base-url: ${OLlama_BASE_URL}  # Ollama 服务地址

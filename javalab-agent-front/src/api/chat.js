@@ -47,6 +47,7 @@ export const deleteSession = (sessionId, userId = 1) => {
  * @param {string} params.message - 用户消息
  * @param {string} [params.sessionId] - 会话ID，新会话时为空
  * @param {number} [params.userId=1] - 用户ID
+ * @param {string} [params.model] - 大模型名称
  * @param {Object} callbacks - 回调函数集合
  * @param {Function} callbacks.onMessage - 收到消息时的回调 (data: string) => void
  * @param {Function} callbacks.onError - 发生错误时的回调 (error: Error) => void
@@ -54,7 +55,7 @@ export const deleteSession = (sessionId, userId = 1) => {
  * @returns {AbortController} 用于取消请求的控制器
  */
 export const sendChatMessage = (params, callbacks) => {
-  const { message, sessionId = '', userId = 1 } = params
+  const { message, sessionId = '', userId = 1, model } = params
   const { onMessage, onError, onComplete } = callbacks
 
   // 创建 AbortController 用于取消请求
@@ -79,7 +80,7 @@ export const sendChatMessage = (params, callbacks) => {
   fetch('/api/v1/ai/rag', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ message, sessionId, userId }),
+    body: JSON.stringify({ message, sessionId, userId, model }),
     signal: controller.signal,
   })
     .then(async (response) => {

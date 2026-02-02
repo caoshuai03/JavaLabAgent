@@ -67,12 +67,13 @@ public class AiRagController {
         String message = (request.getMessage() != null) ? request.getMessage() : "你好";
         String sessionId = request.getSessionId();
         Long userId = (request.getUserId() != null) ? request.getUserId() : 1L;
+        String model = request.getModel();
         
-        log.info("持久化RAG对话请求: message={}, sessionId={}, userId={}", 
-                 message, sessionId, userId);
+        log.info("持久化RAG对话请求: message={}, sessionId={}, userId={}, model={}", 
+                 message, sessionId, userId, model);
         
         // 委托给Service层处理业务逻辑
-        return ragService.chat(message, sessionId, userId);
+        return ragService.chat(message, sessionId, userId, model);
     }
     
     // ==================== 会话管理接口 ====================

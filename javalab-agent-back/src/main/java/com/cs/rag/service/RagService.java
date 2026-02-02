@@ -43,9 +43,10 @@ public interface RagService {
      * @param message 用户消息
      * @param sessionId 会话ID，为空时创建新会话
      * @param userId 用户ID
+     * @param model 大模型名称，为空时使用默认模型
      * @return 流式响应，第一条消息包含sessionId
      */
-    Flux<String> chat(String message, String sessionId, Long userId);
+    Flux<String> chat(String message, String sessionId, Long userId, String model);
     
     /**
      * 获取会话的历史消息列表

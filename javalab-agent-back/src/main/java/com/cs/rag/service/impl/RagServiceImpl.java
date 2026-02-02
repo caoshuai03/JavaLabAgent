@@ -4,15 +4,18 @@ import com.cs.rag.constant.RagConstant;
 import com.cs.rag.entity.ChatMessage;
 import com.cs.rag.entity.ChatSession;
 import com.cs.rag.service.*;
+import com.cs.rag.llm.LLMProviderRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -46,9 +49,9 @@ public class RagServiceImpl implements RagService {
     private final VectorStore vectorStore;
 
     /**
-     * 聊天模型
+     * LLM Provider Registry
      */
-    private final ChatModel chatModel;
+    private final LLMProviderRegistry llmProviderRegistry;
 
     /**
      * 提示词服务
@@ -71,12 +74,13 @@ public class RagServiceImpl implements RagService {
     /**
      * 构造函数注入核心依赖
      *
-     * @param vectorStore 向量存储
-     * @param chatModel   聊天模型
+     * @param vectorStore         向量存储
+     * @param llmProviderRegistry LLM Provider Registry
      */
-    public RagServiceImpl(VectorStore vectorStore, ChatModel chatModel) {
+    public RagServiceImpl(VectorStore vectorStore,
+                          LLMProviderRegistry llmProviderRegistry) {
         this.vectorStore = vectorStore;
-        this.chatModel = chatModel;
+        this.llmProviderRegistry = llmProviderRegistry;
     }
 
     // ==================== 核心业务方法 ====================
@@ -86,14 +90,12 @@ public class RagServiceImpl implements RagService {
      * 将会话和消息存储到数据库，支持跨请求的上下文管理
      */
     @Override
-    public Flux<String> chat(String message, String sessionId, Long userId) {
+    public Flux<String> chat(String message, String sessionId, Long userId, String model) {
         // ===== Step 1: 创建/获取会话 =====
         String title = message.length() > 20 ? message.substring(0, 20) + "..." : message;
         ChatSession session = chatSessionService.getOrCreateSession(sessionId, userId, title);
         String finalSessionId = session.getId();
         boolean isNewSession = (sessionId == null || sessionId.trim().isEmpty());
-
-        log.info("会话信息: sessionId={}, isNew={}, userId={}", finalSessionId, isNewSession, userId);
 
         // ===== Step 2: 保存用户消息 =====
         chatMessageService.saveUserMessage(finalSessionId, userId, message);
@@ -112,10 +114,11 @@ public class RagServiceImpl implements RagService {
 
         // ===== Step 5: 构建消息列表并调用LLM =====
         long llmStartTime = System.currentTimeMillis();
-        log.info("LLM调用开始: sessionId={}", finalSessionId);
-        
-				// 构建大模型客户端
-        ChatClient chatClient = ChatClient.builder(chatModel).build();
+
+        // 根据模型名称选择对应的 ChatModel
+        ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
+        // 构建大模型客户端
+        ChatClient chatClient = ChatClient.builder(targetChatModel).build();
 
         StringBuilder fullResponse = new StringBuilder();
         final String currentSessionId = finalSessionId;
@@ -123,7 +126,6 @@ public class RagServiceImpl implements RagService {
         // 合并历史上下文和当前消息
         List<Message> allMessages = new ArrayList<>(contextMessages);
         allMessages.add(new UserMessage(enhancedMessage));
-
 
         StringBuilder messagesLog = new StringBuilder();
 
@@ -143,16 +145,27 @@ public class RagServiceImpl implements RagService {
         }
         log.info("历史会话：\n{}", messagesLog.toString());
 
+        // 构建 ChatClient.PromptSpec，如果指定了模型则设置运行时选项
+        ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
+                .system(promptService.getChatDefaultPrompt())
+                .messages(allMessages);
+
+        // 如果指定了模型，则通过 options 设置模型名称（运行时覆盖）
+        if (model != null && !model.trim().isEmpty()) {
+            log.info("正在设置请求模型参数: {}", model);
+            log.info("LLM调用开始: sessionId={}, model={}", finalSessionId, model);
+            promptSpec.options(ChatOptions.builder()
+                    .model(model)
+                    .build());
+        }
+
         // 流式返回：先返回sessionId，再返回LLM响应
         return Flux.concat(
                 // 首条消息返回sessionId供前端使用
                 Flux.just(RagConstant.SESSION_ID_PREFIX + finalSessionId + RagConstant.SESSION_ID_SUFFIX),
 
                 // LLM流式响应
-                chatClient.prompt()
-                        .system(promptService.getChatDefaultPrompt())
-                        .messages(allMessages)
-                        .stream()
+                promptSpec.stream()
                         .content()
                         .doOnNext(chunk -> {
                             // 收集响应片段
@@ -169,8 +182,8 @@ public class RagServiceImpl implements RagService {
                             }
                         })
                         .doOnError(error -> {
-                            log.error("LLM调用失败: sessionId={}, error={}",
-                                    currentSessionId, error.getMessage());
+                            log.error("LLM调用失败: sessionId={}, error={}, model={}",
+                                    currentSessionId, error.getMessage(), model);
                         })
         );
     }
@@ -192,7 +205,7 @@ public class RagServiceImpl implements RagService {
      * 增加用户ID校验，确保用户只能删除自己的会话
      *
      * @param sessionId 会话ID
-     * @param userId 用户ID
+     * @param userId    用户ID
      * @return 是否删除成功
      */
     @Override
@@ -212,7 +225,7 @@ public class RagServiceImpl implements RagService {
     @Override
     public String enhance(String message) {
         long startTime = System.currentTimeMillis();
-        
+
         // 构建检索请求
         SearchRequest ragSearchRequest = SearchRequest.builder()
                 .query(message)
@@ -224,10 +237,10 @@ public class RagServiceImpl implements RagService {
 
         // 执行向量检索
         List<Document> ragDocuments = vectorStore.similaritySearch(ragSearchRequest);
-        
+
         long endTime = System.currentTimeMillis();
-        log.info("RAG检索完成: 命中{}条文档, 耗时{}ms", 
-                ragDocuments != null ? ragDocuments.size() : 0, 
+        log.info("RAG检索完成: 命中{}条文档, 耗时{}ms",
+                ragDocuments != null ? ragDocuments.size() : 0,
                 endTime - startTime);
 
         // 记录检索到的文档信息

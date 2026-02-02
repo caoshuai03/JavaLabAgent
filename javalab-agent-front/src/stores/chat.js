@@ -28,6 +28,9 @@ export const useChatStore = defineStore('chat', () => {
   // 是否是新对话（尚未发送消息）
   const isNewConversation = ref(false)
 
+  // 当前选中的大模型
+  const selectedModel = ref('qwen3:8b')
+
   const currentConversation = computed(() => {
     return conversations.value.find(conv => conv.id === currentConversationId.value)
   })
@@ -309,6 +312,7 @@ export const useChatStore = defineStore('chat', () => {
     sidebarCollapsed,
     shouldFocusInput,
     isNewConversation,
+    selectedModel,
     currentConversation,
     createConversation,
     setCurrentSessionId,

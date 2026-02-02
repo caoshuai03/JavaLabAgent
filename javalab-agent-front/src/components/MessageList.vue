@@ -174,7 +174,7 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 32px 0;
+  padding: 60px 0 32px 0;
   
   &::-webkit-scrollbar {
     width: 8px;

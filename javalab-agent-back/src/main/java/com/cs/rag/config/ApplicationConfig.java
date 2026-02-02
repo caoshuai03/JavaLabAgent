@@ -3,9 +3,13 @@ package com.cs.rag.config;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.util.List;
 
@@ -16,6 +20,27 @@ import java.util.List;
 
 @Configuration
 public class ApplicationConfig {
+
+    /**
+     * 解决 Spring AI 自动配置中多个 ChatModel (OpenAI, Ollama) 导致的冲突问题。
+     * 手动提供 ChatClient.Builder Bean，指定默认使用 OpenAI 模型。
+     * 使用 @Primary 标注为主 Bean，覆盖自动配置的同名 Bean
+     */
+    @Bean
+    @Primary
+    public ChatClient.Builder customChatClientBuilder(@Qualifier("ollamaChatModel") ChatModel chatModel) {
+        return ChatClient.builder(chatModel);
+    }
+
+    /**
+     * 解决 Spring AI 自动配置中多个 EmbeddingModel (OpenAI, Ollama) 导致的冲突问题。
+     * 指定默认使用 Ollama Embedding 模型。
+     */
+    @Bean
+    @Primary
+    public EmbeddingModel primaryEmbeddingModel(@Qualifier("ollamaEmbeddingModel") EmbeddingModel embeddingModel) {
+        return embeddingModel;
+    }
 
     /**
      * ETL中的DocumentTransformer的实现，将文本数据源转换为多个分割段落
