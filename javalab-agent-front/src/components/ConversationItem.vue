@@ -5,12 +5,20 @@
     @mouseenter="showActions = true"
     @mouseleave="showActions = false"
   >
+    <!-- 批量选择复选框 -->
+    <div v-if="isSelectionMode" class="checkbox-wrapper" @click.stop="handleToggleSelect">
+      <input 
+        type="checkbox" 
+        :checked="isSelected" 
+        class="custom-checkbox"
+      />
+    </div>
+
     <div class="content" @dblclick="handleDoubleClick">
       <div class="title">{{ conversation.title }}</div>
-      <div class="time">{{ formatTime(conversation.updatedAt) }}</div>
     </div>
     
-    <div v-if="showActions" class="actions" @click.stop>
+    <div v-if="showActions && !isSelectionMode" class="actions" @click.stop>
       <button 
         @click="handleDelete" 
         class="action-button delete"
@@ -21,7 +29,7 @@
     </div>
     
     <input
-      v-if="isEditing"
+      v-if="isRenaming"
       v-model="editTitle"
       @blur="handleSave"
       @keyup.enter="handleSave"
@@ -46,25 +54,40 @@ const props = defineProps({
   isActive: {
     type: Boolean,
     default: false
+  },
+  isSelectionMode: {
+    type: Boolean,
+    default: false
+  },
+  isSelected: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['select', 'delete', 'rename'])
+const emit = defineEmits(['select', 'delete', 'rename', 'toggleSelect'])
 
 const chatStore = useChatStore()
 const showActions = ref(false)
-const isEditing = ref(false)
+const isRenaming = ref(false)
 const editTitle = ref('')
 const editInputRef = ref(null)
 
 const handleClick = () => {
-  if (!isEditing.value) {
+  if (props.isSelectionMode) {
+    emit('toggleSelect', props.conversation.id)
+  } else if (!isRenaming.value) {
     emit('select', props.conversation.id)
   }
 }
 
+const handleToggleSelect = () => {
+  emit('toggleSelect', props.conversation.id)
+}
+
 const handleDoubleClick = () => {
-  isEditing.value = true
+  if (props.isSelectionMode) return
+  isRenaming.value = true
   editTitle.value = props.conversation.title
   nextTick(() => {
     editInputRef.value?.focus()
@@ -73,7 +96,7 @@ const handleDoubleClick = () => {
 }
 
 const handleRename = () => {
-  isEditing.value = true
+  isRenaming.value = true
   editTitle.value = props.conversation.title
   nextTick(() => {
     editInputRef.value?.focus()
@@ -85,172 +108,115 @@ const handleSave = () => {
   if (editTitle.value.trim()) {
     emit('rename', props.conversation.id, editTitle.value.trim())
   }
-  isEditing.value = false
+  isRenaming.value = false
 }
 
 const handleCancel = () => {
-  isEditing.value = false
+  isRenaming.value = false
   editTitle.value = ''
 }
 
 const handleDelete = () => {
   emit('delete', props.conversation.id)
 }
-
-const formatTime = (timestamp) => {
-  if (!timestamp) return ''
-  
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diff = now - date
-  
-  // 小于1小时
-  if (diff < 3600000) {
-    const minutes = Math.floor(diff / 60000)
-    return minutes < 1 ? '刚刚' : `${minutes}分钟前`
-  }
-  
-  // 今天
-  if (date.toDateString() === now.toDateString()) {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-  
-  // 昨天
-  const yesterday = new Date(now)
-  yesterday.setDate(yesterday.getDate() - 1)
-  if (date.toDateString() === yesterday.toDateString()) {
-    return '昨天'
-  }
-  
-  // 一周内
-  if (diff < 604800000) {
-    const days = Math.floor(diff / 86400000)
-    return `${days}天前`
-  }
-  
-  // 更早
-  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-}
 </script>
 
 <style lang="scss" scoped>
 .conversation-item {
-  position: relative;
-  padding: 12px;
-  margin-bottom: 4px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-bottom: 2px;
+  position: relative;
+  transition: background-color 0.2s;
+  height: 44px;
   
   &:hover {
     background-color: var(--bg-hover);
+    
+    .actions {
+      opacity: 1;
+    }
   }
   
   &.active {
     background-color: var(--bg-active);
     
-    .content {
-      .title {
-        color: var(--text-primary);
-        font-weight: 500;
-      }
-      
-      .time {
-        color: var(--text-secondary);
-        opacity: 0.9;
-      }
+    .title {
+      font-weight: 500;
+    }
+  }
+
+  .checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
+    
+    .custom-checkbox {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
     }
   }
   
   .content {
     flex: 1;
     min-width: 0;
+    margin-right: 24px; // 为操作按钮留出空间
     
     .title {
-      color: var(--text-primary);
       font-size: 14px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-bottom: 4px;
-      transition: color 0.2s ease, font-weight 0.2s ease;
-    }
-    
-    .time {
-      color: var(--text-secondary);
-      font-size: 12px;
-      transition: color 0.2s ease, opacity 0.2s ease;
+      color: var(--text-primary);
     }
   }
   
   .actions {
+    position: absolute;
+    right: 8px;
     display: flex;
-    gap: 8px;
-    opacity: 0.6;
-    transition: all 0.2s;
-    
-    .conversation-item:hover & {
-      opacity: 1;
-    }
+    align-items: center;
+    opacity: 0; // 默认隐藏，hover时显示
+    transition: opacity 0.2s;
+    background: linear-gradient(to right, transparent, var(--bg-hover) 20%);
+    padding-left: 10px;
     
     .action-button {
-      padding: 6px;
-      min-width: 28px;
-      min-height: 28px;
-      background: transparent;
+      background: none;
       border: none;
-      color: var(--text-secondary);
       cursor: pointer;
+      color: var(--text-secondary);
+      padding: 4px;
       border-radius: 4px;
-      transition: all 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
       
-      svg {
-        width: 16px;
-        height: 16px;
-      }
-      
       &:hover {
-        background-color: var(--border-color-hover);
-        color: var(--text-primary);
-        transform: scale(1.05);
-      }
-      
-      &.delete {
-        color: #dc3545;
-        opacity: 0.8;
-        
-        &:hover {
-          background-color: #dc3545;
-          color: white;
-          opacity: 1;
-        }
+        background-color: rgba(0, 0, 0, 0.05);
+        color: var(--danger-color);
       }
     }
   }
   
   .edit-input {
     position: absolute;
-    left: 12px;
-    right: 12px;
-    top: 12px;
-    bottom: 12px;
-    background-color: var(--bg-hover);
-    border: 1px solid var(--border-color-hover);
+    left: 4px;
+    right: 4px;
+    top: 4px;
+    bottom: 4px;
+    padding: 0 8px;
+    border: 1px solid var(--primary-color);
     border-radius: 4px;
-    color: var(--text-primary);
-    font-size: 14px;
-    padding: 8px;
     outline: none;
-    
-    &:focus {
-      border-color: #10a37f; // 保持品牌色不变
-    }
+    font-size: 14px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    z-index: 2;
   }
 }
 </style>

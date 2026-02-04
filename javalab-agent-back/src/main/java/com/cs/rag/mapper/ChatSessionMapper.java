@@ -56,4 +56,14 @@ public interface ChatSessionMapper extends BaseMapper<ChatSession> {
      */
     int logicalDeleteWithUser(@Param("sessionId") String sessionId, 
                                @Param("userId") Long userId);
+
+    /**
+     * 批量逻辑删除会话（带用户归属校验）
+     *
+     * @param sessionIds 会话ID列表
+     * @param userId 用户ID
+     * @return 影响的行数
+     */
+    int logicalDeleteSessionsWithUser(@Param("sessionIds") List<String> sessionIds,
+                                      @Param("userId") Long userId);
 }

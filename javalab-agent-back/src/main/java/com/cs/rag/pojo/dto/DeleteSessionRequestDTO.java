@@ -20,6 +20,12 @@ public class DeleteSessionRequestDTO {
     private String sessionId;
     
     /**
+     * 批量删除的会话ID列表
+     */
+    @Schema(description = "批量删除的会话ID列表", example = "[\"abc123\", \"def456\"]")
+    private java.util.List<String> sessionIds;
+    
+    /**
      * 用户ID（用于权限校验）
      */
     @Schema(description = "用户ID", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)

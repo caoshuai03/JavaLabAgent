@@ -79,4 +79,13 @@ public interface RagService {
      * @return 是否删除成功
      */
     boolean delete(String sessionId, Long userId);
+    
+    /**
+     * 批量删除会话（逻辑删除）
+     * 
+     * @param sessionIds 会话ID列表
+     * @param userId 用户ID
+     * @return 是否删除成功
+     */
+    boolean deleteBatch(List<String> sessionIds, Long userId);
 }

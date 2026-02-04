@@ -6,9 +6,12 @@
         :key="conversation.id"
         :conversation="conversation"
         :is-active="conversation.id === chatStore.currentConversationId"
+        :is-selection-mode="isSelectionMode"
+        :is-selected="selectedIds.includes(conversation.id)"
         @select="handleSelect"
         @delete="handleDelete"
         @rename="handleRename"
+        @toggleSelect="handleToggleSelect"
       />
     </div>
   </div>
@@ -18,6 +21,19 @@
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import ConversationItem from './ConversationItem.vue'
+
+const props = defineProps({
+  isSelectionMode: {
+    type: Boolean,
+    default: false
+  },
+  selectedIds: {
+    type: Array,
+    default: () => []
+  }
+})
+
+const emit = defineEmits(['update:selectedIds'])
 
 const router = useRouter()
 const route = useRoute()
@@ -39,6 +55,17 @@ const handleDelete = (conversationId) => {
 
 const handleRename = (conversationId, newTitle) => {
   chatStore.renameConversation(conversationId, newTitle)
+}
+
+const handleToggleSelect = (conversationId) => {
+  const newSelectedIds = [...props.selectedIds]
+  const index = newSelectedIds.indexOf(conversationId)
+  if (index === -1) {
+    newSelectedIds.push(conversationId)
+  } else {
+    newSelectedIds.splice(index, 1)
+  }
+  emit('update:selectedIds', newSelectedIds)
 }
 </script>
 

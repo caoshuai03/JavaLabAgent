@@ -241,7 +241,21 @@ public class RagServiceImpl implements RagService {
      */
     @Override
     public boolean delete(String sessionId, Long userId) {
+        log.info("执行会话逻辑删除: sessionId={}, userId={}", sessionId, userId);
         return chatSessionService.deleteSession(sessionId, userId);
+    }
+
+    /**
+     * 批量删除会话（逻辑删除）
+     * 
+     * @param sessionIds 会话ID列表
+     * @param userId 用户ID
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean deleteBatch(List<String> sessionIds, Long userId) {
+        log.info("执行会话批量逻辑删除: sessionIds={}, userId={}", sessionIds, userId);
+        return chatSessionService.deleteSessions(sessionIds, userId);
     }
 
     // ==================== 辅助方法 ====================

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getUserSessions, getSessionHistory, deleteSession } from '../api/chat'
+import { getUserSessions, getSessionHistory, deleteSession, deleteSessions } from '../api/chat'
 import { useUserStore } from './user'
 
 export const useChatStore = defineStore('chat', () => {
@@ -133,6 +133,49 @@ export const useChatStore = defineStore('chat', () => {
       }
     } catch (error) {
       console.error('删除会话失败:', error)
+      return false
+    }
+  }
+
+  /**
+   * 批量删除对话
+   * @param {Array<string>} conversationIds - 会话ID列表
+   * @returns {Promise<boolean>} 删除是否成功
+   */
+  const deleteConversations = async (conversationIds) => {
+    try {
+      if (!conversationIds || conversationIds.length === 0) return false
+      
+      const userStore = useUserStore()
+      const userId = userStore.userInfo?.id || 1
+      
+      // 调用后端API批量删除会话
+      const response = await deleteSessions(conversationIds, userId)
+      
+      // 删除成功后更新本地状态
+      if (response.data === true) {
+        // 过滤掉已删除的会话
+        conversations.value = conversations.value.filter(conv => !conversationIds.includes(conv.id))
+        
+        // 如果当前会话被删除了，切换到其他会话
+        if (conversationIds.includes(currentConversationId.value)) {
+          if (conversations.value.length > 0) {
+            await switchConversation(conversations.value[0].id)
+          } else {
+            currentConversationId.value = null
+            messages.value = []
+            isNewConversation.value = true
+          }
+        }
+        
+        console.log('批量删除会话成功:', conversationIds)
+        return true
+      } else {
+        console.error('批量删除会话失败: 后端返回false')
+        return false
+      }
+    } catch (error) {
+      console.error('批量删除会话失败:', error)
       return false
     }
   }
@@ -319,6 +362,7 @@ export const useChatStore = defineStore('chat', () => {
     addNewConversationToList,
     switchConversation,
     deleteConversation,
+    deleteConversations,
     renameConversation,
     updateConversationTitle,
     addMessage,

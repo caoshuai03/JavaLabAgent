@@ -104,4 +104,17 @@
           AND user_id = #{userId}
     </update>
 
+    <!-- 
+        批量逻辑删除会话（带用户归属校验）
+    -->
+    <update id="logicalDeleteSessionsWithUser">
+        UPDATE chat_session 
+        SET deleted = 1, updated_at = CURRENT_TIMESTAMP 
+        WHERE user_id = #{userId}
+          AND id IN 
+          <foreach collection="sessionIds" item="sessionId" open="(" separator="," close=")">
+              #{sessionId}::uuid
+          </foreach>
+    </update>
+
 </mapper>

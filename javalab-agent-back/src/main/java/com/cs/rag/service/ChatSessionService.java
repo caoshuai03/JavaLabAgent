@@ -57,4 +57,13 @@ public interface ChatSessionService extends IService<ChatSession> {
      * @return 是否删除成功
      */
     boolean deleteSession(String sessionId, Long userId);
+    
+    /**
+     * 批量逻辑删除会话（带用户归属校验）
+     * 
+     * @param sessionIds 会话ID列表
+     * @param userId 用户ID
+     * @return 是否删除成功
+     */
+    boolean deleteSessions(List<String> sessionIds, Long userId);
 }

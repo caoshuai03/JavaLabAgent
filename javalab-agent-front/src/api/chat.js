@@ -38,6 +38,16 @@ export const deleteSession = (sessionId, userId = 1) => {
 }
 
 /**
+ * 批量删除会话（逻辑删除）
+ * @param {Array<string>} sessionIds - 会话ID列表
+ * @param {number} userId - 用户ID（用于权限校验）
+ * @returns {Promise} 删除结果，true表示成功
+ */
+export const deleteSessions = (sessionIds, userId = 1) => {
+  return apiClient.post('/v1/ai/rag/sessions/delete', { sessionIds, userId })
+}
+
+/**
  * 发送RAG对话消息（POST方式，支持SSE流式响应）
  *
  * 使用 fetch + ReadableStream 处理 SSE 流式响应，

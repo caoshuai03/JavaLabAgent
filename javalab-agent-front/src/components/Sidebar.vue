@@ -35,21 +35,53 @@
       </div>
     </div>
 
-    <ConversationList v-if="!chatStore.sidebarCollapsed" />
+    <div class="list-header" v-if="!chatStore.sidebarCollapsed">
+      <span class="title">历史记录</span>
+      <button class="edit-btn" @click="toggleSelectionMode" :title="isSelectionMode ? '完成' : '批量管理'">
+        <span v-if="isSelectionMode" class="text-btn">完成</span>
+        <EditIcon v-else :size="14" />
+      </button>
+    </div>
 
-    <div class="sidebar-bottom">
+    <ConversationList 
+      v-if="!chatStore.sidebarCollapsed" 
+      :is-selection-mode="isSelectionMode"
+      v-model:selected-ids="selectedIds"
+    />
+
+    <div class="sidebar-bottom" v-if="isSelectionMode && !chatStore.sidebarCollapsed">
+      <div class="batch-actions">
+        <button 
+          class="batch-btn cancel" 
+          @click="cancelSelectionMode"
+        >
+          取消
+        </button>
+        <button 
+          class="batch-btn delete" 
+          @click="handleBatchDelete"
+          :disabled="selectedIds.length === 0"
+        >
+          删除 ({{ selectedIds.length }})
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-bottom" v-else>
       <UserProfile />
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import ConversationList from './ConversationList.vue'
 import UserProfile from './UserProfile.vue'
 import PlusIcon from './icons/PlusIcon.vue'
 import FolderIcon from './icons/FolderIcon.vue'
+import EditIcon from './icons/EditIcon.vue'
 
 import ChevronLeftIcon from './icons/ChevronLeftIcon.vue'
 import ChevronRightIcon from './icons/ChevronRightIcon.vue'
@@ -57,6 +89,33 @@ import ChevronRightIcon from './icons/ChevronRightIcon.vue'
 const router = useRouter()
 const route = useRoute()
 const chatStore = useChatStore()
+
+const isSelectionMode = ref(false)
+const selectedIds = ref([])
+
+const toggleSelectionMode = () => {
+  isSelectionMode.value = !isSelectionMode.value
+  if (!isSelectionMode.value) {
+    selectedIds.value = []
+  }
+}
+
+const cancelSelectionMode = () => {
+  isSelectionMode.value = false
+  selectedIds.value = []
+}
+
+const handleBatchDelete = async () => {
+  if (selectedIds.value.length === 0) return
+  
+  if (confirm(`确定要删除选中的 ${selectedIds.value.length} 个对话吗？`)) {
+    const success = await chatStore.deleteConversations(selectedIds.value)
+    if (success) {
+      isSelectionMode.value = false
+      selectedIds.value = []
+    }
+  }
+}
 
 /**
  * 创建新对话
@@ -268,6 +327,82 @@ const handleKnowledgeManagement = () => {
   .sidebar.collapsed & {
     align-items: center;
     justify-content: center;
+  }
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+  
+  .title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .edit-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    
+    &:hover {
+      background-color: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    
+    .text-btn {
+      color: var(--primary-color);
+      font-weight: 500;
+    }
+  }
+}
+
+.batch-actions {
+  display: flex;
+  padding: 12px;
+  gap: 12px;
+  
+  .batch-btn {
+    flex: 1;
+    padding: 8px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    
+    &.cancel {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      
+      &:hover {
+        background-color: var(--bg-hover);
+      }
+    }
+    
+    &.delete {
+      background-color: rgba(220, 53, 69, 0.1);
+      color: #dc3545;
+      
+      &:hover:not(:disabled) {
+        background-color: rgba(220, 53, 69, 0.2);
+      }
+      
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
   }
 }
 </style>

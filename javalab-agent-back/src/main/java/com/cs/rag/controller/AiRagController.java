@@ -140,18 +140,31 @@ public class AiRagController {
     /**
      * 删除会话（逻辑删除）
      * 增加用户ID校验，确保用户只能删除自己的会话
+     * 支持单个删除和批量删除
      * 
      * @param request 请求参数（JSON请求体）
      * @return 删除结果，true表示成功，false表示失败
      */
-    @Operation(summary = "deleteSession", description = "删除会话（逻辑删除）")
+    @Operation(summary = "deleteSession", description = "删除会话（逻辑删除），支持批量删除")
     @PostMapping(value = "/rag/sessions/delete")
     public boolean delete(@RequestBody DeleteSessionRequestDTO request) {
         
-        String sessionId = request.getSessionId();
         Long userId = request.getUserId();
         
-        log.info("删除会话请求: sessionId={}, userId={}", sessionId, userId);
-        return ragService.delete(sessionId, userId);
+        // 优先处理批量删除
+        if (request.getSessionIds() != null && !request.getSessionIds().isEmpty()) {
+            log.info("批量删除会话请求: sessionIds={}, userId={}", request.getSessionIds(), userId);
+            return ragService.deleteBatch(request.getSessionIds(), userId);
+        }
+        
+        // 处理单个删除
+        String sessionId = request.getSessionId();
+        if (sessionId != null && !sessionId.isEmpty()) {
+            log.info("删除会话请求: sessionId={}, userId={}", sessionId, userId);
+            return ragService.delete(sessionId, userId);
+        }
+        
+        log.warn("删除会话请求参数错误: sessionId和sessionIds均为空");
+        return false;
     }
 }

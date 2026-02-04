@@ -141,4 +141,30 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
             return false;
         }
     }
+    
+    /**
+     * 批量逻辑删除会话（带用户归属校验）
+     * 
+     * @param sessionIds 会话ID列表
+     * @param userId 用户ID
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean deleteSessions(List<String> sessionIds, Long userId) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            log.warn("批量删除会话失败: sessionIds为空");
+            return false;
+        }
+        
+        if (userId == null) {
+            log.warn("批量删除会话失败: userId为空");
+            return false;
+        }
+        
+        log.info("批量逻辑删除会话: sessionIds={}, userId={}", sessionIds, userId);
+        
+        // 使用手写SQL以支持 PostgreSQL UUID 类型转换
+        int rows = chatSessionMapper.logicalDeleteSessionsWithUser(sessionIds, userId);
+        return rows > 0;
+    }
 }
