@@ -22,6 +22,8 @@ import reactor.core.publisher.Flux;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.cs.rag.constant.RagConstant.DEFAULT_EXTERNAL_LLM;
+
 
 /**
  * RAG服务实现类
@@ -110,13 +112,21 @@ public class RagServiceImpl implements RagService {
         log.info("历史会话: 获取最近{}条消息，实际获取{}条", MEMORY_SIZE, contextMessages.size());
 
         // ===== Step 4: RAG消息增强 =====
-        String enhancedMessage = enhance(message);
+        List<Document> ragDocuments = performSearch(message);
+        String enhancedMessage = formatMessageWithDocs(message, ragDocuments);
+
+        // 模型选择策略
+        String effectiveModel = model;
+        if (ragDocuments == null || ragDocuments.isEmpty()) {
+            log.info("未检索到相关文档，强制切换为{}大模型", DEFAULT_EXTERNAL_LLM);
+            effectiveModel = DEFAULT_EXTERNAL_LLM;
+        }
 
         // ===== Step 5: 构建消息列表并调用LLM =====
         long llmStartTime = System.currentTimeMillis();
 
         // 根据模型名称选择对应的 ChatModel
-        ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
+        ChatModel targetChatModel = llmProviderRegistry.getChatModel(effectiveModel);
         // 构建大模型客户端
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
 
@@ -129,6 +139,7 @@ public class RagServiceImpl implements RagService {
 
         StringBuilder messagesLog = new StringBuilder();
 
+        // 记录日志
         for (int i = 0; i < allMessages.size(); i++) {
             Message msg = allMessages.get(i);
             String content = msg.getContent();
@@ -150,15 +161,16 @@ public class RagServiceImpl implements RagService {
                 .system(promptService.getChatDefaultPrompt())
                 .messages(allMessages);
 
-        // 如果指定了模型，则通过 options 设置模型名称（运行时覆盖）
-        if (model != null && !model.trim().isEmpty()) {
-            log.info("正在设置请求模型参数: {}", model);
-            log.info("LLM调用开始: sessionId={}, model={}", finalSessionId, model);
+        // 如果指定了模型，则通过 options 设置模型名称
+        if (effectiveModel != null && !effectiveModel.trim().isEmpty()) {
+            log.info("正在设置请求模型参数: {}", effectiveModel);
+            log.info("LLM调用开始: sessionId={}, model={}", finalSessionId, effectiveModel);
             promptSpec.options(ChatOptions.builder()
-                    .model(model)
+                    .model(effectiveModel)
                     .build());
         }
 
+        final String finalModel = effectiveModel;
         // 流式返回：先返回sessionId，再返回LLM响应
         return Flux.concat(
                 // 首条消息返回sessionId供前端使用
@@ -183,7 +195,7 @@ public class RagServiceImpl implements RagService {
                         })
                         .doOnError(error -> {
                             log.error("LLM调用失败: sessionId={}, error={}, model={}",
-                                    currentSessionId, error.getMessage(), model);
+                                    currentSessionId, error.getMessage(), finalModel);
                         })
         );
     }
@@ -224,6 +236,14 @@ public class RagServiceImpl implements RagService {
      */
     @Override
     public String enhance(String message) {
+        List<Document> ragDocuments = performSearch(message);
+        return formatMessageWithDocs(message, ragDocuments);
+    }
+
+    /**
+     * 执行检索
+     */
+    private List<Document> performSearch(String message) {
         long startTime = System.currentTimeMillis();
 
         // 构建检索请求
@@ -242,7 +262,13 @@ public class RagServiceImpl implements RagService {
         log.info("RAG检索完成: 命中{}条文档, 耗时{}ms",
                 ragDocuments != null ? ragDocuments.size() : 0,
                 endTime - startTime);
+        return ragDocuments;
+    }
 
+    /**
+     * 格式化消息
+     */
+    private String formatMessageWithDocs(String message, List<Document> ragDocuments) {
         // 记录检索到的文档信息
         if (ragDocuments != null && !ragDocuments.isEmpty()) {
             for (int i = 0; i < ragDocuments.size(); i++) {

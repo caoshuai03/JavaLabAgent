@@ -18,6 +18,9 @@ public class RagConstant {
     
     /** 对话上下文滑动窗口大小 */
     public static final int MEMORY_SIZE = 10;
+
+    /** 默认外部大模型 */
+    public static final String DEFAULT_EXTERNAL_LLM = "ernie-4.5-turbo-128k-preview";
     
     // ==================== 格式常量 ====================
     
@@ -28,5 +31,6 @@ public class RagConstant {
     
     /** 无知识库命中时的提示标签 */
     public static final String NO_KNOWLEDGE_FOUND_LABEL = "\n\n[系统提示: 知识库中未检索到相关内容，请基于通用知识回答]\n";
+
 
 }
