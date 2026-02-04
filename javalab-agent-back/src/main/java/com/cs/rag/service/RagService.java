@@ -23,11 +23,7 @@ import java.util.List;
  */
 public interface RagService {
     
-    // 常量定义已移至 RagConstant 类
-    double SIMILARITY_THRESHOLD = RagConstant.SIMILARITY_THRESHOLD;
-    int TOP_K = RagConstant.TOP_K;
-    int MEMORY_SIZE = RagConstant.MEMORY_SIZE;
-    
+
     /**
      * 持久化RAG对话接口
      * 
