@@ -8,6 +8,7 @@ import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;
 import com.cs.rag.service.PromptService;
 import com.cs.rag.service.RagService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
@@ -22,7 +23,9 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.cs.rag.constant.RagConstant.*;
 
@@ -74,6 +77,9 @@ public class RagServiceImpl implements RagService {
      */
     @Autowired
     private ChatMessageService chatMessageService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     /**
      * 构造函数注入核心依赖
@@ -175,15 +181,26 @@ public class RagServiceImpl implements RagService {
         final String finalModel = effectiveModel;
         // 流式返回：先返回sessionId，再返回LLM响应
         return Flux.concat(
-                // 首条消息返回sessionId供前端使用
-                Flux.just(RagConstant.SESSION_ID_PREFIX + finalSessionId + RagConstant.SESSION_ID_SUFFIX),
+                // 首条消息返回sessionId供前端使用 (JSON格式)
+                Flux.just("{\"sessionId\":\"" + finalSessionId + "\"}"),
 
                 // LLM流式响应
                 promptSpec.stream()
                         .content()
                         .doOnNext(chunk -> {
-                            // 收集响应片段
+                            // 收集原始响应片段
                             fullResponse.append(chunk);
+                        })
+                        .map(chunk -> {
+                            try {
+                                // 封装为JSON格式，确保特殊字符和换行符正确传输
+                                Map<String, String> data = new HashMap<>();
+                                data.put("content", chunk);
+                                return objectMapper.writeValueAsString(data);
+                            } catch (Exception e) {
+                                log.error("JSON序列化失败", e);
+                                return "{\"content\":\"\"}";
+                            }
                         })
                         .doOnComplete(() -> {
                             // 流结束后保存AI回复

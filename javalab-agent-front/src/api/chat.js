@@ -169,12 +169,25 @@ function processLine(line, eventBuffer, onMessage) {
     // 去除 "data:" 前缀
     let data = cleanLine.slice(5)
 
-    // 如果 data 为空字符串，说明是换行符
-    if (data.length === 0) {
-      data = '\n'
+    try {
+      // 尝试解析 JSON 格式数据（新版后端协议）
+      const parsed = JSON.parse(data)
+      
+      if (parsed.sessionId) {
+        // 转换 SessionID 为前端约定的格式
+        eventBuffer.push(`[SESSION_ID:${parsed.sessionId}]`)
+      } else if (parsed.content !== undefined) {
+        // 提取内容
+        eventBuffer.push(parsed.content)
+      }
+    } catch (e) {
+      // 解析失败，回退到旧的纯文本处理逻辑
+      // 如果 data 为空字符串，说明是换行符
+      if (data.length === 0) {
+        data = '\n'
+      }
+      // 收集数据
+      eventBuffer.push(data)
     }
-
-    // 收集数据
-    eventBuffer.push(data)
   }
 }
