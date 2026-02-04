@@ -57,11 +57,11 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
                 return true;
             } catch (Exception ex) {
                 //4、不通过，响应401状态码
-                response.setStatus(ErrorCode.NO_AUTH_ERROR.getCode());
+                response.setStatus(401);
                 return false;
             }
         }else {
-            response.setStatus(ErrorCode.NO_AUTH_ERROR.getCode());
+            response.setStatus(401);
             return false;
         }
     }

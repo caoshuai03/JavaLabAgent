@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+import static com.cs.rag.constant.RagConstant.OPENAI_LLM;
+
 @Component
 public class OpenAiLLMProvider implements LLMProvider {
 
@@ -18,10 +20,9 @@ public class OpenAiLLMProvider implements LLMProvider {
 
     @Override
     public boolean supports(String model) {
-        List<String> supportedModels = List.of("ernie-4.5-turbo-128k-preview", "deepseek-v3", "deepseek-r1", "qwen3-235b-a22b", "llama-2-70b");
         if (model == null) return false;
         String lowerCase = model.toLowerCase();
-        return supportedModels.contains(lowerCase);
+        return OPENAI_LLM.contains(lowerCase);
     }
 
     @Override

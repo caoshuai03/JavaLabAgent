@@ -119,7 +119,7 @@ public class RagServiceImpl implements RagService {
 
         // 模型选择策略
         String effectiveModel = model;
-        if (ragDocuments == null || ragDocuments.isEmpty()) {
+        if (OLLAMA_LLM.contains(effectiveModel) && (ragDocuments == null || ragDocuments.isEmpty())) {
             log.info("未检索到相关文档，强制切换为{}大模型", DEFAULT_EXTERNAL_LLM);
             effectiveModel = DEFAULT_EXTERNAL_LLM;
         }
