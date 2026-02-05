@@ -15,7 +15,7 @@ public class RagConstant {
     /**
      * RAG相似度阈值
      */
-    public static final double SIMILARITY_THRESHOLD = 0.5;
+    public static final double SIMILARITY_THRESHOLD = 0.7;
 
     /**
      * RAG检索返回的最大文档数量
@@ -38,7 +38,6 @@ public class RagConstant {
     public static final List<String> OLLAMA_LLM = List.of("qwen3:8b");
 
     public static final List<String> OPENAI_LLM = List.of("ernie-4.5-turbo-128k-preview", "deepseek-v3", "deepseek-r1", "qwen3-235b-a22b", "llama-2-70b");
-
 
 
     // ==================== 格式常量 ====================
