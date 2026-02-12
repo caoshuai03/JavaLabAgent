@@ -118,40 +118,32 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
      */
     @Override
     public List<Message> convertToAiMessages(List<ChatMessage> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         List<Message> aiMessages = new ArrayList<>();
-
-        Message aiMessageUser = null;
-        Message aiMessageAssistant = null;
-        for (int i=0; i < messages.size(); i++) {
-
-            // 跳过第一个用户消息
-            ChatMessage msg = messages.get(i);
-            if (i == 0 && ChatMessage.ROLE_USER.equals(msg.getRole())) {
-                continue;
-            }
-
-            
+        for (ChatMessage msg : messages) {
+            Message aiMessage = null;
             // 根据角色类型创建对应的Spring AI Message对象
             switch (msg.getRole()) {
                 case ChatMessage.ROLE_USER:
-                    aiMessageUser = new UserMessage(msg.getContent());
+                    aiMessage = new UserMessage(msg.getContent());
                     break;
                 case ChatMessage.ROLE_ASSISTANT:
-                    aiMessageAssistant = new AssistantMessage(msg.getContent());
+                    aiMessage = new AssistantMessage(msg.getContent());
                     break;
-//                case ChatMessage.ROLE_SYSTEM:
-//                    aiMessage = new SystemMessage(msg.getContent());
-//                    break;
+                case ChatMessage.ROLE_SYSTEM:
+                    // 如果系统中有存储system消息，也应该支持转换
+                    // aiMessage = new SystemMessage(msg.getContent());
+                    break;
                 default:
                     log.warn("未知的消息角色: {}", msg.getRole());
                     continue;
             }
-
-            if (aiMessageUser != null && aiMessageAssistant != null) {
-                aiMessages.add(aiMessageUser);
-                aiMessages.add(aiMessageAssistant);
-                aiMessageUser = null;
-                aiMessageAssistant = null;
+            
+            if (aiMessage != null) {
+                aiMessages.add(aiMessage);
             }
         }
         

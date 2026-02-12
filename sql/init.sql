@@ -107,6 +107,7 @@ CREATE TABLE public.chat_session (
                                      id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
                                      user_id bigint,
                                      title character varying(255),
+                                     summary text,
                                      created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
                                      updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
                                      deleted smallint DEFAULT 0
@@ -115,6 +116,7 @@ COMMENT ON TABLE "public"."chat_session" IS '对话会话表';
 COMMENT ON COLUMN "public"."chat_session"."id" IS '会话ID (UUID)';
 COMMENT ON COLUMN "public"."chat_session"."user_id" IS '用户ID';
 COMMENT ON COLUMN "public"."chat_session"."title" IS '会话标题';
+COMMENT ON COLUMN "public"."chat_session"."summary" IS '会话摘要';
 COMMENT ON COLUMN "public"."chat_session"."created_at" IS '创建时间';
 COMMENT ON COLUMN "public"."chat_session"."updated_at" IS '更新时间';
 COMMENT ON COLUMN "public"."chat_session"."deleted" IS '逻辑删除标记: 0-未删除, 1-已删除';

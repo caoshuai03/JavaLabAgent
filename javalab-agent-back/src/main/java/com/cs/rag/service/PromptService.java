@@ -22,5 +22,14 @@ public interface PromptService {
      * @return 处理后的提示词内容
      */
     String getChatDefaultPrompt();
+    /**
+     * 获取对话摘要提示词
+     * 
+     * <p>用于生成长对话的历史摘要，
+     * 作为后续对话的长期记忆上下文。</p>
+     * 
+     * @return 处理后的提示词内容
+     */
+    String getChatSummaryPrompt();
 }
 

@@ -4,14 +4,12 @@ import com.cs.rag.constant.RagConstant;
 import com.cs.rag.entity.ChatMessage;
 import com.cs.rag.entity.ChatSession;
 import com.cs.rag.llm.LLMProviderRegistry;
-import com.cs.rag.service.ChatMessageService;
-import com.cs.rag.service.ChatSessionService;
-import com.cs.rag.service.PromptService;
-import com.cs.rag.service.RagService;
+import com.cs.rag.service.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -26,9 +24,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
 
 import static com.cs.rag.constant.RagConstant.*;
 
+
+import java.util.concurrent.CompletableFuture;
+
+import com.cs.rag.mapper.ChatSessionMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
 /**
  * RAG服务实现类
@@ -72,6 +76,9 @@ public class RagServiceImpl implements RagService {
     @Autowired
     private ChatSessionService chatSessionService;
 
+    @Autowired
+    private ChatSessionMapper chatSessionMapper;
+
     /**
      * 消息服务
      */
@@ -80,6 +87,12 @@ public class RagServiceImpl implements RagService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    /**
+     * 摘要生成服务
+     */
+    @Autowired
+    private SummaryService summaryService;
 
     /**
      * 构造函数注入核心依赖
@@ -101,121 +114,208 @@ public class RagServiceImpl implements RagService {
      */
     @Override
     public Flux<String> chat(String message, String sessionId, Long userId, String model) {
-        // ===== Step 1: 创建/获取会话 =====
-        String title = message.length() > 20 ? message.substring(0, 20) + "..." : message;
-        ChatSession session = chatSessionService.getOrCreateSession(sessionId, userId, title);
-        String finalSessionId = session.getId();
-        boolean isNewSession = (sessionId == null || sessionId.trim().isEmpty());
+        // 1. 准备会话
+        String finalSessionId = prepareSession(message, sessionId, userId);
 
-        // ===== Step 2: 保存用户消息 =====
+        // 2. 构建上下文 (摘要 + 最近历史)
+        List<Message> contextMessages = buildContext(finalSessionId, userId);
+
+        // 3. 保存当前用户消息
         chatMessageService.saveUserMessage(finalSessionId, userId, message);
         log.info("已保存用户消息: sessionId={}, userId={}", finalSessionId, userId);
 
-        // ===== Step 3: 构建滑动窗口上下文 =====
-        List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(finalSessionId, userId, MEMORY_SIZE);
-        // 转换为DTO形式
-//        List<ChatMessageDTO> contextMessageDTOs = chatMessageService.convertToMessageDTOs(recentMessages);
-        // 同时保留AI Message用于LLM调用
-        List<Message> contextMessages = chatMessageService.convertToAiMessages(recentMessages);
-        log.info("历史会话: 获取最近{}条消息，实际获取{}条", MEMORY_SIZE, contextMessages.size());
-
-        // ===== Step 4: RAG消息增强 =====
+        // 4. RAG检索
         List<Document> ragDocuments = performSearch(message);
         String enhancedMessage = formatMessageWithDocs(message, ragDocuments);
 
-        // 模型选择策略
+        // 5. 选择模型
+        String effectiveModel = selectModel(model, ragDocuments);
+
+        // 6. 构建完整消息列表
+        List<Message> allMessages = new ArrayList<>(contextMessages);
+        allMessages.add(new UserMessage(enhancedMessage));
+
+        // 7. 记录对话日志
+        logChatHistory(allMessages);
+
+        // 8. 执行流式对话
+        return streamResponse(allMessages, effectiveModel, finalSessionId, userId)
+                .doOnComplete(() -> {
+                    // 9. 对话完成后，异步检查是否需要更新摘要 (滚动摘要)
+                    checkAndUpdateSummaryAsync(finalSessionId, userId);
+                });
+    }
+
+    // ==================== 私有辅助方法 ====================
+
+    /**
+     * 异步检查并更新摘要
+     * 策略：每积攒 10 条新消息，触发一次滚动更新
+     */
+    private void checkAndUpdateSummaryAsync(String sessionId, Long userId) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                // 1. 获取会话当前信息
+                ChatSession session = chatSessionMapper.selectByIdAndUserId(sessionId, userId);
+                if (session == null) return;
+
+                // 2. 获取所有消息数量
+
+                long totalMessages = chatMessageService.count(new LambdaQueryWrapper<ChatMessage>()
+                        .apply("session_id = {0}::uuid", sessionId));
+
+                // 每 10 条触发一次更新
+                if (totalMessages > 0 && totalMessages % MEMORY_SIZE == 0) {
+                    log.info("触发滚动摘要更新: sessionId={}, totalMessages={}", sessionId, totalMessages);
+
+                    // 获取最近的 10 条消息 (作为增量)
+                    List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, MEMORY_SIZE);
+                    // 注意：getRecentMessages 返回的是时间倒序的，需要反转
+                    Collections.reverse(recentMessages); // 转为正序
+
+                    // 获取当前摘要
+                    String oldSummary = session.getSummary();
+
+                    // 生成新摘要
+                    String newSummary = summaryService.refreshSummary(oldSummary, recentMessages);
+
+                    // 更新数据库
+                    chatSessionMapper.updateSummary(sessionId, newSummary);
+                    log.info("滚动摘要更新完成: sessionId={}", sessionId);
+                }
+            } catch (Exception e) {
+                log.error("异步更新摘要失败: sessionId={}", sessionId, e);
+            }
+        });
+    }
+
+    /**
+     * 准备会话：创建或获取现有会话
+     */
+    private String prepareSession(String message, String sessionId, Long userId) {
+        String title = message.length() > 20 ? message.substring(0, 20) + "..." : message;
+        ChatSession session = chatSessionService.getOrCreateSession(sessionId, userId, title);
+        return session.getId();
+    }
+
+    /**
+     * 构建上下文：结合摘要和最近历史
+     */
+    private List<Message> buildContext(String sessionId, Long userId) {
+        // 获取会话信息（包含摘要）
+        ChatSession session = chatSessionMapper.selectByIdAndUserId(sessionId, userId);
+        String existingSummary = (session != null) ? session.getSummary() : null;
+
+        List<Message> contextMessages = new ArrayList<>();
+
+        // 1. 如果有预存的摘要，直接作为 System Message 添加
+        if (existingSummary != null && !existingSummary.isEmpty()) {
+            contextMessages.add(new SystemMessage("以下是早期对话的摘要总结，请基于此背景继续对话：\n" + existingSummary));
+            log.info("历史会话: 使用预存的滚动摘要 (长度: {})", existingSummary.length());
+        }
+
+        // 2. 获取最近的详细消息 (保留最近 10 条作为短期记忆)
+        // 无论是否有摘要，最近的 10 条都保留原文，以保证对话流畅性
+        int recentCount = MEMORY_SIZE;
+        List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, recentCount);
+
+        // getRecentMessages 返回的是倒序的，需要反转为正序
+        Collections.reverse(recentMessages);
+
+        if (!recentMessages.isEmpty()) {
+            contextMessages.addAll(chatMessageService.convertToAiMessages(recentMessages));
+            log.info("历史会话: 保留最近{}条详细消息", recentMessages.size());
+        }
+
+        return contextMessages;
+    }
+
+    /**
+     * 选择模型
+     */
+    private String selectModel(String model, List<Document> ragDocuments) {
         String effectiveModel = model;
         if (OLLAMA_LLM.contains(effectiveModel) && (ragDocuments == null || ragDocuments.isEmpty())) {
             log.info("未检索到相关文档，强制切换为{}大模型", DEFAULT_EXTERNAL_LLM);
             effectiveModel = DEFAULT_EXTERNAL_LLM;
         }
+        return (effectiveModel == null || effectiveModel.isEmpty()) ? DEFAULT_EXTERNAL_LLM : effectiveModel;
+    }
 
-        // ===== Step 5: 构建消息列表并调用LLM =====
-        long llmStartTime = System.currentTimeMillis();
-
-        // 根据模型名称选择对应的 ChatModel
-        ChatModel targetChatModel = llmProviderRegistry.getChatModel(effectiveModel);
-        // 构建大模型客户端
-        ChatClient chatClient = ChatClient.builder(targetChatModel).build();
-
-        StringBuilder fullResponse = new StringBuilder();
-        final String currentSessionId = finalSessionId;
-
-        // 合并历史上下文和当前消息
-        List<Message> allMessages = new ArrayList<>(contextMessages);
-        allMessages.add(new UserMessage(enhancedMessage));
-
+    /**
+     * 记录对话日志
+     */
+    private void logChatHistory(List<Message> allMessages) {
         StringBuilder messagesLog = new StringBuilder();
-
-        // 记录日志
+        messagesLog.append("\n==================== 完整会话上下文 START ====================\n");
         for (int i = 0; i < allMessages.size(); i++) {
             Message msg = allMessages.get(i);
             String content = msg.getContent();
-            if (i == allMessages.size() - 1) {
-                messagesLog.append("Role: ").append(msg.getMessageType())
-                        .append(", Content: ").append(content)
-                        .append("\n");
-                break;
-            }
-            String truncatedContent = content.length() > 20 ? content.substring(0, 20) + "..." : content;
-            messagesLog.append("Role: ").append(msg.getMessageType())
-                    .append(", Content: ").append(truncatedContent)
-                    .append("\n");
-        }
-        log.info("历史会话：\n{}", messagesLog.toString());
+            String role = msg.getMessageType().getValue();
 
-        // 构建 ChatClient.PromptSpec，如果指定了模型则设置运行时选项
+            messagesLog.append(String.format("[%d] Role: %s\n", i, role));
+
+            // 对于摘要类型的 SystemMessage，通常比较长，但我们也希望看到内容
+            // 对于最后一条用户消息，肯定要完整显示
+            // 对于其他历史消息，如果太长可以适当截断，但用户要求“看到log输出”，为了大厂调试风格，我们提供较长的预览
+            if (i == allMessages.size() - 1) {
+                messagesLog.append("Content (User Input): ").append(content).append("\n");
+            } else if (role.equals("system") && content.contains("摘要总结")) {
+                messagesLog.append("Content (Summary): ").append(content).append("\n");
+            } else {
+                // 增加截断长度到 100，并显示总长度
+                String displayContent = content.length() > 100
+                        ? content.substring(0, 100) + "...(length: " + content.length() + ")"
+                        : content;
+                messagesLog.append("Content: ").append(displayContent).append("\n");
+            }
+            messagesLog.append("--------------------------------------------------\n");
+        }
+        messagesLog.append("==================== 完整会话上下文 END ====================\n");
+        log.info(messagesLog.toString());
+    }
+
+    /**
+     * 执行流式响应
+     */
+    private Flux<String> streamResponse(List<Message> allMessages, String model, String sessionId, Long userId) {
+        long llmStartTime = System.currentTimeMillis();
+
+        // 构建 ChatClient
+        ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
+        ChatClient chatClient = ChatClient.builder(targetChatModel).build();
+
+        // 构建 PromptSpec
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
                 .system(promptService.getChatDefaultPrompt())
-                .messages(allMessages);
+                .messages(allMessages)
+                .options(ChatOptions.builder().model(model).build());
 
-        // 如果指定了模型，则通过 options 设置模型名称
-        if (effectiveModel != null && !effectiveModel.trim().isEmpty()) {
-            log.info("正在设置请求模型参数: {}", effectiveModel);
-            log.info("LLM调用开始: sessionId={}, model={}", finalSessionId, effectiveModel);
-            promptSpec.options(ChatOptions.builder()
-                    .model(effectiveModel)
-                    .build());
-        }
+        StringBuilder fullResponse = new StringBuilder();
 
-        final String finalModel = effectiveModel;
-        // 流式返回：先返回sessionId，再返回LLM响应
         return Flux.concat(
-                // 首条消息返回sessionId供前端使用 (JSON格式)
-                Flux.just("{\"sessionId\":\"" + finalSessionId + "\"}"),
-
-                // LLM流式响应
+                Flux.just("{\"sessionId\":\"" + sessionId + "\"}"),
                 promptSpec.stream()
                         .content()
-                        .doOnNext(chunk -> {
-                            // 收集原始响应片段
-                            fullResponse.append(chunk);
-                        })
+                        .doOnNext(fullResponse::append)
                         .map(chunk -> {
                             try {
-                                // 封装为JSON格式，确保特殊字符和换行符正确传输
                                 Map<String, String> data = new HashMap<>();
                                 data.put("content", chunk);
                                 return objectMapper.writeValueAsString(data);
                             } catch (Exception e) {
-                                log.error("JSON序列化失败", e);
                                 return "{\"content\":\"\"}";
                             }
                         })
                         .doOnComplete(() -> {
-                            // 流结束后保存AI回复
                             String aiResponse = fullResponse.toString();
                             if (!aiResponse.isEmpty()) {
-                                chatMessageService.saveAssistantMessage(currentSessionId, userId, aiResponse);
-                                long llmEndTime = System.currentTimeMillis();
-                                log.info("LLM调用完成: sessionId={}, 回复长度={}, 耗时{}ms",
-                                        currentSessionId, aiResponse.length(), llmEndTime - llmStartTime);
+                                chatMessageService.saveAssistantMessage(sessionId, userId, aiResponse);
+                                log.info("LLM调用完成: sessionId={}, 长度={}, 耗时{}ms",
+                                        sessionId, aiResponse.length(), System.currentTimeMillis() - llmStartTime);
                             }
                         })
-                        .doOnError(error -> {
-                            log.error("LLM调用失败: sessionId={}, error={}, model={}",
-                                    currentSessionId, error.getMessage(), finalModel);
-                        })
+                        .doOnError(e -> log.error("LLM调用失败: sessionId={}, error={}", sessionId, e.getMessage()))
         );
     }
 
@@ -247,9 +347,9 @@ public class RagServiceImpl implements RagService {
 
     /**
      * 批量删除会话（逻辑删除）
-     * 
+     *
      * @param sessionIds 会话ID列表
-     * @param userId 用户ID
+     * @param userId     用户ID
      * @return 是否删除成功
      */
     @Override

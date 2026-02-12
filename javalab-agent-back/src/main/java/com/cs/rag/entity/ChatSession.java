@@ -57,4 +57,10 @@ public class ChatSession {
      * 1: 已删除
      */
     private Integer deleted;
+
+    /**
+     * 会话摘要
+     * 存储会话的滚动摘要，避免每次实时生成
+     */
+    private String summary;
 }

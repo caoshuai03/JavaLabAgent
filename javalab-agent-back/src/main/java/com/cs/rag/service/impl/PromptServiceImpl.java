@@ -28,6 +28,10 @@ public class PromptServiceImpl implements PromptService {
     @Value("classpath:/prompts/chat-default.md")
     private Resource chatDefaultPrompt;
 
+    /** 对话摘要提示词资源文件 */
+    @Value("classpath:/prompts/chat-summary.md")
+    private Resource chatSummaryPrompt;
+
     /**
      * 获取默认对话提示词
      * 
@@ -36,6 +40,16 @@ public class PromptServiceImpl implements PromptService {
     @Override
     public String getChatDefaultPrompt() {
         return readFile(chatDefaultPrompt);
+    }
+
+    /**
+     * 获取对话摘要提示词
+     * 
+     * @return 处理后的提示词内容
+     */
+    @Override
+    public String getChatSummaryPrompt() {
+        return readFile(chatSummaryPrompt);
     }
 
     /**
