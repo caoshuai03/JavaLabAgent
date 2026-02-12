@@ -164,12 +164,17 @@ public class RagServiceImpl implements RagService {
                 long totalMessages = chatMessageService.count(new LambdaQueryWrapper<ChatMessage>()
                         .apply("session_id = {0}::uuid", sessionId));
 
-                // 每 10 条触发一次更新
-                if (totalMessages > 0 && totalMessages % MEMORY_SIZE == 0) {
+                // 每 10 条触发一次更新，容忍奇偶差异（余数0或1均触发）
+                // 这样即使因历史原因或中断导致消息总数变成奇数，也能在后续对话中触发更新
+                if (totalMessages > 0 && totalMessages % MEMORY_SIZE <= 1) {
                     log.info("触发滚动摘要更新: sessionId={}, totalMessages={}", sessionId, totalMessages);
 
-                    // 获取最近的 10 条消息 (作为增量)
-                    List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, MEMORY_SIZE);
+                    // 动态计算需要获取的消息数量，确保覆盖所有新增消息（防止奇数偏移导致遗漏）
+                    // 如果余数是1，则多取1条；如果是0，则取标准长度
+                    int limit = MEMORY_SIZE + (int) (totalMessages % MEMORY_SIZE);
+
+                    // 获取最近的消息 (作为增量)
+                    List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, limit);
                     // 注意：getRecentMessages 返回的是时间倒序的，需要反转
                     Collections.reverse(recentMessages); // 转为正序
 
