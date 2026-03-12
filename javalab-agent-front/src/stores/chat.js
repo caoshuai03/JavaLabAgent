@@ -219,7 +219,8 @@ export const useChatStore = defineStore('chat', () => {
       id: generateMessageId(),
       sender: sender,
       content: content,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      toolEvents: []
     }
 
     messages.value.push(message)
@@ -257,6 +258,18 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  const addToolEventToLastMessage = (toolEvent) => {
+    if (messages.value.length > 0) {
+      const lastMessage = messages.value[messages.value.length - 1]
+      if (lastMessage.sender === 'assistant') {
+        if (!Array.isArray(lastMessage.toolEvents)) {
+          lastMessage.toolEvents = []
+        }
+        lastMessage.toolEvents.push(toolEvent)
+      }
+    }
+  }
+
   /**
    * 从数据库加载会话的历史消息
    * @param {string} sessionId - 会话ID
@@ -274,7 +287,8 @@ export const useChatStore = defineStore('chat', () => {
         id: msg.id || generateMessageId(),
         sender: msg.role === 'user' ? 'user' : 'assistant',
         content: msg.content,
-        timestamp: msg.createdAt || new Date().toISOString() // 字段名与后端 ChatMessage.createdAt 对应
+        timestamp: msg.createdAt || new Date().toISOString(),
+        toolEvents: []
       }))
     } catch (error) {
       console.error('加载会话历史失败:', error)
@@ -367,6 +381,7 @@ export const useChatStore = defineStore('chat', () => {
     updateConversationTitle,
     addMessage,
     updateLastMessage,
+    addToolEventToLastMessage,
     clearMessages,
     toggleSidebar,
     focusInput,

@@ -94,6 +94,9 @@ public class RagServiceImpl implements RagService {
     @Autowired
     private SummaryService summaryService;
 
+    @Autowired
+    private RagConversationSupport ragConversationSupport;
+
     /**
      * 构造函数注入核心依赖
      *
@@ -161,8 +164,7 @@ public class RagServiceImpl implements RagService {
 
                 // 2. 获取所有消息数量
 
-                long totalMessages = chatMessageService.count(new LambdaQueryWrapper<ChatMessage>()
-                        .apply("session_id = {0}::uuid", sessionId));
+                long totalMessages = ragConversationSupport.countMessagesBySession(sessionId);
 
                 // 每 10 条触发一次更新，容忍奇偶差异（余数0或1均触发）
                 // 这样即使因历史原因或中断导致消息总数变成奇数，也能在后续对话中触发更新
@@ -198,53 +200,21 @@ public class RagServiceImpl implements RagService {
      * 准备会话：创建或获取现有会话
      */
     private String prepareSession(String message, String sessionId, Long userId) {
-        String title = message.length() > 20 ? message.substring(0, 20) + "..." : message;
-        ChatSession session = chatSessionService.getOrCreateSession(sessionId, userId, title);
-        return session.getId();
+        return ragConversationSupport.prepareSession(message, sessionId, userId);
     }
 
     /**
      * 构建上下文：结合摘要和最近历史
      */
     private List<Message> buildContext(String sessionId, Long userId) {
-        // 获取会话信息（包含摘要）
-        ChatSession session = chatSessionMapper.selectByIdAndUserId(sessionId, userId);
-        String existingSummary = (session != null) ? session.getSummary() : null;
-
-        List<Message> contextMessages = new ArrayList<>();
-
-        // 1. 如果有预存的摘要，直接作为 System Message 添加
-        if (existingSummary != null && !existingSummary.isEmpty()) {
-            contextMessages.add(new SystemMessage("以下是早期对话的摘要总结，请基于此背景继续对话：\n" + existingSummary));
-            log.info("历史会话: 使用预存的滚动摘要 (长度: {})", existingSummary.length());
-        }
-
-        // 2. 获取最近的详细消息 (保留最近 10 条作为短期记忆)
-        // 无论是否有摘要，最近的 10 条都保留原文，以保证对话流畅性
-        int recentCount = MEMORY_SIZE;
-        List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, recentCount);
-
-        // getRecentMessages 返回的是倒序的，需要反转为正序
-        Collections.reverse(recentMessages);
-
-        if (!recentMessages.isEmpty()) {
-            contextMessages.addAll(chatMessageService.convertToAiMessages(recentMessages));
-            log.info("历史会话: 保留最近{}条详细消息", recentMessages.size());
-        }
-
-        return contextMessages;
+        return ragConversationSupport.buildContext(sessionId, userId);
     }
 
     /**
      * 选择模型
      */
     private String selectModel(String model, List<Document> ragDocuments) {
-        String effectiveModel = model;
-        if (OLLAMA_LLM.contains(effectiveModel) && (ragDocuments == null || ragDocuments.isEmpty())) {
-            log.info("未检索到相关文档，强制切换为{}大模型", DEFAULT_EXTERNAL_LLM);
-            effectiveModel = DEFAULT_EXTERNAL_LLM;
-        }
-        return (effectiveModel == null || effectiveModel.isEmpty()) ? DEFAULT_EXTERNAL_LLM : effectiveModel;
+        return ragConversationSupport.selectModel(model, ragDocuments);
     }
 
     /**
@@ -382,49 +352,13 @@ public class RagServiceImpl implements RagService {
      * 执行检索
      */
     private List<Document> performSearch(String message) {
-        long startTime = System.currentTimeMillis();
-
-        // 构建检索请求
-        SearchRequest ragSearchRequest = SearchRequest.builder()
-                .query(message)
-                .topK(TOP_K)
-                .similarityThreshold(SIMILARITY_THRESHOLD)
-                .build();
-
-        log.info("RAG检索开始: 相似度阈值={}, 检索数量={}", SIMILARITY_THRESHOLD, TOP_K);
-
-        // 执行向量检索
-        List<Document> ragDocuments = vectorStore.similaritySearch(ragSearchRequest);
-
-        long endTime = System.currentTimeMillis();
-        log.info("RAG检索完成: 命中{}条文档, 耗时{}ms",
-                ragDocuments != null ? ragDocuments.size() : 0,
-                endTime - startTime);
-        return ragDocuments;
+        return ragConversationSupport.performSearch(message);
     }
 
     /**
      * 格式化消息
      */
     private String formatMessageWithDocs(String message, List<Document> ragDocuments) {
-        // 记录检索到的文档信息
-        if (ragDocuments != null && !ragDocuments.isEmpty()) {
-            for (int i = 0; i < ragDocuments.size(); i++) {
-                Document doc = ragDocuments.get(i);
-                String title = doc.getText().split("\n")[0];
-                log.info("{}、文档标题: {}, 相似度: {}", (i + 1), title, doc.getScore());
-            }
-
-            // 将检索结果附加到消息
-            StringBuilder knowledgeContent = new StringBuilder(RagConstant.KNOWLEDGE_SOURCE_LABEL);
-            for (Document doc : ragDocuments) {
-                knowledgeContent.append(doc.getText()).append("\n\n");
-            }
-            return message + knowledgeContent.toString();
-        } else {
-            log.info("未检索到相关文档");
-            // 明确告知LLM没有检索到知识库内容，使用情况C的回答方式
-            return message + RagConstant.NO_KNOWLEDGE_FOUND_LABEL;
-        }
+        return ragConversationSupport.formatMessageWithDocs(message, ragDocuments);
     }
 }

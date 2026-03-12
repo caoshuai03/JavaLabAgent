@@ -2,6 +2,44 @@
   <div :class="['message-item', `message-${message.sender}`]">
     <div class="message-container">
       <div class="message-content">
+        <details v-if="message.sender === 'assistant' && Array.isArray(message.toolEvents) && message.toolEvents.length > 0" class="tool-events-panel">
+          <summary class="tool-events-summary">
+            <span>思考过程</span>
+            <span class="tool-events-count">{{ groupedToolEvents.length }} 步</span>
+          </summary>
+          <div class="tool-events">
+            <div v-for="(item, idx) in groupedToolEvents" :key="`group-${idx}`" class="tool-group-item">
+              <!-- Case 1: Tool Interaction -->
+              <div v-if="item.type === 'tool'" class="tool-interaction">
+                <div class="tool-header">
+                  <div class="tool-title-row">
+                    <span class="tool-icon">🛠️</span>
+                    <span class="tool-name">{{ item.call.payload.toolName }}</span>
+                  </div>
+                  <span class="tool-status" :class="{ success: item.result?.payload?.success, error: item.result && !item.result.payload.success }">
+                    {{ item.result ? (item.result.payload.success ? '成功' : '失败') : '执行中...' }}
+                  </span>
+                </div>
+                <div class="tool-details">
+                  <div class="tool-detail-row">
+                    <span class="tool-label">输入:</span>
+                    <span class="tool-value">{{ prettyJson(item.call.payload.input) }}</span>
+                  </div>
+                  <div v-if="item.result" class="tool-detail-row">
+                    <span class="tool-label">输出:</span>
+                    <span class="tool-value">{{ prettyJson(item.result.payload.data || item.result.payload.error) }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Case 2: Status -->
+              <div v-else-if="item.type === 'status'" class="status-item">
+                <span class="status-icon">💭</span>
+                <span class="status-text">{{ formatStage(item.event.payload) }}</span>
+              </div>
+            </div>
+          </div>
+        </details>
         <div class="message-text" v-html="formatContent(message.content)" ref="messageTextRef" @click="handleCodeBlockClick"></div>
 
         <!-- 消息底部区域：操作按钮 + 时间 -->
@@ -52,7 +90,7 @@
 <script setup>
 import { useChatStore } from '../stores/chat'
 import { renderMarkdown } from '../utils/markdown'
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import FeedbackModal from './FeedbackModal.vue'
 
 const props = defineProps({
@@ -109,6 +147,67 @@ const formatTime = (timestamp) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+const prettyJson = (obj) => {
+  try {
+    if (typeof obj === 'string') {
+      // 尝试解析字符串
+      const parsed = JSON.parse(obj)
+      return JSON.stringify(parsed, null, 2)
+    }
+    return JSON.stringify(obj, null, 2)
+  } catch (e) {
+    return String(obj)
+  }
+}
+
+const groupedToolEvents = computed(() => {
+  if (!props.message.toolEvents || !props.message.toolEvents.length) return []
+  
+  const list = []
+  // 使用 map 暂存正在进行的调用，以 round 为 key
+  const activeCalls = new Map()
+
+  props.message.toolEvents.forEach(e => {
+    if (e.eventType === 'tool_call') {
+      const round = e.payload?.round
+      const callItem = {
+        type: 'tool',
+        call: e,
+        result: null,
+        round: round
+      }
+      activeCalls.set(round, callItem)
+      list.push(callItem)
+    } else if (e.eventType === 'tool_result') {
+      const round = e.payload?.round
+      const callItem = activeCalls.get(round)
+      if (callItem) {
+        callItem.result = e
+        activeCalls.delete(round)
+      }
+    } else if (e.eventType === 'status') {
+      const stage = e.payload?.stage
+      // 过滤掉冗余状态，只展示关键节点
+      if (stage === 'thinking' || stage === 'ready_to_answer' || stage === 'tool_running' || stage === 'tool_done') {
+         list.push({ type: 'status', event: e })
+      }
+    }
+  })
+
+  return list
+})
+
+const formatStage = (payload) => {
+  if (!payload || !payload.stage) return '进行中...'
+  const map = {
+    'thinking': '正在思考...',
+    'ready_to_answer': '思考结束，开始回答',
+    'tool_running': '正在使用工具...',
+    'tool_done': '工具调用完成'
+  }
+  return map[payload.stage] || payload.stage
 }
 
 // 处理复制按钮点击 - 复制整条消息内容
@@ -501,6 +600,161 @@ watch(() => props.message.content, () => {
     border: none;
     border-top: 1px solid var(--border-color);
   }
+}
+
+.tool-events-panel {
+  margin-top: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+.tool-events-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-events-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-events-summary::after {
+  content: '展开';
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.tool-events-panel[open] .tool-events-summary::after {
+  content: '收起';
+}
+
+.tool-events-count {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  margin-right: 8px;
+}
+
+.tool-events {
+  border-top: 1px solid var(--border-color);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-group-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border-color);
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+}
+
+.tool-interaction {
+  background-color: var(--bg-hover);
+  border-radius: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.tool-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-icon {
+  font-size: 14px;
+}
+
+.tool-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+
+  &.success {
+    background-color: rgba(16, 163, 127, 0.1);
+    color: #10a37f;
+  }
+  
+  &.error {
+    background-color: rgba(211, 47, 47, 0.1);
+    color: #d32f2f;
+  }
+}
+
+.tool-details {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-primary);
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.tool-detail-row {
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.tool-label {
+  flex-shrink: 0;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tool-value {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: monospace;
+  color: var(--text-primary);
+  opacity: 0.9;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-style: italic;
+}
+
+.status-icon {
+  font-size: 12px;
 }
 
 // 消息底部区域：复制按钮 + 时间

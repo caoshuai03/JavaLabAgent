@@ -39,7 +39,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useUserStore } from '../stores/user'
-import { sendChatMessage } from '../api/chat'
+import { sendReactAgentMessage } from '../api/chat'
 
 const chatStore = useChatStore()
 const inputText = ref('')
@@ -123,50 +123,41 @@ const handleSend = async () => {
   const userId = userStore.userInfo?.id || 1
   const model = chatStore.selectedModel
 
-  // 使用 POST 方式发送请求（通过 sendChatMessage API）
-  abortController = sendChatMessage(
+  abortController = sendReactAgentMessage(
     { message, sessionId, userId, model },
     {
-      // 收到消息的回调
       onMessage: (data) => {
         const lastMessage = chatStore.messages[chatStore.messages.length - 1]
         if (!lastMessage) return
 
-        // 检查是否是错误消息
+        if (typeof data === 'object' && data.eventType) {
+          handleAgentEvent(data, lastMessage)
+          return
+        }
+
         if (data.startsWith('[ERROR]')) {
           lastMessage.content = '错误：' + data.substring(7)
           handleStop()
           return
         }
 
-        // 检查是否是结束标记
-        if (data === '[DONE]') {
-          handleStop()
-          return
-        }
-
-        // 检查是否是 SessionId 响应（第一条消息）
-        // 格式: [SESSION_ID:xxx]
         if (!sessionIdReceived && data.startsWith('[SESSION_ID:')) {
           const match = data.match(/\[SESSION_ID:(.+?)\]/)
           if (match) {
             const newSessionId = match[1]
             sessionIdReceived = true
 
-            // 如果是新会话，更新 sessionId 并添加到会话列表
             if (chatStore.isNewConversation || !chatStore.currentConversationId) {
               chatStore.setCurrentSessionId(newSessionId)
               chatStore.addNewConversationToList(newSessionId, currentUserMessage)
             }
           }
-          return // 不把 sessionId 消息显示到 UI
+          return
         }
 
-        // 更新最后一条消息
         lastMessage.content += data
         chatStore.updateLastMessage(lastMessage.content)
       },
-      // 发生错误的回调
       onError: (error) => {
         console.error('请求错误:', error)
         const lastMessage = chatStore.messages[chatStore.messages.length - 1]
@@ -175,12 +166,56 @@ const handleSend = async () => {
         }
         handleStop()
       },
-      // 完成的回调
       onComplete: () => {
         handleStop()
       }
     }
   )
+}
+
+const handleAgentEvent = (event, lastMessage) => {
+  const payload = event.payload || {}
+
+  if (event.eventType === 'session') {
+    const newSessionId = payload.sessionId || event.sessionId
+    if (newSessionId && !sessionIdReceived) {
+      sessionIdReceived = true
+      if (chatStore.isNewConversation || !chatStore.currentConversationId) {
+        chatStore.setCurrentSessionId(newSessionId)
+        chatStore.addNewConversationToList(newSessionId, currentUserMessage)
+      }
+    }
+    return
+  }
+
+  if (event.eventType === 'token') {
+    const content = payload.content || ''
+    lastMessage.content += content
+    chatStore.updateLastMessage(lastMessage.content)
+    return
+  }
+
+  if (event.eventType === 'tool_call' || event.eventType === 'tool_result' || event.eventType === 'status') {
+    chatStore.addToolEventToLastMessage({
+      eventType: event.eventType,
+      payload,
+      ts: event.ts
+    })
+    return
+  }
+
+  if (event.eventType === 'error') {
+    const message = payload.message || '请求失败'
+    if (!lastMessage.content) {
+      lastMessage.content = `错误：${message}`
+      chatStore.updateLastMessage(lastMessage.content)
+    }
+    return
+  }
+
+  if (event.eventType === 'final') {
+    handleStop()
+  }
 }
 
 /**

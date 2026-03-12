@@ -65,17 +65,21 @@ export const deleteSessions = (sessionIds, userId = 1) => {
  * @returns {AbortController} 用于取消请求的控制器
  */
 export const sendChatMessage = (params, callbacks) => {
+  return sendSseMessage('/api/v1/ai/rag', params, callbacks)
+}
+
+export const sendReactAgentMessage = (params, callbacks) => {
+  return sendSseMessage('/api/v1/ai/react-agent', params, callbacks)
+}
+
+const sendSseMessage = (url, params, callbacks) => {
   const { message, sessionId = '', userId = 1, model } = params
   const { onMessage, onError, onComplete } = callbacks
 
-  // 创建 AbortController 用于取消请求
   const controller = new AbortController()
 
-  // 从本地存储中读取 token（与 axios 拦截器保持一致）
-  // 注意：后端 JwtTokenUserInterceptor 期望请求头中携带 "Bearer <token>"
   const token = localStorage.getItem('token')
 
-  // 构建请求头
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
@@ -86,39 +90,32 @@ export const sendChatMessage = (params, callbacks) => {
     headers.Authorization = `Bearer ${token}`
   }
 
-  // 发起 POST 请求
-  fetch('/api/v1/ai/rag', {
+  fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify({ message, sessionId, userId, model }),
     signal: controller.signal,
   })
     .then(async (response) => {
-      // 检查响应状态
       if (!response.ok) {
-        // 40100/40101 是后端自定义错误码（直接作为 HTTP status 返回）
-        // 这里给出更明确的错误，便于前端提示用户先登录
         if (response.status === 40100 || response.status === 40101 || response.status === 401) {
           throw new Error('未登录或无权限，请先登录后再重试')
         }
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      // 使用 ReadableStream 读取 SSE 响应
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
-      let buffer = '' // 缓冲区，用于处理不完整的数据块
-      let eventBuffer = [] // 缓冲区，用于处理 SSE 事件的多行数据
+      let buffer = ''
+      let eventBuffer = []
 
       while (true) {
         const { done, value } = await reader.read()
 
         if (done) {
-          // 处理缓冲区中剩余的数据
           if (buffer) {
             processLine(buffer, eventBuffer, onMessage)
           }
-          // 发送剩余的事件数据
           if (eventBuffer.length > 0) {
             onMessage?.(eventBuffer.join(''))
           }
@@ -126,22 +123,15 @@ export const sendChatMessage = (params, callbacks) => {
           break
         }
 
-        // 解码数据并添加到缓冲区
         buffer += decoder.decode(value, { stream: true })
-
-        // 按换行符分割，处理完整的消息
         const lines = buffer.split('\n')
-        // 保留最后一个可能不完整的行
         buffer = lines.pop() || ''
-
-        // 处理每一行
         for (const line of lines) {
           processLine(line, eventBuffer, onMessage)
         }
       }
     })
     .catch((error) => {
-      // 忽略用户主动取消的错误
       if (error.name !== 'AbortError') {
         console.error('SSE请求错误:', error)
         onError?.(error)
@@ -158,45 +148,37 @@ export const sendChatMessage = (params, callbacks) => {
  * @param {Function} onMessage - 消息回调
  */
 function processLine(line, eventBuffer, onMessage) {
-  // 处理 CR 回车符（兼容 Windows 换行 \r\n）
   const cleanLine = line.endsWith('\r') ? line.slice(0, -1) : line
 
-  // 空行表示当前事件结束，分发累积的数据
   if (!cleanLine) {
     if (eventBuffer.length > 0) {
-      // 将多行 data 合并，改为直接连接
-      // 因为后端返回的流式数据中，如果出现连在一起的 data: 行，通常是因为它们属于同一个输出片段
-      // 而之前的换行符处理逻辑会导致额外的换行（如代码块中）或断行（如 ReentrantLock）
       const fullMessage = eventBuffer.join('')
       onMessage?.(fullMessage)
-      eventBuffer.length = 0 // 清空缓存
+      eventBuffer.length = 0
     }
     return
   }
 
-  // 解析 SSE 格式数据（data: xxx）
   if (cleanLine.startsWith('data:')) {
-    // 去除 "data:" 前缀
     let data = cleanLine.slice(5)
 
     try {
-      // 尝试解析 JSON 格式数据（新版后端协议）
       const parsed = JSON.parse(data)
-      
+
+      if (parsed.eventType) {
+        onMessage?.(parsed)
+        return
+      }
+
       if (parsed.sessionId) {
-        // 转换 SessionID 为前端约定的格式
         eventBuffer.push(`[SESSION_ID:${parsed.sessionId}]`)
       } else if (parsed.content !== undefined) {
-        // 提取内容
         eventBuffer.push(parsed.content)
       }
-    } catch (e) {
-      // 解析失败，回退到旧的纯文本处理逻辑
-      // 如果 data 为空字符串，说明是换行符
+    } catch {
       if (data.length === 0) {
         data = '\n'
       }
-      // 收集数据
       eventBuffer.push(data)
     }
   }

@@ -10,6 +10,7 @@ import com.cs.rag.pojo.dto.SessionListRequestDTO;
 import com.cs.rag.pojo.vo.ChatMessageVO;
 import com.cs.rag.pojo.vo.ChatSessionVO;
 import com.cs.rag.service.RagService;
+import com.cs.rag.service.ReactAgentService;
 import org.springframework.http.MediaType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,6 +46,9 @@ public class AiRagController {
     /** RAG业务服务 */
     @Autowired
     private RagService ragService;
+
+    @Autowired
+    private ReactAgentService reactAgentService;
     
     // ==================== 对话接口 ====================
     
@@ -74,6 +78,20 @@ public class AiRagController {
         
         // 委托给Service层处理业务逻辑
         return ragService.chat(message, sessionId, userId, model);
+    }
+
+    @Operation(summary = "reactAgentChat", description = "ReAct Agent 对话接口")
+    @PostMapping(value = "/react-agent", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> reactAgentChat(@RequestBody ChatRequestDTO request) {
+        String message = (request.getMessage() != null) ? request.getMessage() : "你好";
+        String sessionId = request.getSessionId();
+        Long userId = (request.getUserId() != null) ? request.getUserId() : 1L;
+        String model = request.getModel();
+
+        log.info("ReAct Agent 对话请求: message={}, sessionId={}, userId={}, model={}",
+                message, sessionId, userId, model);
+
+        return reactAgentService.chat(message, sessionId, userId, model);
     }
     
     // ==================== 会话管理接口 ====================

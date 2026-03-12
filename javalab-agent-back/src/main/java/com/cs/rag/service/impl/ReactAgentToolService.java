@@ -1,0 +1,292 @@
+package com.cs.rag.service.impl;
+
+import com.cs.rag.entity.ChatMessage;
+import com.cs.rag.service.ChatMessageService;
+import org.springframework.ai.document.Document;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Stack;
+
+@Service
+public class ReactAgentToolService {
+
+    private final RagConversationSupport ragConversationSupport;
+    private final ChatMessageService chatMessageService;
+
+    public ReactAgentToolService(RagConversationSupport ragConversationSupport,
+                                 ChatMessageService chatMessageService) {
+        this.ragConversationSupport = ragConversationSupport;
+        this.chatMessageService = chatMessageService;
+    }
+
+    public ToolExecutionResult execute(String toolName, Map<String, Object> input, String sessionId, Long userId) {
+        if ("current_time".equals(toolName)) {
+            return currentTime(input);
+        }
+        if ("calculator".equals(toolName)) {
+            return calculator(input);
+        }
+        if ("knowledge_search".equals(toolName)) {
+            return knowledgeSearch(input);
+        }
+        if ("session_recall".equals(toolName)) {
+            return sessionRecall(input, sessionId, userId);
+        }
+        return ToolExecutionResult.error(toolName, "不支持的工具");
+    }
+
+    public List<Map<String, Object>> toolSchemas() {
+        List<Map<String, Object>> tools = new ArrayList<>();
+        tools.add(toolSchema("current_time", "获取当前时间", List.of("timezone"), "timezone: 时区，示例 Asia/Shanghai，可选"));
+        tools.add(toolSchema("calculator", "计算数学表达式", List.of("expression"), "expression: 仅支持 + - * / ( ) 和小数"));
+        tools.add(toolSchema("knowledge_search", "查询知识库", List.of("query"), "query: 检索问题"));
+        tools.add(toolSchema("session_recall", "回顾当前会话消息", List.of("limit"), "limit: 回顾条数，默认5，最大20"));
+        return tools;
+    }
+
+    private Map<String, Object> toolSchema(String name, String desc, List<String> params, String paramDesc) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", name);
+        data.put("description", desc);
+        data.put("params", params);
+        data.put("paramDesc", paramDesc);
+        return data;
+    }
+
+    private ToolExecutionResult currentTime(Map<String, Object> input) {
+        String timezone = asString(input.get("timezone"));
+        ZonedDateTime now = timezone == null || timezone.isBlank()
+                ? ZonedDateTime.now()
+                : ZonedDateTime.now(java.time.ZoneId.of(timezone));
+        Map<String, Object> data = new HashMap<>();
+        data.put("timezone", now.getZone().toString());
+        data.put("iso", now.toOffsetDateTime().toString());
+        data.put("formatted", now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        return ToolExecutionResult.success("current_time", data);
+    }
+
+    private ToolExecutionResult calculator(Map<String, Object> input) {
+        String expression = asString(input.get("expression"));
+        if (expression == null || expression.isBlank()) {
+            return ToolExecutionResult.error("calculator", "缺少 expression 参数");
+        }
+        try {
+            BigDecimal value = evaluate(expression);
+            Map<String, Object> data = new HashMap<>();
+            data.put("expression", expression);
+            data.put("result", value.stripTrailingZeros().toPlainString());
+            return ToolExecutionResult.success("calculator", data);
+        } catch (Exception e) {
+            return ToolExecutionResult.error("calculator", "表达式计算失败: " + e.getMessage());
+        }
+    }
+
+    private ToolExecutionResult knowledgeSearch(Map<String, Object> input) {
+        String query = asString(input.get("query"));
+        if (query == null || query.isBlank()) {
+            return ToolExecutionResult.error("knowledge_search", "缺少 query 参数");
+        }
+        List<Document> documents = ragConversationSupport.performSearch(query);
+        List<Map<String, Object>> hits = new ArrayList<>();
+        if (documents != null) {
+            for (Document doc : documents) {
+                Map<String, Object> hit = new HashMap<>();
+                hit.put("score", doc.getScore());
+                String text = doc.getText();
+                hit.put("content", text.length() > 400 ? text.substring(0, 400) : text);
+                hits.add(hit);
+                if (hits.size() >= 5) {
+                    break;
+                }
+            }
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("query", query);
+        data.put("count", hits.size());
+        data.put("hits", hits);
+        return ToolExecutionResult.success("knowledge_search", data);
+    }
+
+    private ToolExecutionResult sessionRecall(Map<String, Object> input, String sessionId, Long userId) {
+        int limit = asInt(input.get("limit"), 5);
+        limit = Math.max(1, Math.min(limit, 20));
+        List<ChatMessage> messages = chatMessageService.getRecentMessages(sessionId, userId, limit);
+        Collections.reverse(messages);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (ChatMessage msg : messages) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("role", msg.getRole());
+            String content = msg.getContent();
+            row.put("content", content.length() > 200 ? content.substring(0, 200) : content);
+            row.put("createdAt", msg.getCreatedAt());
+            rows.add(row);
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("sessionId", sessionId);
+        data.put("count", rows.size());
+        data.put("messages", rows);
+        return ToolExecutionResult.success("session_recall", data);
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private int asInt(Object value, int defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private BigDecimal evaluate(String expression) {
+        String expr = expression.replaceAll("\\s+", "");
+        if (!expr.matches("[0-9+\\-*/().]+")) {
+            throw new IllegalArgumentException("包含非法字符");
+        }
+        List<String> output = new ArrayList<>();
+        Stack<Character> operators = new Stack<>();
+        StringBuilder number = new StringBuilder();
+        for (int i = 0; i < expr.length(); i++) {
+            char c = expr.charAt(i);
+            if (Character.isDigit(c) || c == '.') {
+                number.append(c);
+                continue;
+            }
+            if (number.length() > 0) {
+                output.add(number.toString());
+                number.setLength(0);
+            }
+            if (c == '(') {
+                operators.push(c);
+                continue;
+            }
+            if (c == ')') {
+                while (!operators.isEmpty() && operators.peek() != '(') {
+                    output.add(String.valueOf(operators.pop()));
+                }
+                if (operators.isEmpty() || operators.pop() != '(') {
+                    throw new IllegalArgumentException("括号不匹配");
+                }
+                continue;
+            }
+            if (isOperator(c)) {
+                if ((i == 0 || expr.charAt(i - 1) == '(') && c == '-') {
+                    number.append(c);
+                    continue;
+                }
+                while (!operators.isEmpty() && isOperator(operators.peek())
+                        && precedence(operators.peek()) >= precedence(c)) {
+                    output.add(String.valueOf(operators.pop()));
+                }
+                operators.push(c);
+                continue;
+            }
+            throw new IllegalArgumentException("表达式格式错误");
+        }
+        if (number.length() > 0) {
+            output.add(number.toString());
+        }
+        while (!operators.isEmpty()) {
+            char op = operators.pop();
+            if (op == '(' || op == ')') {
+                throw new IllegalArgumentException("括号不匹配");
+            }
+            output.add(String.valueOf(op));
+        }
+        Stack<BigDecimal> values = new Stack<>();
+        for (String token : output) {
+            if (token.matches("-?\\d+(\\.\\d+)?")) {
+                values.push(new BigDecimal(token));
+                continue;
+            }
+            if (values.size() < 2) {
+                throw new IllegalArgumentException("表达式格式错误");
+            }
+            BigDecimal b = values.pop();
+            BigDecimal a = values.pop();
+            values.push(apply(a, b, token.charAt(0)));
+        }
+        if (values.size() != 1) {
+            throw new IllegalArgumentException("表达式格式错误");
+        }
+        return values.pop();
+    }
+
+    private boolean isOperator(char c) {
+        return c == '+' || c == '-' || c == '*' || c == '/';
+    }
+
+    private int precedence(char op) {
+        return (op == '*' || op == '/') ? 2 : 1;
+    }
+
+    private BigDecimal apply(BigDecimal a, BigDecimal b, char op) {
+        return switch (op) {
+            case '+' -> a.add(b);
+            case '-' -> a.subtract(b);
+            case '*' -> a.multiply(b);
+            case '/' -> {
+                if (b.compareTo(BigDecimal.ZERO) == 0) {
+                    throw new IllegalArgumentException("除数不能为0");
+                }
+                yield a.divide(b, 10, RoundingMode.HALF_UP);
+            }
+            default -> throw new IllegalArgumentException("不支持的运算符");
+        };
+    }
+
+    public static class ToolExecutionResult {
+        private final String toolName;
+        private final boolean success;
+        private final Object data;
+        private final String errorMessage;
+
+        private ToolExecutionResult(String toolName, boolean success, Object data, String errorMessage) {
+            this.toolName = toolName;
+            this.success = success;
+            this.data = data;
+            this.errorMessage = errorMessage;
+        }
+
+        public static ToolExecutionResult success(String toolName, Object data) {
+            return new ToolExecutionResult(toolName, true, data, null);
+        }
+
+        public static ToolExecutionResult error(String toolName, String errorMessage) {
+            return new ToolExecutionResult(toolName, false, null, errorMessage);
+        }
+
+        public String getToolName() {
+            return toolName;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public Object getData() {
+            return data;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+    }
+}
