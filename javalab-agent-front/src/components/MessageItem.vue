@@ -2,10 +2,30 @@
   <div :class="['message-item', `message-${message.sender}`]">
     <div class="message-container">
       <div class="message-content">
-        <details v-if="message.sender === 'assistant' && Array.isArray(message.toolEvents) && message.toolEvents.length > 0" class="tool-events-panel">
+        <details 
+          v-if="message.sender === 'assistant' && Array.isArray(message.toolEvents) && message.toolEvents.length > 0" 
+          class="tool-events-panel"
+          :open="detailsOpen"
+          @toggle="onToggle"
+        >
           <summary class="tool-events-summary">
-            <span>思考过程</span>
-            <span class="tool-events-count">{{ groupedToolEvents.length }} 步</span>
+            <div class="summary-left">
+              <span class="thinking-text">思考过程</span>
+            </div>
+            <svg 
+              class="summary-chevron" 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="16" 
+              height="16" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2" 
+              stroke-linecap="round" 
+              stroke-linejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </summary>
           <div class="tool-events">
             <div v-for="(item, idx) in groupedToolEvents" :key="`group-${idx}`" class="tool-group-item">
@@ -104,6 +124,55 @@ const chatStore = useChatStore()
 const messageTextRef = ref(null)
 const copied = ref(false) // 复制成功状态
 const showFeedbackModal = ref(false) // 反馈弹窗状态
+const detailsOpen = ref(false) // 思考过程展开状态
+
+// 监听展开状态变化
+const onToggle = (event) => {
+  detailsOpen.value = event.target.open
+}
+
+// 初始化和监听思考过程状态
+const initThinkingState = () => {
+  if (props.message.sender === 'assistant' && Array.isArray(props.message.toolEvents) && props.message.toolEvents.length > 0) {
+    // 如果没有内容或者内容很短（正在思考或刚开始输出），则默认展开
+    // 如果有较多内容（已经输出完毕或输出了一部分），则默认折叠
+    const content = props.message.content || ''
+    if (content.length < 5) {
+      detailsOpen.value = true
+    } else {
+      detailsOpen.value = false
+    }
+  }
+}
+
+onMounted(() => {
+  initThinkingState()
+})
+
+// 监听内容变化，实现"出字时折叠"
+watch(() => props.message.content, (newVal, oldVal) => {
+  if (props.message.sender === 'assistant' && Array.isArray(props.message.toolEvents) && props.message.toolEvents.length > 0) {
+    const oldLen = oldVal ? oldVal.length : 0
+    const newLen = newVal ? newVal.length : 0
+    
+    // 当内容从很少变为较多时（开始输出回答），自动折叠
+    // 阈值设为 5 个字符，避免空字符串到第一个字的抖动
+    if (oldLen < 5 && newLen >= 5 && detailsOpen.value) {
+      detailsOpen.value = false
+    }
+  }
+})
+
+// 监听工具事件变化，实现"思考时展开"
+watch(() => props.message.toolEvents, (newVal, oldVal) => {
+  if (props.message.sender === 'assistant' && Array.isArray(newVal) && newVal.length > 0) {
+    // 如果是新增的思考过程（之前没有），且内容为空，则展开
+    const content = props.message.content || ''
+    if ((!oldVal || oldVal.length === 0) && content.length < 5) {
+      detailsOpen.value = true
+    }
+  }
+}, { deep: true })
 
 // 打开反馈弹窗
 const openFeedbackModal = () => {
@@ -605,8 +674,10 @@ watch(() => props.message.content, () => {
 .tool-events-panel {
   margin-top: 8px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-secondary);
+  overflow: hidden;
+  transition: all 0.2s ease;
 }
 
 .tool-events-summary {
@@ -615,17 +686,45 @@ watch(() => props.message.content, () => {
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  padding: 10px 12px;
+  padding: 10px 14px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.tool-events-summary:hover {
+  background-color: var(--bg-hover);
 }
 
 .tool-events-summary::-webkit-details-marker {
   display: none;
 }
 
-.tool-events-summary::after {
+.summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thinking-text {
+  font-weight: 500;
+}
+
+.summary-chevron {
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  margin-left: 12px; /* 确保图标与文字有足够间距 */
+}
+
+.tool-events-panel[open] .summary-chevron {
+  transform: rotate(90deg);
+}
+
+/* 移除原来的 ::after 伪元素 */
+/*.tool-events-summary::after {
   content: '展开';
   color: var(--text-secondary);
   font-weight: 400;
@@ -634,14 +733,7 @@ watch(() => props.message.content, () => {
 
 .tool-events-panel[open] .tool-events-summary::after {
   content: '收起';
-}
-
-.tool-events-count {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 400;
-  margin-right: 8px;
-}
+}*/
 
 .tool-events {
   border-top: 1px solid var(--border-color);

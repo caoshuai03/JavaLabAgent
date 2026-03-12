@@ -283,13 +283,42 @@ export const useChatStore = defineStore('chat', () => {
       const dbMessages = response.data || []
       
       // 转换后端消息格式为前端格式
-      messages.value = dbMessages.map(msg => ({
-        id: msg.id || generateMessageId(),
-        sender: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content,
-        timestamp: msg.createdAt || new Date().toISOString(),
-        toolEvents: []
-      }))
+      messages.value = dbMessages.map(msg => {
+        let content = msg.content || ''
+        let toolEvents = []
+        
+        // 解析思考过程
+        // 格式: <!-- thinking_process_start -->[...]<!-- thinking_process_end -->
+        const thinkingRegex = /<!-- thinking_process_start -->([\s\S]*?)<!-- thinking_process_end -->\n?/
+        const match = content.match(thinkingRegex)
+        
+        if (match) {
+          try {
+            // 解析 JSON 数组
+            const eventsJson = match[1]
+            // 后端保存的是 JSON 对象数组的字符串形式
+            const events = JSON.parse(eventsJson)
+            
+            // 转换事件格式 (如果需要) - 目前看后端返回的结构和前端需要的结构基本一致
+            // 前端 MessageItem 需要 toolEvents 包含 eventType, payload 等字段
+            // 后端 eventJson 生成的正是这种结构
+            toolEvents = events
+            
+            // 从内容中移除思考过程部分
+            content = content.replace(match[0], '')
+          } catch (e) {
+            console.error('解析思考过程失败:', e)
+          }
+        }
+
+        return {
+          id: msg.id || generateMessageId(),
+          sender: msg.role === 'user' ? 'user' : 'assistant',
+          content: content,
+          timestamp: msg.createdAt || new Date().toISOString(),
+          toolEvents: toolEvents
+        }
+      })
     } catch (error) {
       console.error('加载会话历史失败:', error)
       messages.value = []

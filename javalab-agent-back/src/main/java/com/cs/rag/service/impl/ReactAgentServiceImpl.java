@@ -73,7 +73,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         if (planOutcome.finalAnswer != null && !planOutcome.finalAnswer.isBlank()) {
             return Flux.concat(
                     Flux.fromIterable(planOutcome.events),
-                    streamTextAsEvents(planOutcome.finalAnswer, finalSessionId, traceId, userId, start)
+                    streamTextAsEvents(planOutcome.finalAnswer, finalSessionId, traceId, userId, start, planOutcome.events)
             );
         }
 
@@ -94,7 +94,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 .doOnComplete(() -> {
                     String aiResponse = fullResponseRef.get().toString();
                     if (!aiResponse.isEmpty()) {
-                        chatMessageService.saveAssistantMessage(finalSessionId, userId, aiResponse);
+                        saveMessageWithThinkingProcess(finalSessionId, userId, aiResponse, planOutcome.events);
                         log.info("ReactAgent完成: sessionId={}, traceId={}, length={}, cost={}ms",
                                 finalSessionId, traceId, aiResponse.length(), System.currentTimeMillis() - start);
                     }
@@ -255,7 +255,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return messages;
     }
 
-    private Flux<String> streamTextAsEvents(String text, String sessionId, String traceId, Long userId, long start) {
+    private Flux<String> streamTextAsEvents(String text, String sessionId, String traceId, Long userId, long start, List<String> toolEvents) {
         List<String> events = new ArrayList<>();
         events.add(eventJson("status", sessionId, traceId, Map.of("stage", "finalizing")));
         int chunkSize = 25;
@@ -265,10 +265,21 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         }
         events.add(eventJson("final", sessionId, traceId, Map.of("done", true)));
         return Flux.fromIterable(events).doOnComplete(() -> {
-            chatMessageService.saveAssistantMessage(sessionId, userId, text);
+            saveMessageWithThinkingProcess(sessionId, userId, text, toolEvents);
             log.info("ReactAgent完成: sessionId={}, traceId={}, length={}, cost={}ms",
                     sessionId, traceId, text.length(), System.currentTimeMillis() - start);
         });
+    }
+
+    private void saveMessageWithThinkingProcess(String sessionId, Long userId, String content, List<String> events) {
+        String fullContent = content;
+        if (events != null && !events.isEmpty()) {
+            // 将事件列表拼接成 JSON 数组字符串
+            String eventsJson = "[" + String.join(",", events) + "]";
+            // 添加特殊标记，用于前端解析
+            fullContent = "<!-- thinking_process_start -->" + eventsJson + "<!-- thinking_process_end -->\n" + content;
+        }
+        chatMessageService.saveAssistantMessage(sessionId, userId, fullContent);
     }
 
     private String eventJson(String eventType, String sessionId, String traceId, Map<String, Object> payload) {
