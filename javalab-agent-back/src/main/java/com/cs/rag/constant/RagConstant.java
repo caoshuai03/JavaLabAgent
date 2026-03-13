@@ -52,5 +52,8 @@ public class RagConstant {
      */
     public static final String NO_KNOWLEDGE_FOUND_LABEL = "\n\n[系统提示: 知识库中未检索到相关内容，请基于通用知识回答]\n";
 
-
+    /**
+     * 最大轮次
+     */
+    public static final int MAX_ROUNDS = 5;
 }
