@@ -1,5 +1,6 @@
 package com.cs.rag.service.impl;
 
+import com.cs.rag.constant.RagConstant;
 import com.cs.rag.llm.LLMProviderRegistry;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.PromptService;
@@ -113,7 +114,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         events.add(eventJson("session", sessionId, traceId, Map.of("sessionId", sessionId)));
         events.add(eventJson("status", sessionId, traceId, Map.of("stage", "thinking")));
         log.info("ReactAgent开始规划: sessionId={}, traceId={}, question={}", sessionId, traceId, message);
-        int maxRounds = 3;
+        int maxRounds = RagConstant.MAX_ROUNDS;
         for (int i = 1; i <= maxRounds; i++) {
             ActionDecision decision = decideNextAction(message, observations, model);
             log.info("ReactAgent规划结果: sessionId={}, traceId={}, round={}, action={}, tool={}",
