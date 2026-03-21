@@ -14,7 +14,7 @@
               
               <div class="tool-call-content">
                 <div class="tool-icon-wrapper">
-                  <span class="tool-icon">{{ getToolIcon(item.call.payload.toolName) }}</span>
+                  <span class="tool-icon" v-html="getToolIconSvg(item.call.payload.toolName)"></span>
                 </div>
                 <div class="tool-text">
                   <span class="tool-name">{{ getToolDisplayName(item.call.payload.toolName) }}</span>
@@ -23,9 +23,6 @@
                 </div>
                 <div class="tool-status-icon">
                   <span v-if="!item.result" class="loading-spinner"></span>
-                  <span v-else class="arrow-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  </span>
                 </div>
               </div>
             </div>
@@ -184,13 +181,17 @@ const toolCalls = computed(() => {
   return list
 })
 
-const getToolIcon = (toolName) => {
-  if (toolName === 'knowledge_search') return '🔍'
-  if (toolName === 'web_search') return '🌐'
-  if (toolName === 'read_file') return '📄'
-  if (toolName === 'write_file') return '📝'
-  if (toolName === 'run_command') return '💻'
-  return '🛠️'
+const getToolIconSvg = (toolName) => {
+  if (toolName === 'knowledge_search' || toolName === 'web_search') {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`
+  }
+  if (toolName === 'read_file' || toolName === 'write_file') {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
+  }
+  if (toolName === 'run_command') {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>`
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>`
 }
 
 const getToolDisplayName = (toolName) => {
@@ -199,26 +200,34 @@ const getToolDisplayName = (toolName) => {
   if (toolName === 'read_file') return '阅读'
   if (toolName === 'write_file') return '写入'
   if (toolName === 'run_command') return '运行命令'
+  if (toolName === 'session_recall') return '会话回顾'
   return toolName || '调用工具'
 }
 
 const getToolSummary = (item) => {
   try {
     const input = item.call.payload.input
+    const toolName = item.call.payload.toolName
     if (!input) return ''
-    if (item.call.payload.toolName === 'knowledge_search' && input.query) {
+    if (toolName === 'knowledge_search' && input.query) {
       return input.query
     }
-    if (item.call.payload.toolName === 'web_search' && input.query) {
+    if (toolName === 'web_search' && input.query) {
       return input.query
     }
-    if (item.call.payload.toolName === 'read_file' && input.file_path) {
+    if (toolName === 'read_file' && input.file_path) {
       return input.file_path.split('/').pop() || input.file_path.split('\\').pop()
     }
-    if (item.call.payload.toolName === 'run_command' && input.command) {
+    if (toolName === 'write_file' && input.file_path) {
+      return input.file_path.split('/').pop() || input.file_path.split('\\').pop()
+    }
+    if (toolName === 'run_command' && input.command) {
       return input.command
     }
-    // 默认展示第一个参数的值
+    if (toolName === 'session_recall') {
+      return '联系历史上下文'
+    }
+    // 默认展示操作的简短描述
     const keys = Object.keys(input)
     if (keys.length > 0) {
       let firstVal = String(input[keys[0]])
@@ -629,7 +638,7 @@ watch(() => props.message.content, () => {
   margin: 0 0 12px 0;
   border: 1px solid var(--border-color, #e5e7eb);
   border-radius: 12px;
-  background: var(--bg-secondary, #f9fafb);
+  background: transparent;
   overflow: hidden;
   max-width: 600px;
   
@@ -671,7 +680,7 @@ watch(() => props.message.content, () => {
 .tool-icon-wrapper {
   width: 24px;
   height: 24px;
-  background: var(--bg-secondary, #f9fafb);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -680,7 +689,9 @@ watch(() => props.message.content, () => {
 }
 
 .tool-icon {
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-secondary, #6b7280);
 }
 
