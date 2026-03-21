@@ -2,64 +2,35 @@
   <div :class="['message-item', `message-${message.sender}`]">
     <div class="message-container">
       <div class="message-content">
-        <details 
-          v-if="message.sender === 'assistant' && Array.isArray(message.toolEvents) && message.toolEvents.length > 0" 
-          class="tool-events-panel"
-          :open="detailsOpen"
-          @toggle="onToggle"
+        <!-- 思考过程与工具调用面板 -->
+        <div 
+          v-if="message.sender === 'assistant' && toolCalls.length > 0" 
+          class="tool-calls-panel"
         >
-          <summary class="tool-events-summary">
-            <div class="summary-left">
-              <span class="thinking-text">思考过程</span>
-            </div>
-            <svg 
-              class="summary-chevron" 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="16" 
-              height="16" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              stroke-width="2" 
-              stroke-linecap="round" 
-              stroke-linejoin="round"
-            >
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </summary>
-          <div class="tool-events">
-            <div v-for="(item, idx) in groupedToolEvents" :key="`group-${idx}`" class="tool-group-item">
-              <!-- Case 1: Tool Interaction -->
-              <div v-if="item.type === 'tool'" class="tool-interaction">
-                <div class="tool-header">
-                  <div class="tool-title-row">
-                    <span class="tool-icon">🛠️</span>
-                    <span class="tool-name">{{ item.call.payload.toolName }}</span>
-                  </div>
-                  <span class="tool-status" :class="{ success: item.result?.payload?.success, error: item.result && !item.result.payload.success }">
-                    {{ item.result ? (item.result.payload.success ? '成功' : '失败') : '执行中...' }}
+          <div class="tool-calls-list">
+            <div v-for="(item, idx) in toolCalls" :key="`tool-${idx}`" class="tool-call-item">
+              <!-- 左侧连接线 -->
+              <div class="tool-call-line" v-if="idx !== toolCalls.length - 1"></div>
+              
+              <div class="tool-call-content">
+                <div class="tool-icon-wrapper">
+                  <span class="tool-icon">{{ getToolIcon(item.call.payload.toolName) }}</span>
+                </div>
+                <div class="tool-text">
+                  <span class="tool-name">{{ getToolDisplayName(item.call.payload.toolName) }}</span>
+                  <span class="tool-divider" v-if="getToolSummary(item)">|</span>
+                  <span class="tool-summary" v-if="getToolSummary(item)">{{ getToolSummary(item) }}</span>
+                </div>
+                <div class="tool-status-icon">
+                  <span v-if="!item.result" class="loading-spinner"></span>
+                  <span v-else class="arrow-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                   </span>
                 </div>
-                <div class="tool-details">
-                  <div class="tool-detail-row">
-                    <span class="tool-label">输入:</span>
-                    <span class="tool-value">{{ prettyJson(item.call.payload.input) }}</span>
-                  </div>
-                  <div v-if="item.result" class="tool-detail-row">
-                    <span class="tool-label">输出:</span>
-                    <span class="tool-value">{{ prettyJson(item.result.payload.data || item.result.payload.error) }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Case 2: Status -->
-              <div v-else-if="item.type === 'status'" class="status-item">
-                <span class="status-icon">💭</span>
-                <span class="status-text">{{ formatStage(item.event.payload) }}</span>
               </div>
             </div>
           </div>
-        </details>
+        </div>
         <div class="message-text" v-html="formatContent(message.content)" ref="messageTextRef" @click="handleCodeBlockClick"></div>
 
         <!-- 消息底部区域：操作按钮 + 时间 -->
@@ -124,55 +95,6 @@ const chatStore = useChatStore()
 const messageTextRef = ref(null)
 const copied = ref(false) // 复制成功状态
 const showFeedbackModal = ref(false) // 反馈弹窗状态
-const detailsOpen = ref(false) // 思考过程展开状态
-
-// 监听展开状态变化
-const onToggle = (event) => {
-  detailsOpen.value = event.target.open
-}
-
-// 初始化和监听思考过程状态
-const initThinkingState = () => {
-  if (props.message.sender === 'assistant' && Array.isArray(props.message.toolEvents) && props.message.toolEvents.length > 0) {
-    // 如果没有内容或者内容很短（正在思考或刚开始输出），则默认展开
-    // 如果有较多内容（已经输出完毕或输出了一部分），则默认折叠
-    const content = props.message.content || ''
-    if (content.length < 5) {
-      detailsOpen.value = true
-    } else {
-      detailsOpen.value = false
-    }
-  }
-}
-
-onMounted(() => {
-  initThinkingState()
-})
-
-// 监听内容变化，实现"出字时折叠"
-watch(() => props.message.content, (newVal, oldVal) => {
-  if (props.message.sender === 'assistant' && Array.isArray(props.message.toolEvents) && props.message.toolEvents.length > 0) {
-    const oldLen = oldVal ? oldVal.length : 0
-    const newLen = newVal ? newVal.length : 0
-    
-    // 当内容从很少变为较多时（开始输出回答），自动折叠
-    // 阈值设为 5 个字符，避免空字符串到第一个字的抖动
-    if (oldLen < 5 && newLen >= 5 && detailsOpen.value) {
-      detailsOpen.value = false
-    }
-  }
-})
-
-// 监听工具事件变化，实现"思考时展开"
-watch(() => props.message.toolEvents, (newVal, oldVal) => {
-  if (props.message.sender === 'assistant' && Array.isArray(newVal) && newVal.length > 0) {
-    // 如果是新增的思考过程（之前没有），且内容为空，则展开
-    const content = props.message.content || ''
-    if ((!oldVal || oldVal.length === 0) && content.length < 5) {
-      detailsOpen.value = true
-    }
-  }
-}, { deep: true })
 
 // 打开反馈弹窗
 const openFeedbackModal = () => {
@@ -231,7 +153,7 @@ const prettyJson = (obj) => {
   }
 }
 
-const groupedToolEvents = computed(() => {
+const toolCalls = computed(() => {
   if (!props.message.toolEvents || !props.message.toolEvents.length) return []
   
   const list = []
@@ -256,27 +178,59 @@ const groupedToolEvents = computed(() => {
         callItem.result = e
         activeCalls.delete(round)
       }
-    } else if (e.eventType === 'status') {
-      const stage = e.payload?.stage
-      // 过滤掉冗余状态，只展示关键节点
-      if (stage === 'thinking' || stage === 'ready_to_answer' || stage === 'tool_running' || stage === 'tool_done') {
-         list.push({ type: 'status', event: e })
-      }
     }
   })
 
   return list
 })
 
-const formatStage = (payload) => {
-  if (!payload || !payload.stage) return '进行中...'
-  const map = {
-    'thinking': '正在思考...',
-    'ready_to_answer': '思考结束，开始回答',
-    'tool_running': '正在使用工具...',
-    'tool_done': '工具调用完成'
+const getToolIcon = (toolName) => {
+  if (toolName === 'knowledge_search') return '🔍'
+  if (toolName === 'web_search') return '🌐'
+  if (toolName === 'read_file') return '📄'
+  if (toolName === 'write_file') return '📝'
+  if (toolName === 'run_command') return '💻'
+  return '🛠️'
+}
+
+const getToolDisplayName = (toolName) => {
+  if (toolName === 'knowledge_search') return '知识检索'
+  if (toolName === 'web_search') return '搜索网页'
+  if (toolName === 'read_file') return '阅读'
+  if (toolName === 'write_file') return '写入'
+  if (toolName === 'run_command') return '运行命令'
+  return toolName || '调用工具'
+}
+
+const getToolSummary = (item) => {
+  try {
+    const input = item.call.payload.input
+    if (!input) return ''
+    if (item.call.payload.toolName === 'knowledge_search' && input.query) {
+      return input.query
+    }
+    if (item.call.payload.toolName === 'web_search' && input.query) {
+      return input.query
+    }
+    if (item.call.payload.toolName === 'read_file' && input.file_path) {
+      return input.file_path.split('/').pop() || input.file_path.split('\\').pop()
+    }
+    if (item.call.payload.toolName === 'run_command' && input.command) {
+      return input.command
+    }
+    // 默认展示第一个参数的值
+    const keys = Object.keys(input)
+    if (keys.length > 0) {
+      let firstVal = String(input[keys[0]])
+      if (typeof input[keys[0]] === 'object') {
+         firstVal = JSON.stringify(input[keys[0]])
+      }
+      return firstVal.length > 30 ? firstVal.substring(0, 30) + '...' : firstVal
+    }
+  } catch (e) {
+    // ignore
   }
-  return map[payload.stage] || payload.stage
+  return ''
 }
 
 // 处理复制按钮点击 - 复制整条消息内容
@@ -671,182 +625,121 @@ watch(() => props.message.content, () => {
   }
 }
 
-.tool-events-panel {
-  margin-top: 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-secondary);
+.tool-calls-panel {
+  margin: 0 0 12px 0;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  background: var(--bg-secondary, #f9fafb);
   overflow: hidden;
-  transition: all 0.2s ease;
-}
-
-.tool-events-summary {
-  list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  user-select: none;
-  transition: background-color 0.2s;
-}
-
-.tool-events-summary:hover {
-  background-color: var(--bg-hover);
-}
-
-.tool-events-summary::-webkit-details-marker {
-  display: none;
-}
-
-.summary-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.thinking-text {
-  font-weight: 500;
-}
-
-.summary-chevron {
-  color: var(--text-secondary);
-  transition: transform 0.2s ease;
-  flex-shrink: 0;
-  margin-left: 12px; /* 确保图标与文字有足够间距 */
-}
-
-.tool-events-panel[open] .summary-chevron {
-  transform: rotate(90deg);
-}
-
-/* 移除原来的 ::after 伪元素 */
-/*.tool-events-summary::after {
-  content: '展开';
-  color: var(--text-secondary);
-  font-weight: 400;
-  font-size: 12px;
-}
-
-.tool-events-panel[open] .tool-events-summary::after {
-  content: '收起';
-}*/
-
-.tool-events {
-  border-top: 1px solid var(--border-color);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tool-group-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px dashed var(--border-color);
-
-  &:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
+  max-width: 600px;
+  
+  @media (max-width: 768px) {
+    margin: 0 0 12px 0;
+    max-width: 100%;
   }
 }
 
-.tool-interaction {
-  background-color: var(--bg-hover);
-  border-radius: 6px;
-  padding: 8px;
-  border: 1px solid var(--border-color);
+.tool-calls-list {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.tool-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  font-size: 13px;
+.tool-call-item {
+  position: relative;
 }
 
-.tool-title-row {
+.tool-call-line {
+  position: absolute;
+  left: 11.5px;
+  top: 24px;
+  bottom: -20px;
+  width: 1px;
+  border-left: 1px dashed var(--border-color, #d1d5db);
+  z-index: 1;
+}
+
+.tool-call-content {
   display: flex;
   align-items: center;
-  gap: 6px;
+  position: relative;
+  z-index: 2;
+  cursor: default;
+}
+
+.tool-icon-wrapper {
+  width: 24px;
+  height: 24px;
+  background: var(--bg-secondary, #f9fafb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 12px;
 }
 
 .tool-icon {
-  font-size: 14px;
+  font-size: 16px;
+  color: var(--text-secondary, #6b7280);
 }
 
-.tool-name {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.tool-status {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-
-  &.success {
-    background-color: rgba(16, 163, 127, 0.1);
-    color: #10a37f;
-  }
-  
-  &.error {
-    background-color: rgba(211, 47, 47, 0.1);
-    color: #d32f2f;
-  }
-}
-
-.tool-details {
-  font-size: 12px;
-  color: var(--text-secondary);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--bg-primary);
-  padding: 6px;
-  border-radius: 4px;
-}
-
-.tool-detail-row {
-  display: flex;
-  gap: 6px;
-  overflow: hidden;
-}
-
-.tool-label {
-  flex-shrink: 0;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.tool-value {
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-family: monospace;
-  color: var(--text-primary);
-  opacity: 0.9;
-}
-
-.status-item {
+.tool-text {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  padding: 4px 8px;
-  font-style: italic;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
-.status-icon {
+.tool-name {
+  font-size: 14px;
+  color: var(--text-primary, #374151);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.tool-divider {
+  color: var(--border-color, #d1d5db);
   font-size: 12px;
+  flex-shrink: 0;
+}
+
+.tool-summary {
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-status-icon {
+  margin-left: 12px;
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary, #9ca3af);
+  flex-shrink: 0;
+}
+
+.arrow-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #6b7280);
+}
+
+.loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color, #e5e7eb);
+  border-top-color: var(--text-secondary, #6b7280);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 // 消息底部区域：复制按钮 + 时间
