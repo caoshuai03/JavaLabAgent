@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
+import reactor.core.publisher.FluxSink;
 
 @Slf4j
 @Service
@@ -57,6 +57,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     @Override
     public Flux<String> chat(String message, String sessionId, Long userId, String model) {
+        // 预处理阶段（同步，快速完成）
         String finalSessionId = ragConversationSupport.prepareSession(message, sessionId, userId);
         List<Message> contextMessages = ragConversationSupport.buildContext(finalSessionId, userId);
         chatMessageService.saveUserMessage(finalSessionId, userId, message);
@@ -70,49 +71,90 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         String traceId = UUID.randomUUID().toString().replace("-", "");
         long start = System.currentTimeMillis();
 
-        PlanOutcome planOutcome = runPlanningLoop(message, finalSessionId, userId, effectiveModel, traceId);
-        if (planOutcome.finalAnswer != null && !planOutcome.finalAnswer.isBlank()) {
-            return Flux.concat(
-                    Flux.fromIterable(planOutcome.events),
-                    streamTextAsEvents(planOutcome.finalAnswer, finalSessionId, traceId, userId, start, planOutcome.events)
-            );
-        }
+        // 使用 Flux.create 实现实时流式推送，工具调用事件逐个发送到前端
+        return Flux.<String>create(sink -> {
+            Thread thread = new Thread(() -> {
+                try {
+                    // 在子线程中执行规划循环，每个事件实时推送
+                    PlanOutcome planOutcome = runPlanningLoop(message, finalSessionId, userId, effectiveModel, traceId, sink);
 
-        ChatModel targetChatModel = llmProviderRegistry.getChatModel(effectiveModel);
-        ChatClient chatClient = ChatClient.builder(targetChatModel).build();
-        ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
-                .system(promptService.getChatDefaultPrompt())
-                .messages(buildFinalMessages(allMessages, planOutcome.observations))
-                .options(ChatOptions.builder().model(effectiveModel).build());
-
-        AtomicReference<StringBuilder> fullResponseRef = new AtomicReference<>(new StringBuilder());
-        Flux<String> streamFlux = promptSpec.stream()
-                .content()
-                .map(chunk -> {
-                    fullResponseRef.get().append(chunk);
-                    return eventJson("token", finalSessionId, traceId, Map.of("content", chunk));
-                })
-                .doOnComplete(() -> {
-                    String aiResponse = fullResponseRef.get().toString();
-                    if (!aiResponse.isEmpty()) {
-                        saveMessageWithThinkingProcess(finalSessionId, userId, aiResponse, planOutcome.events);
-                        log.info("ReactAgent完成: sessionId={}, traceId={}, length={}, cost={}ms",
-                                finalSessionId, traceId, aiResponse.length(), System.currentTimeMillis() - start);
+                    if (planOutcome.finalAnswer != null && !planOutcome.finalAnswer.isBlank()) {
+                        // 规划器直接给出了最终答案，流式推送 token 事件
+                        streamTextDirectly(sink, planOutcome.finalAnswer, finalSessionId, traceId);
+                        // 保存消息并发送 final 事件
+                        saveMessageWithThinkingProcess(finalSessionId, userId, planOutcome.finalAnswer, planOutcome.events);
+                        sink.next(eventJson("final", finalSessionId, traceId, Map.of("done", true)));
+                        log.info("ReactAgent完成(直接回答): sessionId={}, traceId={}, cost={}ms",
+                                finalSessionId, traceId, System.currentTimeMillis() - start);
+                        sink.complete();
+                        return;
                     }
-                })
-                .concatWithValues(eventJson("final", finalSessionId, traceId, Map.of("done", true)))
-                .onErrorResume(e -> Flux.just(eventJson("error", finalSessionId, traceId, Map.of("message", e.getMessage()))));
 
-        return Flux.concat(Flux.fromIterable(planOutcome.events), streamFlux);
+                    // 需要 LLM 流式生成最终回答，切换到 Flux 订阅模式
+                    ChatModel targetChatModel = llmProviderRegistry.getChatModel(effectiveModel);
+                    ChatClient chatClient = ChatClient.builder(targetChatModel).build();
+                    ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
+                            .system(promptService.getChatDefaultPrompt())
+                            .messages(buildFinalMessages(allMessages, planOutcome.observations))
+                            .options(ChatOptions.builder().model(effectiveModel).build());
+
+                    // 收集完整回复用于保存
+                    StringBuilder fullResponse = new StringBuilder();
+                    // 订阅 LLM 流式输出，逐 token 推送
+                    promptSpec.stream()
+                            .content()
+                            .doOnNext(chunk -> {
+                                fullResponse.append(chunk);
+                                sink.next(eventJson("token", finalSessionId, traceId, Map.of("content", chunk)));
+                            })
+                            .doOnComplete(() -> {
+                                String aiResponse = fullResponse.toString();
+                                if (!aiResponse.isEmpty()) {
+                                    saveMessageWithThinkingProcess(finalSessionId, userId, aiResponse, planOutcome.events);
+                                    log.info("ReactAgent完成: sessionId={}, traceId={}, length={}, cost={}ms",
+                                            finalSessionId, traceId, aiResponse.length(), System.currentTimeMillis() - start);
+                                }
+                                sink.next(eventJson("final", finalSessionId, traceId, Map.of("done", true)));
+                                sink.complete();
+                            })
+                            .doOnError(e -> {
+                                sink.next(eventJson("error", finalSessionId, traceId, Map.of("message", e.getMessage())));
+                                sink.complete();
+                            })
+                            .subscribe();
+                } catch (Exception e) {
+                    log.error("ReactAgent异常: sessionId={}, traceId={}", finalSessionId, traceId, e);
+                    sink.next(eventJson("error", finalSessionId, traceId, Map.of("message", e.getMessage() != null ? e.getMessage() : "未知错误")));
+                    sink.complete();
+                }
+            });
+            thread.setName("react-agent-" + traceId);
+            thread.setDaemon(true);
+            thread.start();
+        });
     }
 
-    private PlanOutcome runPlanningLoop(String message, String sessionId, Long userId, String model, String traceId) {
+    /**
+     * 执行规划循环，每个事件通过 sink 实时推送到前端（逐个显示工具调用）
+     *
+     * @param sink SSE 流的 sink，用于实时推送事件
+     * @return 规划结果（events 列表仅用于持久化，推送已通过 sink 完成）
+     */
+    private PlanOutcome runPlanningLoop(String message, String sessionId, Long userId, String model, String traceId, FluxSink<String> sink) {
+        // events 列表仅用于最终持久化保存，实时推送通过 sink 完成
         List<String> events = new ArrayList<>();
         List<String> observations = new ArrayList<>();
         Set<String> toolSignatureHistory = new LinkedHashSet<>();
         Set<String> emptyKnowledgeQueries = new LinkedHashSet<>();
-        events.add(eventJson("session", sessionId, traceId, Map.of("sessionId", sessionId)));
-        events.add(eventJson("status", sessionId, traceId, Map.of("stage", "thinking")));
+
+        // 辅助方法：同时推送到 sink 和记录到 events 列表
+        java.util.function.Consumer<String> emit = (event) -> {
+            sink.next(event);
+            events.add(event);
+        };
+
+        emit.accept(eventJson("session", sessionId, traceId, Map.of("sessionId", sessionId)));
+        emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "thinking")));
         log.info("ReactAgent开始规划: sessionId={}, traceId={}, question={}", sessionId, traceId, message);
         int maxRounds = RagConstant.MAX_ROUNDS;
         for (int i = 1; i <= maxRounds; i++) {
@@ -124,12 +166,12 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 if (answer == null || answer.isBlank()) {
                     answer = "我已完成工具分析，下面给出总结。";
                 }
-                events.add(eventJson("status", sessionId, traceId, Map.of("stage", "ready_to_answer", "round", i)));
+                emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "ready_to_answer", "round", i)));
                 log.info("ReactAgent结束规划并直接回答: sessionId={}, traceId={}, round={}", sessionId, traceId, i);
                 return new PlanOutcome(events, observations, answer);
             }
             if (!"tool".equals(decision.action)) {
-                events.add(eventJson("status", sessionId, traceId, Map.of("stage", "ready_to_answer", "round", i)));
+                emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "ready_to_answer", "round", i)));
                 log.info("ReactAgent规划返回非tool动作，转直接回答: sessionId={}, traceId={}, round={}, raw={}",
                         sessionId, traceId, i, decision.rawResponse);
                 return new PlanOutcome(events, observations, decision.rawResponse);
@@ -138,7 +180,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             Map<String, Object> toolInput = decision.toolInput == null ? new HashMap<>() : decision.toolInput;
             String toolSignature = toolName + "|" + toJsonQuietly(toolInput);
             if (toolSignatureHistory.contains(toolSignature)) {
-                events.add(eventJson("status", sessionId, traceId,
+                emit.accept(eventJson("status", sessionId, traceId,
                         Map.of("stage", "stop_repeated_tool", "round", i, "toolName", toolName)));
                 observations.add("检测到重复工具调用，停止继续调用并进入最终回答。");
                 log.info("ReactAgent阻止重复工具调用: sessionId={}, traceId={}, round={}, signature={}",
@@ -148,7 +190,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             if ("knowledge_search".equals(toolName)) {
                 String query = extractKnowledgeQuery(toolInput);
                 if (query != null && emptyKnowledgeQueries.contains(query)) {
-                    events.add(eventJson("status", sessionId, traceId,
+                    emit.accept(eventJson("status", sessionId, traceId,
                             Map.of("stage", "skip_redundant_knowledge_search", "round", i, "query", query)));
                     observations.add("同一检索词已无结果，停止重复检索并进入最终回答。");
                     log.info("ReactAgent跳过重复空结果检索: sessionId={}, traceId={}, round={}, query={}",
@@ -157,8 +199,9 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 }
             }
             toolSignatureHistory.add(toolSignature);
-            events.add(eventJson("status", sessionId, traceId, Map.of("stage", "tool_running", "round", i, "toolName", toolName)));
-            events.add(eventJson("tool_call", sessionId, traceId, Map.of("round", i, "toolName", toolName, "input", toolInput)));
+            // 实时推送 tool_running 状态，前端立即显示该工具调用（带 loading 动画）
+            emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "tool_running", "round", i, "toolName", toolName)));
+            emit.accept(eventJson("tool_call", sessionId, traceId, Map.of("round", i, "toolName", toolName, "input", toolInput)));
             log.info("ReactAgent调用工具: sessionId={}, traceId={}, round={}, tool={}, input={}",
                     sessionId, traceId, i, toolName, toJsonQuietly(toolInput));
             long toolStart = System.currentTimeMillis();
@@ -181,12 +224,13 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 resultPayload.put("error", result.getErrorMessage());
                 observations.add("工具 " + result.getToolName() + " 错误: " + result.getErrorMessage());
             }
-            events.add(eventJson("tool_result", sessionId, traceId, resultPayload));
-            events.add(eventJson("status", sessionId, traceId, Map.of("stage", "tool_done", "round", i)));
+            // 实时推送工具结果，前端立即更新该工具调用状态（去掉 loading）
+            emit.accept(eventJson("tool_result", sessionId, traceId, resultPayload));
+            emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "tool_done", "round", i)));
             log.info("ReactAgent工具结果: sessionId={}, traceId={}, round={}, tool={}, success={}, costMs={}",
                     sessionId, traceId, i, result.getToolName(), result.isSuccess(), resultPayload.get("costMs"));
         }
-        events.add(eventJson("status", sessionId, traceId, Map.of("stage", "plan_round_limit_reached", "round", maxRounds)));
+        emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "plan_round_limit_reached", "round", maxRounds)));
         log.info("ReactAgent达到最大规划轮次: sessionId={}, traceId={}, maxRounds={}", sessionId, traceId, maxRounds);
         return new PlanOutcome(events, observations, null);
     }
@@ -256,20 +300,16 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return messages;
     }
 
-    private Flux<String> streamTextAsEvents(String text, String sessionId, String traceId, Long userId, long start, List<String> toolEvents) {
-        List<String> events = new ArrayList<>();
-        events.add(eventJson("status", sessionId, traceId, Map.of("stage", "finalizing")));
+    /**
+     * 将文本分块作为 token 事件直接推送到 sink（用于规划器直接回答的场景）
+     */
+    private void streamTextDirectly(FluxSink<String> sink, String text, String sessionId, String traceId) {
+        sink.next(eventJson("status", sessionId, traceId, Map.of("stage", "finalizing")));
         int chunkSize = 25;
         for (int i = 0; i < text.length(); i += chunkSize) {
             int end = Math.min(i + chunkSize, text.length());
-            events.add(eventJson("token", sessionId, traceId, Map.of("content", text.substring(i, end))));
+            sink.next(eventJson("token", sessionId, traceId, Map.of("content", text.substring(i, end))));
         }
-        events.add(eventJson("final", sessionId, traceId, Map.of("done", true)));
-        return Flux.fromIterable(events).doOnComplete(() -> {
-            saveMessageWithThinkingProcess(sessionId, userId, text, toolEvents);
-            log.info("ReactAgent完成: sessionId={}, traceId={}, length={}, cost={}ms",
-                    sessionId, traceId, text.length(), System.currentTimeMillis() - start);
-        });
     }
 
     private void saveMessageWithThinkingProcess(String sessionId, Long userId, String content, List<String> events) {
