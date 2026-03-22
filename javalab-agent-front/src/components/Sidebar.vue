@@ -32,6 +32,15 @@
           <FolderIcon :size="18" />
           <span v-if="!chatStore.sidebarCollapsed">知识库</span>
         </button>
+
+        <button
+          @click="handleMcpSettings"
+          class="nav-item"
+          :title="chatStore.sidebarCollapsed ? 'MCP 工具' : ''"
+        >
+          <ToolIcon :size="18" />
+          <span v-if="!chatStore.sidebarCollapsed">MCP 工具</span>
+        </button>
       </div>
     </div>
 
@@ -81,6 +90,7 @@ import ConversationList from './ConversationList.vue'
 import UserProfile from './UserProfile.vue'
 import PlusIcon from './icons/PlusIcon.vue'
 import FolderIcon from './icons/FolderIcon.vue'
+import ToolIcon from './icons/ToolIcon.vue'
 import EditIcon from './icons/EditIcon.vue'
 
 import ChevronLeftIcon from './icons/ChevronLeftIcon.vue'
@@ -133,6 +143,10 @@ const handleNewConversation = () => {
 
 const handleKnowledgeManagement = () => {
   router.push('/knowledge')
+}
+
+const handleMcpSettings = () => {
+  router.push('/mcp')
 }
 </script>
 

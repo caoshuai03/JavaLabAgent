@@ -32,6 +32,10 @@ public class PromptServiceImpl implements PromptService {
     @Value("classpath:/prompts/chat-summary.md")
     private Resource chatSummaryPrompt;
 
+    /** ReAct Agent 规划器系统提示词资源文件 */
+    @Value("classpath:/prompts/react-system-prompt.md")
+    private Resource reactAgentPrompt;
+
     /**
      * 获取默认对话提示词
      * 
@@ -50,6 +54,16 @@ public class PromptServiceImpl implements PromptService {
     @Override
     public String getChatSummaryPrompt() {
         return readFile(chatSummaryPrompt);
+    }
+
+    /**
+     * 获取 ReAct Agent 规划器系统提示词
+     *
+     * @return 处理后的提示词内容
+     */
+    @Override
+    public String getReactAgentPrompt() {
+        return readFile(reactAgentPrompt);
     }
 
     /**
@@ -75,15 +89,14 @@ public class PromptServiceImpl implements PromptService {
             
             for (String line : lines) {
                 String trimmedLine = line.trim();
-                // 跳过Markdown标题和描述行
-                if (trimmedLine.startsWith("#") || trimmedLine.startsWith("用于")) {
-                    continue;
+                if (!foundContent) {
+                    // 只跳过文件开头的Markdown标题、描述行和空行
+                    // 一旦遇到正文内容，后续所有行（包括##标题）都保留
+                    if (trimmedLine.startsWith("#") || trimmedLine.startsWith("用于") || trimmedLine.isEmpty()) {
+                        continue;
+                    }
+                    foundContent = true;
                 }
-                // 跳过开头的空行
-                if (!foundContent && trimmedLine.isEmpty()) {
-                    continue;
-                }
-                foundContent = true;
                 result.append(line).append("\n");
             }
             

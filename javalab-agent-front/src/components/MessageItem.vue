@@ -195,12 +195,19 @@ const getToolIconSvg = (toolName) => {
 }
 
 const getToolDisplayName = (toolName) => {
-  if (toolName === 'knowledge_search') return '知识检索'
-  if (toolName === 'web_search') return '搜索网页'
-  if (toolName === 'read_file') return '阅读'
-  if (toolName === 'write_file') return '写入'
-  if (toolName === 'run_command') return '运行命令'
-  if (toolName === 'session_recall') return '会话回顾'
+  // 内置工具名称映射
+  const builtinNames = {
+    'knowledge_search': '知识检索',
+    'web_search': '搜索网页',
+    'read_file': '阅读',
+    'write_file': '写入',
+    'run_command': '运行命令',
+    'session_recall': '会话回顾',
+    'current_time': '获取时间',
+    'calculator': '计算器'
+  }
+  if (builtinNames[toolName]) return builtinNames[toolName]
+  // MCP外部工具：直接显示工具名
   return toolName || '调用工具'
 }
 

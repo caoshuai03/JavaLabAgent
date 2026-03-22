@@ -93,8 +93,10 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                     // 需要 LLM 流式生成最终回答，切换到 Flux 订阅模式
                     ChatModel targetChatModel = llmProviderRegistry.getChatModel(effectiveModel);
                     ChatClient chatClient = ChatClient.builder(targetChatModel).build();
+                    // ReactAgent最终回答使用通用prompt，不限定Java领域，综合工具观察结果回答
+                    String reactFinalSystemPrompt = buildReactFinalSystemPrompt();
                     ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
-                            .system(promptService.getChatDefaultPrompt())
+                            .system(reactFinalSystemPrompt)
                             .messages(buildFinalMessages(allMessages, planOutcome.observations))
                             .options(ChatOptions.builder().model(effectiveModel).build());
 
@@ -156,6 +158,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         emit.accept(eventJson("session", sessionId, traceId, Map.of("sessionId", sessionId)));
         emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "thinking")));
         log.info("ReactAgent开始规划: sessionId={}, traceId={}, question={}", sessionId, traceId, message);
+        log.info("ReactAgent当前可调用工具列表: sessionId={}, traceId={}, tools={}",
+                sessionId, traceId, toJsonQuietly(reactAgentToolService.toolSchemas()));
         int maxRounds = RagConstant.MAX_ROUNDS;
         for (int i = 1; i <= maxRounds; i++) {
             ActionDecision decision = decideNextAction(message, observations, model);
@@ -213,12 +217,16 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             resultPayload.put("costMs", System.currentTimeMillis() - toolStart);
             if (result.isSuccess()) {
                 resultPayload.put("data", result.getData());
-                observations.add("工具 " + result.getToolName() + " 返回: " + toJsonQuietly(result.getData()));
                 if (isKnowledgeSearchNoResult(result.getToolName(), result.getData())) {
+                    // 知识库无结果时，给出更明确的引导信息，帮助planner选择其他工具
                     String query = extractKnowledgeQuery(toolInput);
                     if (query != null && !query.isBlank()) {
                         emptyKnowledgeQueries.add(query);
                     }
+                    observations.add("工具 knowledge_search 对查询\"" + (query != null ? query : "") +
+                            "\"返回0条结果，知识库中无相关内容。请勿再次调用knowledge_search，应尝试其他可用工具（如联网搜索类MCP工具）或直接基于通用知识回答。");
+                } else {
+                    observations.add("工具 " + result.getToolName() + " 返回: " + toJsonQuietly(result.getData()));
                 }
             } else {
                 resultPayload.put("error", result.getErrorMessage());
@@ -237,30 +245,36 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     private ActionDecision decideNextAction(String message, List<String> observations, String model) {
         String toolList = toJsonQuietly(reactAgentToolService.toolSchemas());
-        String obs = observations.isEmpty() ? "[]"
-                : observations.stream().map(s -> "- " + s).reduce((a, b) -> a + "\n" + b).orElse("[]");
-        String plannerPrompt = """
-                你是一个ReAct规划器。你只能输出JSON，不要输出任何额外文本。
+        String obs = observations.isEmpty() ? "无"
+                : observations.stream().map(s -> "- " + s).reduce((a, b) -> a + "\n" + b).orElse("无");
+
+        // 使用外部化的 ReAct 系统提示词（react-system-prompt.md）
+        String systemPrompt = promptService.getReactAgentPrompt();
+
+        // 用户消息：提供可用工具列表、用户问题、已有观察
+        String userPrompt = """
                 可用工具列表:
                 %s
+
                 用户问题:
                 %s
+
                 已有观察:
                 %s
-                如果还需要调用工具，输出:
-                {"action":"tool","toolName":"工具名","toolInput":{"key":"value"}}
-                如果可以直接回答，输出:
-                {"action":"final","finalAnswer":"最终答案"}
+
+                请输出你的决策JSON:
                 """.formatted(toolList, message, obs);
         try {
             ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
             ChatClient chatClient = ChatClient.builder(targetChatModel).build();
             String content = chatClient.prompt()
-                    .system("你必须严格返回JSON。")
-                    .user(plannerPrompt)
+                    .system(systemPrompt)
+                    .user(userPrompt)
                     .options(ChatOptions.builder().model(model).temperature(0.1).build())
                     .call()
                     .content();
+            // 记录LLM原始响应，便于排查规划异常（如不调用工具直接回答）
+            log.debug("ReactAgent规划器LLM原始响应: model={}, response={}", model, content);
             return parseDecision(content);
         } catch (Exception e) {
             ActionDecision decision = new ActionDecision();
@@ -289,6 +303,32 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             decision.finalAnswer = content;
         }
         return decision;
+    }
+
+    /**
+     * 构建 ReactAgent 最终回答阶段的系统提示词
+     * 比 chat-default.md 更通用，不限定 Java 领域，允许综合工具结果回答各类问题
+     */
+    private String buildReactFinalSystemPrompt() {
+        return """
+                你是一个智能助手。你需要根据用户的问题和整个对话上下文（包括工具调用及其结果）提供全面、准确的回答。
+
+                ## 处理工具调用上下文
+                当对话中包含工具调用及其结果时，你需要：
+                1. 仔细分析工具调用的目的和返回结果
+                2. 将工具返回的信息与用户的原始问题结合起来
+                3. 基于综合信息提供完整的回答
+                4. 如果工具返回了联网搜索结果，请整理并呈现关键信息
+
+                ## 回答要求
+                - 全面性：考虑整个对话历史和工具调用结果
+                - 准确性：基于工具返回的真实信息进行回答
+                - 清晰性：表达清晰，逻辑连贯，适当使用 Markdown 格式
+                - 实用性：提供有实际帮助的信息
+                - 如果涉及知识库检索到的内容，加上前缀"【根据知识库】："
+                - 如果涉及联网搜索到的内容，加上前缀"【根据联网搜索】："
+                - 如果是基于通用知识回答，加上前缀"【根据通用知识】："
+                """;
     }
 
     private List<Message> buildFinalMessages(List<Message> allMessages, List<String> observations) {

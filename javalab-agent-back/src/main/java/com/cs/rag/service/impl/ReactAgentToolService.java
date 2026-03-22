@@ -1,7 +1,10 @@
 package com.cs.rag.service.impl;
 
 import com.cs.rag.entity.ChatMessage;
+import com.cs.rag.mcp.McpClientManager;
+import com.cs.rag.mcp.McpToolInfo;
 import com.cs.rag.service.ChatMessageService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 
@@ -16,16 +19,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
+@Slf4j
 @Service
 public class ReactAgentToolService {
 
     private final RagConversationSupport ragConversationSupport;
     private final ChatMessageService chatMessageService;
+    /** MCP客户端管理器，负责与外部MCP工具服务器通信 */
+    private final McpClientManager mcpClientManager;
 
     public ReactAgentToolService(RagConversationSupport ragConversationSupport,
-                                 ChatMessageService chatMessageService) {
+                                 ChatMessageService chatMessageService,
+                                 McpClientManager mcpClientManager) {
         this.ragConversationSupport = ragConversationSupport;
         this.chatMessageService = chatMessageService;
+        this.mcpClientManager = mcpClientManager;
     }
 
     public ToolExecutionResult execute(String toolName, Map<String, Object> input, String sessionId, Long userId) {
@@ -41,15 +49,57 @@ public class ReactAgentToolService {
         if ("session_recall".equals(toolName)) {
             return sessionRecall(input, sessionId, userId);
         }
+
+        // 尝试从MCP工具服务器执行（动态扩展的外部工具）
+        McpToolInfo mcpTool = mcpClientManager.findTool(toolName);
+        if (mcpTool != null) {
+            return executeMcpTool(toolName, input);
+        }
+
         return ToolExecutionResult.error(toolName, "不支持的工具");
     }
 
     public List<Map<String, Object>> toolSchemas() {
         List<Map<String, Object>> tools = new ArrayList<>();
+        // 内置工具
         tools.add(toolSchema("current_time", "获取当前时间", List.of("timezone"), "timezone: 时区，示例 Asia/Shanghai，可选"));
         tools.add(toolSchema("calculator", "计算数学表达式", List.of("expression"), "expression: 仅支持 + - * / ( ) 和小数"));
         tools.add(toolSchema("knowledge_search", "查询知识库", List.of("query"), "query: 检索问题"));
         tools.add(toolSchema("session_recall", "回顾当前会话消息", List.of("limit"), "limit: 回顾条数，默认5，最大20"));
+
+        // 动态追加MCP外部工具
+        List<McpToolInfo> mcpTools = mcpClientManager.getAllTools();
+        for (McpToolInfo mcpTool : mcpTools) {
+            Map<String, Object> schema = new HashMap<>();
+            schema.put("name", mcpTool.getName());
+            schema.put("description", mcpTool.getDescription());
+            schema.put("source", "mcp:" + mcpTool.getServerName());
+            // 从inputSchema中提取参数名列表
+            if (mcpTool.getInputSchema() != null && mcpTool.getInputSchema().containsKey("properties")) {
+                Object props = mcpTool.getInputSchema().get("properties");
+                if (props instanceof Map<?, ?> propsMap) {
+                    schema.put("params", new ArrayList<>(propsMap.keySet()));
+                    // 生成参数描述
+                    StringBuilder paramDesc = new StringBuilder();
+                    propsMap.forEach((k, v) -> {
+                        if (v instanceof Map<?, ?> propDef) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> properties = (Map<String, Object>) propDef;
+                            String desc = properties.containsKey("description")
+                                    ? String.valueOf(properties.get("description"))
+                                    : String.valueOf(properties.getOrDefault("type", "any"));
+                            paramDesc.append(k).append(": ").append(desc).append("; ");
+                        }
+                    });
+                    schema.put("paramDesc", paramDesc.toString());
+                }
+            } else {
+                schema.put("params", List.of());
+                schema.put("paramDesc", "无参数");
+            }
+            tools.add(schema);
+        }
+
         return tools;
     }
 
@@ -135,6 +185,28 @@ public class ReactAgentToolService {
         data.put("count", rows.size());
         data.put("messages", rows);
         return ToolExecutionResult.success("session_recall", data);
+    }
+
+    /**
+     * 执行MCP外部工具调用
+     * 将请求转发给McpClientManager，由其与对应的MCP服务器通信
+     */
+    private ToolExecutionResult executeMcpTool(String toolName, Map<String, Object> input) {
+        try {
+            log.info("调用MCP工具: toolName={}, input={}", toolName, input);
+            McpClientManager.McpToolResult mcpResult = mcpClientManager.callTool(toolName, input);
+            if (mcpResult.isSuccess()) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("source", "mcp");
+                data.put("result", mcpResult.getContent());
+                return ToolExecutionResult.success(toolName, data);
+            } else {
+                return ToolExecutionResult.error(toolName, "MCP工具错误: " + mcpResult.getErrorMessage());
+            }
+        } catch (Exception e) {
+            log.error("MCP工具调用异常: toolName={}, error={}", toolName, e.getMessage(), e);
+            return ToolExecutionResult.error(toolName, "MCP工具调用异常: " + e.getMessage());
+        }
     }
 
     private String asString(Object value) {

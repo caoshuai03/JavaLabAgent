@@ -52,7 +52,7 @@
     <ChatInput/>
 
     <div class="footer-container">
-      <p>AI生成内容仅供参考，不代表本平台立场。版权所有 © shuaicao01@163.com</p>
+      <p>以上内容均由AI生成, 仅供参考和借鉴。版权所有 © shuaicao01@163.com</p>
     </div>
   </div>
 </template>

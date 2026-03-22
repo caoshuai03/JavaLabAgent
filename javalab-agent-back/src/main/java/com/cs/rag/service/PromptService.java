@@ -31,5 +31,15 @@ public interface PromptService {
      * @return 处理后的提示词内容
      */
     String getChatSummaryPrompt();
+
+    /**
+     * 获取 ReAct Agent 规划器系统提示词
+     *
+     * <p>用于 ReactAgent 规划阶段，指导 LLM 进行
+     * 工具选择和推理决策。</p>
+     *
+     * @return 处理后的提示词内容
+     */
+    String getReactAgentPrompt();
 }
 

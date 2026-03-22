@@ -21,6 +21,13 @@ RUN mvn -q -DskipTests package
 # ---------- 运行阶段 ----------
 FROM eclipse-temurin:17-jre
 
+# 安装 Node.js 和 npm（提供 npx），供 MCP stdio 模式的子进程使用
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # 说明：Spring Boot 默认会读取环境变量覆盖配置
 WORKDIR /app
 
