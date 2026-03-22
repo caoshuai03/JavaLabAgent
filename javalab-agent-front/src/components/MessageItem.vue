@@ -3,15 +3,15 @@
     <div class="message-container">
       <div class="message-content">
         <!-- 思考过程与工具调用面板 -->
-        <div 
-          v-if="message.sender === 'assistant' && toolCalls.length > 0" 
+        <div
+          v-if="message.sender === 'assistant' && toolCalls.length > 0"
           class="tool-calls-panel"
         >
           <div class="tool-calls-list">
             <div v-for="(item, idx) in toolCalls" :key="`tool-${idx}`" class="tool-call-item">
               <!-- 左侧连接线 -->
               <div class="tool-call-line" v-if="idx !== toolCalls.length - 1"></div>
-              
+
               <div class="tool-call-content">
                 <div class="tool-icon-wrapper">
                   <span class="tool-icon" v-html="getToolIconSvg(item.call.payload.toolName)"></span>
@@ -177,7 +177,7 @@ const prettyJson = (obj) => {
 
 const toolCalls = computed(() => {
   if (!props.message.toolEvents || !props.message.toolEvents.length) return []
-  
+
   const list = []
   // 使用 map 暂存正在进行的调用，以 round 为 key
   const activeCalls = new Map()
@@ -654,13 +654,13 @@ watch(() => props.message.content, () => {
 }
 
 .tool-calls-panel {
-  margin: 0 0 12px 0;
+  margin: 0 0 16px 16px;
   border: 1px solid var(--border-color, #e5e7eb);
   border-radius: 12px;
   background: transparent;
   overflow: hidden;
   max-width: 600px;
-  
+
   @media (max-width: 768px) {
     margin: 0 0 12px 0;
     max-width: 100%;
@@ -668,7 +668,7 @@ watch(() => props.message.content, () => {
 }
 
 .tool-calls-list {
-  padding: 12px 16px;
+  padding: 12px 16px 12px 11px; // 左侧内边距改为 11px，使 24px 宽的图标中心对齐 16px 的文本
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -680,7 +680,7 @@ watch(() => props.message.content, () => {
 
 .tool-call-line {
   position: absolute;
-  left: 11.5px;
+  left: 11.5px; // 修改连接线位置，使其在 24px 宽的图标中心
   top: 24px;
   bottom: -20px;
   width: 1px;
@@ -813,8 +813,8 @@ watch(() => props.message.content, () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 0px; // 恢复正常边距
-  padding-left: 16px; // 与 .message-text 的左内边距对齐
+  margin-top: 12px; // 增加与文字的间距
+  padding-left: 11px; // 左侧内边距改为 11px，使 28px 宽的按钮图标中心对齐 16px 的文本
 }
 
 // 操作按钮区域 - ChatGPT 风格
