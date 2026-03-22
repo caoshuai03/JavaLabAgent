@@ -2,31 +2,27 @@
 
 <p align="center"> <img src="javalab-agent-front/src/assets/logo.png" alt="Logo" width="200" height="200"> </p>
 
-
-基于 Spring AI 的智能 RAG（检索增强生成）对话系统，集成本地大模型，支持知识库管理和智能问答。
+基于 **Spring AI** 构建的智能助手系统，集成了 **RAG**（检索增强生成）与 **ReAct Agent** 框架，支持本地大模型及 **MCP** 工具生态。
 
 ![img.png](javalab-agent-back/src/main/resources/img.png)
 
+## 🌟 主要功能
+
+- 🤖 **智能智能体 (ReAct Agent)**：基于 ReAct 模式的任务规划与执行，支持多步思考与工具调用。
+- 🛠️ **MCP 工具集成**：兼容 Model Context Protocol，可动态扩展外部工具与服务。
+- 📚 **RAG 知识库管理**：支持文档上传、自动切片、向量存储及精准检索问答。
+- 💬 **流式交互体验**：基于 SSE 的流式响应，支持对话上下文记忆与摘要。
+- 🔐 **完善安全体系**：基于 JWT 的身份认证与精细化权限管理。
+
 ## 🛠️ 技术栈
 
-| 技术 | 版本 | 说明 |
-| :---: | :---: | :---: |
-| Spring Boot | 3.4.2 | 核心框架 |
-| JDK | 17 | 运行环境 |
-| Spring AI | 1.0.0-M5 | AI 框架 |
-| PostgreSQL | 16.6 | 数据库 |
-| pgvector | 0.7.2 | 向量存储 |
-| Vue.js | 3.x | 前端框架 |
-
-## 📋 项目简介
-
-主要功能包括：
-- 🤖 智能上下文对话：基于 RAG 技术实现精准问答，支持 SSE 流式响应，带来流畅交互体验
-- 📚 全流程知识库管理：支持文档上传、自动切片、向量化存储与智能检索，高效管理知识资产
-- 👤 完善的用户体系：基于 JWT 实现身份认证，配套精细的用户权限管理，保障系统访问安全 
-> 集成多种大模型，摘要记忆
-
-
+| 技术 | 说明 |
+| :--- | :--- |
+| **Spring Boot 3.4** | 核心开发框架 |
+| **Spring AI** | AI 模型集成与编排 |
+| **PostgreSQL + pgvector** | 向量及关系型数据存储 |
+| **MinIO / AliOSS** | 对象存储支持 |
+| **Vue.js 3** | 前端交互界面 |
 
 ## 🚀 快速开始
 
@@ -35,7 +31,6 @@
 在项目根目录创建 .env 文件，填写以下配置项（按需选择对应配置）：
 
 ```env
-# =================【必需配置】=================
 # Ollama 服务地址
 OLlama_BASE_URL=http://xxx:11434
 # 镜像tag 镜像地址：mailacs/javalabagent-backend
@@ -106,11 +101,9 @@ docker push mailacs/javalabagent-frontend:2026022601
 
 ---
 
-未来优化方向：
-- 多模态支持：支持图片、音频、视频等
-- MCP 工具集成
-- Agent ReAct 框架集成
-- skills 模块集成
-- 对话管理优化
+## 📅 未来规划
 
+- [ ] 多模态能力增强（图片、语音识别）
+- [ ] 更多 MCP 官方工具集成
+- [ ] 自动化技能 (Skills) 模块
 
