@@ -45,15 +45,15 @@
     </div>
 
     <div class="list-header" v-if="!chatStore.sidebarCollapsed">
-      <span class="title">聊天历史</span>
+      <span class="title">历史会话</span>
       <button class="edit-btn" @click="toggleSelectionMode" :title="isSelectionMode ? '完成' : '批量编辑'">
         <span v-if="isSelectionMode" class="text-btn">完成</span>
         <EditIcon v-else :size="14" />
       </button>
     </div>
 
-    <ConversationList 
-      v-if="!chatStore.sidebarCollapsed" 
+    <ConversationList
+      v-if="!chatStore.sidebarCollapsed"
       :is-selection-mode="isSelectionMode"
       :selected-ids="selectedIds"
       @update:selected-ids="val => selectedIds = val"
@@ -61,14 +61,14 @@
 
     <div class="sidebar-bottom" v-if="isSelectionMode && !chatStore.sidebarCollapsed">
       <div class="batch-actions">
-        <button 
-          class="batch-btn cancel" 
+        <button
+          class="batch-btn cancel"
           @click="cancelSelectionMode"
         >
           取消
         </button>
-        <button 
-          class="batch-btn delete" 
+        <button
+          class="batch-btn delete"
           @click="handleBatchDelete"
           :disabled="selectedIds.length === 0"
         >
@@ -118,7 +118,7 @@ const cancelSelectionMode = () => {
 
 const handleBatchDelete = async () => {
   if (selectedIds.value.length === 0) return
-  
+
   if (confirm(`确定要删除选中的 ${selectedIds.value.length} 个对话吗？`)) {
     const success = await chatStore.deleteConversations(selectedIds.value)
     if (success) {
@@ -350,7 +350,7 @@ const handleMcpSettings = () => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px 8px;
-  
+
   .title {
     font-size: 12px;
     font-weight: 600;
@@ -358,7 +358,7 @@ const handleMcpSettings = () => {
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
-  
+
   .edit-btn {
     background: none;
     border: none;
@@ -369,12 +369,12 @@ const handleMcpSettings = () => {
     display: flex;
     align-items: center;
     font-size: 12px;
-    
+
     &:hover {
       background-color: var(--bg-hover);
       color: var(--text-primary);
     }
-    
+
     .text-btn {
       color: var(--primary-color);
       font-weight: 500;
@@ -386,7 +386,7 @@ const handleMcpSettings = () => {
   display: flex;
   padding: 12px;
   gap: 12px;
-  
+
   .batch-btn {
     flex: 1;
     padding: 8px;
@@ -395,24 +395,24 @@ const handleMcpSettings = () => {
     cursor: pointer;
     border: none;
     transition: all 0.2s;
-    
+
     &.cancel {
       background-color: var(--bg-primary);
       color: var(--text-primary);
-      
+
       &:hover {
         background-color: var(--bg-hover);
       }
     }
-    
+
     &.delete {
       background-color: rgba(220, 53, 69, 0.1);
       color: #dc3545;
-      
+
       &:hover:not(:disabled) {
         background-color: rgba(220, 53, 69, 0.2);
       }
-      
+
       &:disabled {
         opacity: 0.5;
         cursor: not-allowed;
