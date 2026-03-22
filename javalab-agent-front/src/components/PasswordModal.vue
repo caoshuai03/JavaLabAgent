@@ -4,36 +4,36 @@
       <h2>修改密码</h2>
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
-          <label for="currentPassword">当前密码:</label>
+          <label for="currentPassword">当前密码</label>
           <input
             id="currentPassword"
             v-model="form.currentPassword"
             type="password"
-            placeholder="请输入当前密码"
+            placeholder="输入当前使用的密码"
           />
         </div>
         <div class="form-group">
-          <label for="newPassword">新密码:</label>
+          <label for="newPassword">新密码</label>
           <input
             id="newPassword"
             v-model="form.newPassword"
             type="password"
-            placeholder="请输入新密码（至少6位）"
+            placeholder="设置新密码（不少于6位）"
           />
         </div>
         <div class="form-group">
-          <label for="confirmNewPassword">确认新密码:</label>
+          <label for="confirmNewPassword">确认新密码</label>
           <input
             id="confirmNewPassword"
             v-model="form.confirmNewPassword"
             type="password"
-            placeholder="请再次输入新密码"
+            placeholder="再次输入新密码以确认"
           />
         </div>
         <div class="form-actions">
           <button type="button" @click="handleClose">取消</button>
           <button type="submit" :disabled="changing">
-            {{ changing ? '修改中...' : '修改密码' }}
+            {{ changing ? '修改中...' : '确定修改' }}
           </button>
         </div>
       </form>
@@ -174,7 +174,7 @@ const handleSubmit = async () => {
       
       &:focus {
         outline: none;
-        border-color: #10a37f;
+        border-color: #90138B;
       }
       
       &::placeholder {
@@ -206,11 +206,11 @@ const handleSubmit = async () => {
       }
       
       &:last-child {
-        background-color: #10a37f;
+        background-color: #90138B;
         color: white;
         
         &:hover:not(:disabled) {
-          background-color: #0d8f6e;
+          background-color: #9B2A96;
         }
         
         &:disabled {

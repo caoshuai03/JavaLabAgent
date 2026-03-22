@@ -504,8 +504,8 @@ watch(() => props.message.content, () => {
     margin: 1em 0;
     padding: 0.5em 1em;
     padding-left: 1em;
-    border-left: 4px solid #10a37f;
-    background-color: rgba(16, 163, 127, 0.05);
+    border-left: 4px solid #90138B;
+    background-color: rgba(144, 19, 139, 0.05);
     border-radius: 4px;
     color: var(--text-secondary);
     font-style: italic;
@@ -566,10 +566,10 @@ watch(() => props.message.content, () => {
         }
 
         &.copied {
-          background-color: #10a37f;
-          border-color: #10a37f;
-          color: #fff;
-        }
+      background-color: #90138B;
+      border-color: #90138B;
+      color: #fff;
+    }
       }
     }
 
@@ -642,13 +642,13 @@ watch(() => props.message.content, () => {
   }
 
   :deep(a) {
-    color: #10a37f;
+    color: #90138B;
     text-decoration: none;
     border-bottom: 1px solid transparent;
     transition: border-color 0.2s ease;
 
     &:hover {
-      border-bottom-color: #10a37f;
+      border-bottom-color: #90138B;
     }
   }
 
@@ -768,7 +768,7 @@ watch(() => props.message.content, () => {
   transition: color 0.2s;
 
   &:hover {
-    color: #10a37f;
+    color: #90138B;
   }
 }
 
@@ -871,7 +871,7 @@ watch(() => props.message.content, () => {
 
     // 复制成功时的状态
     &.copied {
-      color: #10a37f;
+      color: #90138B;
     }
   }
 }

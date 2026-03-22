@@ -213,14 +213,14 @@ onMounted(() => {
   padding: 8px 16px;
   border: none;
   border-radius: 8px;
-  background-color: #10a37f;
+  background-color: #90138B;
   color: #fff;
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s;
 
   &:hover {
-    background-color: #0d8c6d;
+    background-color: #9B2A96;
   }
 }
 
@@ -231,12 +231,12 @@ onMounted(() => {
   gap: 10px;
   margin: 24px 32px 0;
   padding: 12px 16px;
-  background-color: rgba(16, 163, 127, 0.06);
-  border: 1px solid rgba(16, 163, 127, 0.15);
+  background-color: rgba(144, 19, 139, 0.06);
+  border: 1px solid rgba(144, 19, 139, 0.15);
   border-radius: 10px;
 
   .info-icon {
-    color: #10a37f;
+    color: #90138B;
     flex-shrink: 0;
     margin-top: 2px;
   }
@@ -262,7 +262,7 @@ onMounted(() => {
     width: 32px;
     height: 32px;
     border: 3px solid var(--border-color);
-    border-top-color: #10a37f;
+    border-top-color: #90138B;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -309,7 +309,7 @@ onMounted(() => {
   transition: all 0.2s;
 
   &:hover {
-    border-color: rgba(16, 163, 127, 0.3);
+    border-color: rgba(144, 19, 139, 0.3);
   }
 
   &.disabled {
@@ -345,8 +345,8 @@ onMounted(() => {
   flex-shrink: 0;
 
   &.active {
-    background-color: #10a37f;
-    box-shadow: 0 0 4px rgba(16, 163, 127, 0.4);
+    background-color: #90138B;
+    box-shadow: 0 0 4px rgba(144, 19, 139, 0.4);
   }
 
   &.inactive {
@@ -364,8 +364,8 @@ onMounted(() => {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background-color: rgba(16, 163, 127, 0.1);
-  color: #10a37f;
+  background-color: rgba(144, 19, 139, 0.1);
+  color: #90138B;
   font-weight: 500;
   text-transform: uppercase;
 }
@@ -398,8 +398,8 @@ onMounted(() => {
   .tool-badge {
     padding: 2px 8px;
     border-radius: 4px;
-    background-color: rgba(16, 163, 127, 0.08);
-    color: #10a37f;
+    background-color: rgba(144, 19, 139, 0.08);
+    color: #90138B;
     font-weight: 500;
   }
 }
@@ -422,8 +422,8 @@ onMounted(() => {
   transition: background-color 0.2s, color 0.2s;
 
   &:hover {
-    background-color: rgba(16, 163, 127, 0.12);
-    color: #10a37f;
+    background-color: rgba(144, 19, 139, 0.12);
+    color: #90138B;
   }
 }
 
@@ -500,8 +500,8 @@ onMounted(() => {
   }
 
   &.success {
-    color: #10a37f;
-    border-color: rgba(16, 163, 127, 0.3);
+    color: #90138B;
+    border-color: rgba(144, 19, 139, 0.3);
   }
 }
 
@@ -523,9 +523,9 @@ onMounted(() => {
   font-size: 13px;
 
   &.success {
-    background-color: rgba(16, 163, 127, 0.08);
-    color: #10a37f;
-    border: 1px solid rgba(16, 163, 127, 0.2);
+    background-color: rgba(144, 19, 139, 0.08);
+    color: #90138B;
+    border: 1px solid rgba(144, 19, 139, 0.2);
   }
 
   &.error {
@@ -624,7 +624,7 @@ onMounted(() => {
   box-sizing: border-box;
 
   &:focus {
-    border-color: #10a37f;
+    border-color: #90138B;
   }
 
   &::placeholder {
@@ -648,7 +648,7 @@ onMounted(() => {
   box-sizing: border-box;
 
   &:focus {
-    border-color: #10a37f;
+    border-color: #90138B;
   }
 
   &::placeholder {
@@ -670,7 +670,7 @@ onMounted(() => {
   cursor: pointer;
 
   input[type="radio"] {
-    accent-color: #10a37f;
+    accent-color: #90138B;
   }
 }
 
@@ -700,14 +700,14 @@ onMounted(() => {
   padding: 8px 24px;
   border: none;
   border-radius: 8px;
-  background-color: #10a37f;
+  background-color: #90138B;
   color: #fff;
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s;
 
   &:hover:not(:disabled) {
-    background-color: #0d8c6d;
+    background-color: #9B2A96;
   }
 
   &:disabled {
@@ -729,7 +729,7 @@ onMounted(() => {
   animation: fadeInUp 0.3s ease;
 
   &.success {
-    background-color: #10a37f;
+    background-color: #90138B;
     color: #fff;
   }
 

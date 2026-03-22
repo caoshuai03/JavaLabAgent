@@ -257,7 +257,7 @@ const handleRegister = async () => {
 
         &:focus {
           outline: none;
-          border-color: #007bff;
+          border-color: #90138B;
         }
       }
 

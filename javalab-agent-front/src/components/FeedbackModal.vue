@@ -37,7 +37,7 @@
             v-model="form.title"
             type="text"
             class="form-input"
-            placeholder="请输入反馈标题"
+            placeholder="简要说明反馈主题"
             maxlength="100"
           />
         </div>
@@ -49,7 +49,7 @@
             v-model="form.contactEmail"
             type="email"
             class="form-input"
-            placeholder="请输入您的邮箱，方便我们回复您"
+            placeholder="留下您的邮箱，方便我们回复"
             maxlength="100"
           />
         </div>
@@ -60,7 +60,7 @@
           <textarea
             v-model="form.content"
             class="form-textarea"
-            placeholder="请详细描述您的问题或建议..."
+            placeholder="请描述您的问题或改进建议..."
             rows="5"
             maxlength="2000"
           ></textarea>
@@ -275,13 +275,13 @@ const handleSubmit = async () => {
     transition: all 0.2s ease;
 
     &:hover {
-      border-color: #10a37f;
-      color: #10a37f;
+      border-color: #90138B;
+      color: #90138B;
     }
 
     &.active {
-      background-color: #10a37f;
-      border-color: #10a37f;
+      background-color: #90138B;
+      border-color: #90138B;
       color: #fff;
     }
   }
@@ -300,7 +300,7 @@ const handleSubmit = async () => {
 
   &:focus {
     outline: none;
-    border-color: #10a37f;
+    border-color: #90138B;
   }
 
   &::placeholder {
@@ -324,7 +324,7 @@ const handleSubmit = async () => {
 
   &:focus {
     outline: none;
-    border-color: #10a37f;
+    border-color: #90138B;
   }
 
   &::placeholder {
@@ -391,11 +391,11 @@ const handleSubmit = async () => {
   }
 
   &.btn-submit {
-    background-color: #10a37f;
+    background-color: #90138B;
     color: #fff;
 
     &:hover:not(:disabled) {
-      background-color: #0d8a6a;
+      background-color: #9B2A96;
     }
 
     &:disabled {

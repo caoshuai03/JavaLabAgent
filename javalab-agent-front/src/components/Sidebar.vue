@@ -45,8 +45,8 @@
     </div>
 
     <div class="list-header" v-if="!chatStore.sidebarCollapsed">
-      <span class="title">历史记录</span>
-      <button class="edit-btn" @click="toggleSelectionMode" :title="isSelectionMode ? '完成' : '批量管理'">
+      <span class="title">聊天历史</span>
+      <button class="edit-btn" @click="toggleSelectionMode" :title="isSelectionMode ? '完成' : '批量编辑'">
         <span v-if="isSelectionMode" class="text-btn">完成</span>
         <EditIcon v-else :size="14" />
       </button>
@@ -55,7 +55,8 @@
     <ConversationList 
       v-if="!chatStore.sidebarCollapsed" 
       :is-selection-mode="isSelectionMode"
-      v-model:selected-ids="selectedIds"
+      :selected-ids="selectedIds"
+      @update:selected-ids="val => selectedIds = val"
     />
 
     <div class="sidebar-bottom" v-if="isSelectionMode && !chatStore.sidebarCollapsed">

@@ -4,27 +4,27 @@
       <h2>个人资料</h2>
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
-          <label for="name">姓名:</label>
+          <label for="name">姓名</label>
           <input
             id="name"
             v-model="form.name"
             type="text"
-            placeholder="请输入姓名"
+            placeholder="设置您的显示名称"
           />
         </div>
         <div class="form-group">
-          <label for="userName">用户名:</label>
+          <label for="userName">用户名</label>
           <input
             id="userName"
             v-model="form.userName"
             type="text"
-            placeholder="请输入用户名"
+            placeholder="设置您的登录用户名"
           />
         </div>
         <div class="form-actions">
           <button type="button" @click="handleClose">取消</button>
           <button type="submit" :disabled="updating">
-            {{ updating ? '更新中...' : '更新' }}
+            {{ updating ? '保存中...' : '保存' }}
           </button>
         </div>
       </form>
@@ -153,7 +153,7 @@ const handleSubmit = async () => {
       
       &:focus {
         outline: none;
-        border-color: #10a37f;
+        border-color: #90138B;
       }
       
       &::placeholder {
@@ -185,11 +185,11 @@ const handleSubmit = async () => {
       }
       
       &:last-child {
-        background-color: #10a37f;
+        background-color: #90138B;
         color: white;
         
         &:hover:not(:disabled) {
-          background-color: #0d8f6e;
+          background-color: #9B2A96;
         }
         
         &:disabled {

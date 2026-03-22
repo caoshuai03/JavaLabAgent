@@ -7,9 +7,6 @@
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
-    <!-- 圆形背景 -->
-    <circle cx="24" cy="24" r="24" fill="#F1E6FF" />
-
     <!-- 头像（头部） -->
     <circle
       cx="24"

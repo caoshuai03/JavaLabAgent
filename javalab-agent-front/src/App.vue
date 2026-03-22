@@ -54,7 +54,8 @@ html, body {
   --text-primary: #353740;
   --text-secondary: #6e6e80;
   --text-tertiary: #8e8ea0;
-  --accent-color: #10a37f;
+  --accent-color: #90138B;
+  --primary-color: #90138B;
   --user-message-bg: #f0f0f0;
   --user-message-text: #353740;
   --assistant-message-bg: #ffffff;

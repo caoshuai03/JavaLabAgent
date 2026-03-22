@@ -369,10 +369,10 @@ onUnmounted(() => {
     color: white;
 
     &.send-button {
-      background-color: #19c37d; // ChatGPT 绿色
+      background-color: #90138B;
 
       &:hover:not(:disabled) {
-        background-color: #1a7f64;
+        background-color: #9B2A96;
       }
 
       &:disabled {
