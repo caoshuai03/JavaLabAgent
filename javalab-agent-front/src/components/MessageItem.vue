@@ -81,8 +81,6 @@
             :session-id="chatStore.currentConversationId"
             @close="closeFeedbackModal"
           />
-          <!-- 时间显示 -->
-          <div class="message-time">{{ formatTime(message.timestamp) }}</div>
         </div>
       </div>
     </div>
@@ -162,26 +160,6 @@ const formatContent = (content) => {
   return content
     .replace(/\n/g, '<br>')
     .replace(/ {2}/g, '&nbsp;&nbsp;')
-}
-
-const formatTime = (timestamp) => {
-  if (!timestamp) return ''
-
-  const date = new Date(timestamp)
-  const now = new Date()
-
-  // 如果是今天，只显示时间
-  if (date.toDateString() === now.toDateString()) {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-
-  // 否则显示日期和时间
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
 }
 
 const prettyJson = (obj) => {
@@ -458,18 +436,18 @@ watch(() => props.message.content, () => {
 }
 
 .message-text {
-  padding: 16px 20px;
-  padding-bottom: 12px; // 减小底部内边距，让复制按钮更靠近文本
+  padding: 10px 16px;
+  padding-bottom: 8px; // 减小底部内边距，让复制按钮更靠近文本
   border-radius: 12px;
-  line-height: 1.75;
-  font-size: 16px;
+  line-height: 1.6;
+  font-size: 15px;
   word-wrap: break-word;
   white-space: normal;
 
   @media (max-width: 768px) {
-    padding: 12px 16px;
-    padding-bottom: 10px;
-    font-size: 15px;
+    padding: 8px 12px;
+    padding-bottom: 6px;
+    font-size: 14px;
     border-radius: 10px;
   }
 
@@ -835,8 +813,8 @@ watch(() => props.message.content, () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: -2px; // 负边距让内容更靠近文本
-  padding-left: 20px; // 与 .message-text 的左内边距对齐
+  margin-top: 0px; // 恢复正常边距
+  padding-left: 16px; // 与 .message-text 的左内边距对齐
 }
 
 // 操作按钮区域 - ChatGPT 风格
@@ -874,11 +852,5 @@ watch(() => props.message.content, () => {
       color: #90138B;
     }
   }
-}
-
-.message-time {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 28px; // 与按钮高度对齐
 }
 </style>
