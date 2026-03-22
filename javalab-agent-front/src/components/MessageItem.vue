@@ -19,7 +19,12 @@
                 <div class="tool-text">
                   <span class="tool-name">{{ getToolDisplayName(item.call.payload.toolName) }}</span>
                   <span class="tool-divider" v-if="getToolSummary(item)">|</span>
-                  <span class="tool-summary" v-if="getToolSummary(item)">{{ getToolSummary(item) }}</span>
+                  <span
+                    class="tool-summary"
+                    v-if="getToolSummary(item)"
+                    @mouseenter="showToolTip($event, getToolSummary(item))"
+                    @mouseleave="hideToolTip"
+                  >{{ truncateText(getToolSummary(item)) }}</span>
                 </div>
                 <div class="tool-status-icon">
                   <span v-if="!item.result" class="loading-spinner"></span>
@@ -29,6 +34,15 @@
           </div>
         </div>
         <div class="message-text" v-html="formatContent(message.content)" ref="messageTextRef" @click="handleCodeBlockClick"></div>
+
+        <!-- 工具描述 Tooltip -->
+        <div
+          v-if="toolTip.visible"
+          class="tool-desc-tooltip"
+          :style="{ top: toolTip.y + 'px', left: toolTip.x + 'px' }"
+        >
+          {{ toolTip.text }}
+        </div>
 
         <!-- 消息底部区域：操作按钮 + 时间 -->
         <div class="message-footer">
@@ -93,6 +107,9 @@ const messageTextRef = ref(null)
 const copied = ref(false) // 复制成功状态
 const showFeedbackModal = ref(false) // 反馈弹窗状态
 
+// 工具描述 Tooltip 状态
+const toolTip = ref({ visible: false, text: '', x: 0, y: 0 })
+
 // 打开反馈弹窗
 const openFeedbackModal = () => {
   showFeedbackModal.value = true
@@ -101,6 +118,36 @@ const openFeedbackModal = () => {
 // 关闭反馈弹窗
 const closeFeedbackModal = () => {
   showFeedbackModal.value = false
+}
+
+/** 截断文本为原来的一半长度 */
+const truncateText = (text, maxLen = 20) => {
+  if (!text) return ''
+  if (text.length <= maxLen) return text
+  return text.substring(0, maxLen) + '...'
+}
+
+/** 鼠标移入工具描述时显示完整 Tooltip */
+const showToolTip = (event, fullText) => {
+  if (!fullText) return
+  const rect = event.target.getBoundingClientRect()
+  const tooltipMaxWidth = 360
+  const padding = 12
+  // 居中对齐，同时限制不超出视口左右边界
+  let x = rect.left + rect.width / 2
+  x = Math.max(padding + tooltipMaxWidth / 2, x)
+  x = Math.min(window.innerWidth - padding - tooltipMaxWidth / 2, x)
+  toolTip.value = {
+    visible: true,
+    text: fullText,
+    x,
+    y: rect.top - 8
+  }
+}
+
+/** 鼠标移出时隐藏 Tooltip */
+const hideToolTip = () => {
+  toolTip.value.visible = false
 }
 
 const formatContent = (content) => {
@@ -213,36 +260,23 @@ const getToolDisplayName = (toolName) => {
 
 const getToolSummary = (item) => {
   try {
-    const input = item.call.payload.input
+    // 优先使用后端返回的工具描述
+    if (item.call.payload.description) {
+      return item.call.payload.description
+    }
+    // 内置工具描述兜底映射
     const toolName = item.call.payload.toolName
-    if (!input) return ''
-    if (toolName === 'knowledge_search' && input.query) {
-      return input.query
+    const builtinDescriptions = {
+      'knowledge_search': '查询知识库',
+      'web_search': '搜索网页',
+      'read_file': '读取文件内容',
+      'write_file': '写入文件内容',
+      'run_command': '执行终端命令',
+      'session_recall': '回顾当前会话消息',
+      'current_time': '获取当前时间',
+      'calculator': '计算数学表达式'
     }
-    if (toolName === 'web_search' && input.query) {
-      return input.query
-    }
-    if (toolName === 'read_file' && input.file_path) {
-      return input.file_path.split('/').pop() || input.file_path.split('\\').pop()
-    }
-    if (toolName === 'write_file' && input.file_path) {
-      return input.file_path.split('/').pop() || input.file_path.split('\\').pop()
-    }
-    if (toolName === 'run_command' && input.command) {
-      return input.command
-    }
-    if (toolName === 'session_recall') {
-      return '联系历史上下文'
-    }
-    // 默认展示操作的简短描述
-    const keys = Object.keys(input)
-    if (keys.length > 0) {
-      let firstVal = String(input[keys[0]])
-      if (typeof input[keys[0]] === 'object') {
-         firstVal = JSON.stringify(input[keys[0]])
-      }
-      return firstVal.length > 30 ? firstVal.substring(0, 30) + '...' : firstVal
-    }
+    return builtinDescriptions[toolName] || ''
   } catch (e) {
     // ignore
   }
@@ -730,6 +764,42 @@ watch(() => props.message.content, () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: default;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #10a37f;
+  }
+}
+
+// 工具描述 Tooltip（聊天消息内）
+.tool-desc-tooltip {
+  position: fixed;
+  transform: translateX(-50%) translateY(-100%);
+  max-width: 360px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary, #fff);
+  color: var(--text-primary, #1f2937);
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid var(--border-color, #e5e7eb);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  z-index: 3000;
+  animation: tooltipFadeIn 0.15s ease;
+  word-break: break-word;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-100%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-100%);
+  }
 }
 
 .tool-status-icon {

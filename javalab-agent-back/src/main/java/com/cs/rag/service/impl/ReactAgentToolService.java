@@ -59,6 +59,30 @@ public class ReactAgentToolService {
         return ToolExecutionResult.error(toolName, "不支持的工具");
     }
 
+    /**
+     * 根据工具名称获取工具描述，供前端展示工具简介
+     * @param toolName 工具名称
+     * @return 工具描述，未找到返回null
+     */
+    public String getToolDescription(String toolName) {
+        // 内置工具描述
+        Map<String, String> builtinDescriptions = Map.of(
+                "current_time", "获取当前时间",
+                "calculator", "计算数学表达式",
+                "knowledge_search", "查询知识库",
+                "session_recall", "回顾当前会话消息"
+        );
+        if (builtinDescriptions.containsKey(toolName)) {
+            return builtinDescriptions.get(toolName);
+        }
+        // MCP外部工具描述
+        McpToolInfo mcpTool = mcpClientManager.findTool(toolName);
+        if (mcpTool != null) {
+            return mcpTool.getDescription();
+        }
+        return null;
+    }
+
     public List<Map<String, Object>> toolSchemas() {
         List<Map<String, Object>> tools = new ArrayList<>();
         // 内置工具
@@ -193,7 +217,7 @@ public class ReactAgentToolService {
      */
     private ToolExecutionResult executeMcpTool(String toolName, Map<String, Object> input) {
         try {
-            log.info("调用MCP工具: toolName={}, input={}", toolName, input);
+//            log.info("调用MCP工具: toolName={}, input={}", toolName, input);
             McpClientManager.McpToolResult mcpResult = mcpClientManager.callTool(toolName, input);
             if (mcpResult.isSuccess()) {
                 Map<String, Object> data = new HashMap<>();

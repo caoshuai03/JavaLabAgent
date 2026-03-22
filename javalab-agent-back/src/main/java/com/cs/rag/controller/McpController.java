@@ -52,12 +52,20 @@ public class McpController {
                 item.put("command", serverConfig.getCommand());
                 item.put("args", serverConfig.getArgs());
                 item.put("url", serverConfig.getUrl());
-                item.put("env", serverConfig.getEnv());
+                // 对 env 中的敏感值进行脱敏处理（如 API Key）
+                item.put("env", maskEnvValues(serverConfig.getEnv()));
                 item.put("description", serverConfig.getDescription());
                 // 附加已发现的工具数量
                 List<McpToolInfo> tools = mcpClientManager.getServerTools(name);
                 item.put("toolCount", tools.size());
                 item.put("toolNames", tools.stream().map(McpToolInfo::getName).toList());
+                // 返回工具详情列表（含 name 和 description），供前端 tooltip 使用
+                item.put("tools", tools.stream().map(t -> {
+                    Map<String, Object> toolItem = new LinkedHashMap<>();
+                    toolItem.put("name", t.getName());
+                    toolItem.put("description", t.getDescription());
+                    return toolItem;
+                }).toList());
                 serverList.add(item);
             });
         }
@@ -258,6 +266,27 @@ public class McpController {
     }
 
     // ==================== 辅助方法 ====================
+
+    /**
+     * 对环境变量的值进行脱敏处理
+     * 保留前4位和后4位，中间用 **** 替代；短于8位的值全部替换为 ****
+     */
+    private Map<String, String> maskEnvValues(Map<String, String> env) {
+        if (env == null || env.isEmpty()) {
+            return env;
+        }
+        Map<String, String> masked = new LinkedHashMap<>();
+        env.forEach((key, value) -> {
+            if (value == null || value.length() <= 8) {
+                // 过短的值全部脱敏
+                masked.put(key, "****");
+            } else {
+                // 保留前4位和后4位
+                masked.put(key, value.substring(0, 4) + "****" + value.substring(value.length() - 4));
+            }
+        });
+        return masked;
+    }
 
     private boolean getBoolean(Map<String, Object> map, String key, boolean defaultValue) {
         Object val = map.get(key);

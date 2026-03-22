@@ -205,7 +205,16 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             toolSignatureHistory.add(toolSignature);
             // 实时推送 tool_running 状态，前端立即显示该工具调用（带 loading 动画）
             emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "tool_running", "round", i, "toolName", toolName)));
-            emit.accept(eventJson("tool_call", sessionId, traceId, Map.of("round", i, "toolName", toolName, "input", toolInput)));
+            // 构建 tool_call 事件，包含工具描述供前端展示工具简介
+            Map<String, Object> toolCallPayload = new HashMap<>();
+            toolCallPayload.put("round", i);
+            toolCallPayload.put("toolName", toolName);
+            toolCallPayload.put("input", toolInput);
+            String toolDesc = reactAgentToolService.getToolDescription(toolName);
+            if (toolDesc != null) {
+                toolCallPayload.put("description", toolDesc);
+            }
+            emit.accept(eventJson("tool_call", sessionId, traceId, toolCallPayload));
             log.info("ReactAgent调用工具: sessionId={}, traceId={}, round={}, tool={}, input={}",
                     sessionId, traceId, i, toolName, toJsonQuietly(toolInput));
             long toolStart = System.currentTimeMillis();
@@ -235,8 +244,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             // 实时推送工具结果，前端立即更新该工具调用状态（去掉 loading）
             emit.accept(eventJson("tool_result", sessionId, traceId, resultPayload));
             emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "tool_done", "round", i)));
-            log.info("ReactAgent工具结果: sessionId={}, traceId={}, round={}, tool={}, success={}, costMs={}",
-                    sessionId, traceId, i, result.getToolName(), result.isSuccess(), resultPayload.get("costMs"));
+//            log.info("ReactAgent工具结果: sessionId={}, traceId={}, round={}, tool={}, success={}, costMs={}",
+//                    sessionId, traceId, i, result.getToolName(), result.isSuccess(), resultPayload.get("costMs"));
         }
         emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "plan_round_limit_reached", "round", maxRounds)));
         log.info("ReactAgent达到最大规划轮次: sessionId={}, traceId={}, maxRounds={}", sessionId, traceId, maxRounds);
