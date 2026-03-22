@@ -119,68 +119,80 @@ const handleSubmit = async () => {
 
 .modal-content {
   background: var(--bg-primary);
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  padding: 1.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   width: 100%;
-  max-width: 500px;
+  max-width: 440px;
   
   h2 {
-    text-align: center;
+    text-align: left;
     margin-bottom: 1.5rem;
+    font-size: 14px; // 统一为反馈界面的 14px
+    font-weight: 500; // 统一为 500
     color: var(--text-primary);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
   }
   
   .form-group {
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
     
     label {
       display: block;
       margin-bottom: 0.5rem;
-      font-weight: bold;
+      font-size: 13px;
+      font-weight: 500;
       color: var(--text-primary);
     }
     
     input {
       width: 100%;
-      padding: 0.75rem;
-      background-color: var(--input-bg);
+      padding: 8px 12px; // 统一为 8px 12px
+      background-color: var(--bg-primary);
       border: 1px solid var(--border-color);
-      border-radius: 4px;
-      font-size: 1rem;
-      color: var(--input-text);
+      border-radius: 6px;
+      font-size: 14px;
+      color: var(--text-primary);
       box-sizing: border-box;
+      transition: all 0.2s ease;
       
       &:focus {
         outline: none;
         border-color: #90138B;
+        box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
       }
       
       &::placeholder {
         color: var(--text-secondary);
+        opacity: 0.6;
       }
     }
   }
   
   .form-actions {
     display: flex;
-    justify-content: space-between;
-    margin-top: 1.5rem;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 2rem;
     
     button {
-      padding: 0.75rem 1.5rem;
+      padding: 0.5rem 1.25rem;
       border: none;
-      border-radius: 4px;
-      font-size: 1rem;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
       cursor: pointer;
-      transition: background-color 0.3s;
+      transition: all 0.2s ease;
       
       &:first-child {
-        background-color: var(--border-color-hover);
-        color: var(--text-primary);
+        background-color: transparent;
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
         
         &:hover {
           background-color: var(--bg-hover);
+          color: var(--text-primary);
         }
       }
       
@@ -189,11 +201,13 @@ const handleSubmit = async () => {
         color: white;
         
         &:hover:not(:disabled) {
-          background-color: #9B2A96;
+          background-color: #A01BA0;
+          box-shadow: 0 2px 8px rgba(144, 19, 139, 0.2);
         }
         
         &:disabled {
-          background-color: var(--border-color-hover);
+          background-color: var(--border-color);
+          opacity: 0.5;
           cursor: not-allowed;
         }
       }

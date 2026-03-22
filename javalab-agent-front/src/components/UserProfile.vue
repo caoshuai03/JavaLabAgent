@@ -260,6 +260,7 @@ const vClickOutside = {
         border: none;
         color: var(--text-primary);
         font-size: 14px;
+        font-weight: 400; // 显式设置为 400，防止部分浏览器对 button 的文字默认加粗
         cursor: pointer;
         border-radius: 4px;
         transition: background-color 0.15s ease;

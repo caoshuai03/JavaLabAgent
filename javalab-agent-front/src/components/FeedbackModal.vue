@@ -208,8 +208,8 @@ const handleSubmit = async () => {
 
   h3 {
     margin: 0;
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 14px; // 同步侧边栏文字大小
+    font-weight: 500; // 同步侧边栏字体权重
     color: var(--text-primary);
   }
 
@@ -244,7 +244,7 @@ const handleSubmit = async () => {
   label {
     display: block;
     margin-bottom: 8px;
-    font-size: 14px;
+    font-size: 13px; // 稍微调小一点，使其更显精致
     font-weight: 500;
     color: var(--text-primary);
 
@@ -265,18 +265,19 @@ const handleSubmit = async () => {
   flex-wrap: wrap;
 
   .type-btn {
-    padding: 8px 16px;
+    padding: 6px 14px;
     border: 1px solid var(--border-color);
-    border-radius: 20px;
+    border-radius: 6px; // 从圆角改为更统一的微圆角
     background: transparent;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
     cursor: pointer;
     transition: all 0.2s ease;
 
     &:hover {
       border-color: #90138B;
       color: #90138B;
+      background-color: var(--bg-hover);
     }
 
     &.active {
@@ -289,9 +290,9 @@ const handleSubmit = async () => {
 
 .form-input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 14px;
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -301,23 +302,25 @@ const handleSubmit = async () => {
   &:focus {
     outline: none;
     border-color: #90138B;
+    box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
   }
 
   &::placeholder {
     color: var(--text-secondary);
+    opacity: 0.6;
   }
 }
 
 .form-textarea {
   width: 100%;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 14px;
   background: var(--bg-primary);
   color: var(--text-primary);
   resize: vertical;
-  min-height: 120px;
+  min-height: 100px;
   font-family: inherit;
   transition: border-color 0.2s ease;
   box-sizing: border-box;
@@ -325,10 +328,12 @@ const handleSubmit = async () => {
   &:focus {
     outline: none;
     border-color: #90138B;
+    box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
   }
 
   &::placeholder {
     color: var(--text-secondary);
+    opacity: 0.6;
   }
 }
 
@@ -341,17 +346,18 @@ const handleSubmit = async () => {
 
 .related-message {
   background-color: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 12px;
 
   label {
     font-size: 12px;
     color: var(--text-secondary);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .message-preview {
     font-size: 13px;
+    line-height: 1.6;
     color: var(--text-primary);
     max-height: 80px;
     overflow: hidden;
@@ -371,8 +377,8 @@ const handleSubmit = async () => {
 }
 
 .btn {
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -395,7 +401,8 @@ const handleSubmit = async () => {
     color: #fff;
 
     &:hover:not(:disabled) {
-      background-color: #9B2A96;
+      background-color: #A01BA0;
+      box-shadow: 0 2px 8px rgba(144, 19, 139, 0.2);
     }
 
     &:disabled {
