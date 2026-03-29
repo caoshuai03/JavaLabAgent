@@ -9,89 +9,53 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-/**
- * 提示词管理服务实现类
- * 
- * <p>统一管理应用程序中使用的所有提示词模板，
- * 从资源文件中加载并处理提示词内容。</p>
- * 
- * <p>提示词文件存放位置: resources/prompts/</p>
- * 
- * @author caoshuai
- * @since 1.0
- */
 @Slf4j
 @Service
 public class PromptServiceImpl implements PromptService {
 
-    /** 默认对话提示词资源文件 */
     @Value("classpath:/prompts/chat-default.md")
     private Resource chatDefaultPrompt;
 
-    /** 对话摘要提示词资源文件 */
     @Value("classpath:/prompts/chat-summary.md")
     private Resource chatSummaryPrompt;
 
-    /** ReAct Agent 规划器系统提示词资源文件 */
     @Value("classpath:/prompts/react-system-prompt.md")
     private Resource reactAgentPrompt;
 
-    /**
-     * 获取默认对话提示词
-     * 
-     * @return 处理后的提示词内容
-     */
+    @Value("classpath:/prompts/react-final-system-prompt.md")
+    private Resource reactAgentFinalPrompt;
+
     @Override
     public String getChatDefaultPrompt() {
         return readFile(chatDefaultPrompt);
     }
 
-    /**
-     * 获取对话摘要提示词
-     * 
-     * @return 处理后的提示词内容
-     */
     @Override
     public String getChatSummaryPrompt() {
         return readFile(chatSummaryPrompt);
     }
 
-    /**
-     * 获取 ReAct Agent 规划器系统提示词
-     *
-     * @return 处理后的提示词内容
-     */
     @Override
     public String getReactAgentPrompt() {
         return readFile(reactAgentPrompt);
     }
 
-    /**
-     * 读取提示词文件内容
-     * 
-     * <p>处理逻辑:</p>
-     * <ol>
-     *   <li>读取Markdown格式的提示词文件</li>
-     *   <li>去除标题行（以#开头）</li>
-     *   <li>去除描述行（以"用于"开头）</li>
-     *   <li>返回纯净的提示词内容</li>
-     * </ol>
-     * 
-     * @param resource 提示词资源文件
-     * @return 处理后的文件内容，失败时返回空字符串
-     */
+    @Override
+    public String getReactAgentFinalPrompt() {
+        return readFile(reactAgentFinalPrompt);
+    }
+
+    // 允许 prompt 文件保留 markdown 标题，运行时自动跳过文件头说明。
     private String readFile(Resource resource) {
         try {
             String content = resource.getContentAsString(StandardCharsets.UTF_8);
             String[] lines = content.split("\n");
             StringBuilder result = new StringBuilder();
             boolean foundContent = false;
-            
+
             for (String line : lines) {
                 String trimmedLine = line.trim();
                 if (!foundContent) {
-                    // 只跳过文件开头的Markdown标题、描述行和空行
-                    // 一旦遇到正文内容，后续所有行（包括##标题）都保留
                     if (trimmedLine.startsWith("#") || trimmedLine.startsWith("用于") || trimmedLine.isEmpty()) {
                         continue;
                     }
@@ -99,10 +63,10 @@ public class PromptServiceImpl implements PromptService {
                 }
                 result.append(line).append("\n");
             }
-            
+
             return result.toString().trim();
         } catch (IOException e) {
-            log.error("读取 prompt 文件失败: {}", resource.getFilename(), e);
+            log.error("Read prompt file failed: {}", resource.getFilename(), e);
             return "";
         }
     }

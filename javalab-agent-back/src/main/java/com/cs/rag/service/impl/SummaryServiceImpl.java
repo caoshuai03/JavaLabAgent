@@ -1,48 +1,37 @@
 package com.cs.rag.service.impl;
 
 import com.cs.rag.constant.RagConstant;
-import com.cs.rag.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatMessage;
 import com.cs.rag.llm.LLMProviderRegistry;
+import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.PromptService;
 import com.cs.rag.service.SummaryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.cs.rag.service.ChatMessageService;
-import org.springframework.ai.chat.messages.Message;
+import java.util.List;
 import java.util.stream.Collectors;
 
-import java.util.List;
-
-/**
- * 摘要生成服务实现类
- *
- * @author caoshuai
- * @since 1.0
- */
 @Slf4j
 @Service
 public class SummaryServiceImpl implements SummaryService {
 
-    @Autowired
-    private LLMProviderRegistry llmProviderRegistry;
+    private final LLMProviderRegistry llmProviderRegistry;
+    private final PromptService promptService;
+    private final ChatMessageService chatMessageService;
 
-    @Autowired
-    private PromptService promptService;
+    public SummaryServiceImpl(LLMProviderRegistry llmProviderRegistry,
+                              PromptService promptService,
+                              ChatMessageService chatMessageService) {
+        this.llmProviderRegistry = llmProviderRegistry;
+        this.promptService = promptService;
+        this.chatMessageService = chatMessageService;
+    }
 
-    @Autowired
-    private ChatMessageService chatMessageService;
-
-    /**
-     * 生成对话历史摘要
-     * 
-     * @param messages 对话历史消息列表
-     * @return 生成的摘要文本
-     */
     @Override
     public String summarize(List<ChatMessage> messages) {
         if (messages == null || messages.isEmpty()) {
@@ -50,27 +39,15 @@ public class SummaryServiceImpl implements SummaryService {
         }
 
         try {
-            // 1. 构建对话文本 (使用标准的消息转换服务)
-            List<Message> aiMessages = chatMessageService.convertToAiMessages(messages);
-            
-            String chatHistory = aiMessages.stream()
-                    .map(msg -> msg.getMessageType().getValue() + ": " + msg.getContent())
-                    .collect(Collectors.joining("\n"));
-
-            log.info("用于生成摘要的对话历史原文：\n{}", chatHistory);
-
-            // 2. 调用LLM
+            String chatHistory = buildChatHistory(messages);
+            log.info("Summary input chat history:\n{}", chatHistory);
             return callLlmForSummary(chatHistory);
-
         } catch (Exception e) {
-            log.error("生成对话摘要失败", e);
+            log.error("Generate summary failed", e);
             return "";
         }
     }
 
-    /**
-     * 基于已有摘要和新消息生成更新后的摘要 (滚动更新)
-     */
     @Override
     public String refreshSummary(String oldSummary, List<ChatMessage> newMessages) {
         if (newMessages == null || newMessages.isEmpty()) {
@@ -78,39 +55,37 @@ public class SummaryServiceImpl implements SummaryService {
         }
 
         try {
-            // 1. 构建新消息文本
-            List<Message> aiMessages = chatMessageService.convertToAiMessages(newMessages);
-            String newChatHistory = aiMessages.stream()
-                    .map(msg -> msg.getMessageType().getValue() + ": " + msg.getContent())
-                    .collect(Collectors.joining("\n"));
-
-            // 2. 构建合并后的输入：旧摘要 + 新对话
-            String combinedInput;
-            if (oldSummary != null && !oldSummary.isEmpty()) {
-                combinedInput = String.format("【已知上下文摘要】:\n%s\n\n【新发生的对话】:\n%s", oldSummary, newChatHistory);
-            } else {
-                combinedInput = newChatHistory;
-            }
-
-            log.info("执行滚动摘要更新，输入长度: {}", combinedInput.length());
-            
-            // 3. 调用LLM
+            String newChatHistory = buildChatHistory(newMessages);
+            String combinedInput = buildRefreshInput(oldSummary, newChatHistory);
+            log.info("Refresh rolling summary, input length={}", combinedInput.length());
             return callLlmForSummary(combinedInput);
-
         } catch (Exception e) {
-            log.error("滚动更新摘要失败", e);
-            return oldSummary; // 失败时返回旧摘要，保证不丢失
+            log.error("Refresh summary failed", e);
+            return oldSummary;
         }
     }
 
+    // 摘要输入统一走同一套消息转换逻辑，避免格式前后不一致。
+    private String buildChatHistory(List<ChatMessage> messages) {
+        List<Message> aiMessages = chatMessageService.convertToAiMessages(messages);
+        return aiMessages.stream()
+                .map(msg -> msg.getMessageType().getValue() + ": " + msg.getContent())
+                .collect(Collectors.joining("\n"));
+    }
+
+    // 滚动摘要继续沿用“旧摘要 + 新对话”的合并方式。
+    private String buildRefreshInput(String oldSummary, String newChatHistory) {
+        if (oldSummary != null && !oldSummary.isEmpty()) {
+            return String.format("【已有上下文摘要】\n%s\n\n【新发生的对话】\n%s", oldSummary, newChatHistory);
+        }
+        return newChatHistory;
+    }
+
     private String callLlmForSummary(String inputContent) {
-        // 获取Prompt
         String systemPrompt = promptService.getChatSummaryPrompt();
-        
-        // 调用LLM生成摘要
         ChatModel chatModel = llmProviderRegistry.getChatModel(RagConstant.DEFAULT_EXTERNAL_LLM);
         ChatClient chatClient = ChatClient.builder(chatModel).build();
-        
+
         String summary = chatClient.prompt()
                 .system(systemPrompt)
                 .user(inputContent)
@@ -118,7 +93,7 @@ public class SummaryServiceImpl implements SummaryService {
                 .call()
                 .content();
 
-        log.info("摘要生成完成，输出长度: {}", summary.length());
+        log.info("Summary generation completed, output length={}", summary.length());
         return summary;
     }
 }

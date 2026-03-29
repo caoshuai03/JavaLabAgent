@@ -1,7 +1,7 @@
 package com.cs.rag.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.cs.rag.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatMessage;
 import com.cs.rag.mapper.ChatMessageMapper;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;

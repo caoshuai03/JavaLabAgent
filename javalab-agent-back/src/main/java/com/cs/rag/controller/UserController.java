@@ -2,10 +2,10 @@ package com.cs.rag.controller;
 
 import com.cs.rag.common.*;
 import com.cs.rag.config.JwtProperties;
-import com.cs.rag.context.BaseContext;
+import com.cs.rag.common.BaseContext;
 import com.cs.rag.constant.JwtClaimsConstant;
 import com.cs.rag.constant.UserMessageConstant;
-import com.cs.rag.entity.User;
+import com.cs.rag.pojo.entity.User;
 import com.cs.rag.pojo.dto.PasswordDTO;
 import com.cs.rag.pojo.dto.UserDTO;
 import com.cs.rag.pojo.dto.UserPageQueryDTO;

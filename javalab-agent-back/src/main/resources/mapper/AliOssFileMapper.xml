@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.cs.rag.mapper.AliOssFileMapper">
 
-    <resultMap id="BaseResultMap" type="com.cs.rag.entity.AliOssFile">
+    <resultMap id="BaseResultMap" type="com.cs.rag.pojo.entity.AliOssFile">
             <id property="id" column="id" />
             <result property="fileName" column="file_name" />
             <result property="url" column="url" />
@@ -16,7 +16,7 @@
     <sql id="Base_Column_List">
         id,file_name,url,vector_id,create_time,update_time
     </sql>
-    <select id="findByFileNameContaining" resultType="com.cs.rag.entity.AliOssFile">
+    <select id="findByFileNameContaining" resultType="com.cs.rag.pojo.entity.AliOssFile">
         SELECT * FROM ali_oss_file
         <where>
             <if test="fileName != null and fileName != ''">

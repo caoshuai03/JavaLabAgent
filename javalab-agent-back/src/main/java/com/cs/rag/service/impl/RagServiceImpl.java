@@ -1,204 +1,134 @@
 package com.cs.rag.service.impl;
 
-import com.cs.rag.constant.RagConstant;
-import com.cs.rag.entity.ChatMessage;
-import com.cs.rag.entity.ChatSession;
+import com.cs.rag.pojo.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatSession;
 import com.cs.rag.llm.LLMProviderRegistry;
-import com.cs.rag.service.*;
+import com.cs.rag.mapper.ChatSessionMapper;
+import com.cs.rag.service.ChatMessageService;
+import com.cs.rag.service.ChatSessionService;
+import com.cs.rag.service.PromptService;
+import com.cs.rag.service.RagService;
+import com.cs.rag.service.SummaryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Collections;
-
-import static com.cs.rag.constant.RagConstant.*;
-
-
 import java.util.concurrent.CompletableFuture;
 
-import com.cs.rag.mapper.ChatSessionMapper;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import static com.cs.rag.constant.RagConstant.MEMORY_SIZE;
 
-/**
- * RAG服务实现类
- * 实现RAG对话相关的核心业务逻辑
- *
- * <p>该类负责:</p>
- * <ul>
- *   <li>RAG向量检索增强</li>
- *   <li>会话管理与消息持久化</li>
- *   <li>LLM流式对话生成</li>
- * </ul>
- *
- * @author caoshuai
- * @since 1.0
- */
 @Slf4j
 @Service
 public class RagServiceImpl implements RagService {
 
-    // ==================== 依赖注入 ====================
-
-    /**
-     * 向量存储，用于RAG检索
-     */
     private final VectorStore vectorStore;
-
-    /**
-     * LLM Provider Registry
-     */
     private final LLMProviderRegistry llmProviderRegistry;
+    private final PromptService promptService;
+    private final ChatSessionService chatSessionService;
+    private final ChatSessionMapper chatSessionMapper;
+    private final ChatMessageService chatMessageService;
+    private final ObjectMapper objectMapper;
+    private final SummaryService summaryService;
+    private final RagConversationSupport ragConversationSupport;
 
-    /**
-     * 提示词服务
-     */
-    @Autowired
-    private PromptService promptService;
-
-    /**
-     * 会话服务
-     */
-    @Autowired
-    private ChatSessionService chatSessionService;
-
-    @Autowired
-    private ChatSessionMapper chatSessionMapper;
-
-    /**
-     * 消息服务
-     */
-    @Autowired
-    private ChatMessageService chatMessageService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    /**
-     * 摘要生成服务
-     */
-    @Autowired
-    private SummaryService summaryService;
-
-    @Autowired
-    private RagConversationSupport ragConversationSupport;
-
-    /**
-     * 构造函数注入核心依赖
-     *
-     * @param vectorStore         向量存储
-     * @param llmProviderRegistry LLM Provider Registry
-     */
     public RagServiceImpl(VectorStore vectorStore,
-                          LLMProviderRegistry llmProviderRegistry) {
+                          LLMProviderRegistry llmProviderRegistry,
+                          PromptService promptService,
+                          ChatSessionService chatSessionService,
+                          ChatSessionMapper chatSessionMapper,
+                          ChatMessageService chatMessageService,
+                          ObjectMapper objectMapper,
+                          SummaryService summaryService,
+                          RagConversationSupport ragConversationSupport) {
         this.vectorStore = vectorStore;
         this.llmProviderRegistry = llmProviderRegistry;
+        this.promptService = promptService;
+        this.chatSessionService = chatSessionService;
+        this.chatSessionMapper = chatSessionMapper;
+        this.chatMessageService = chatMessageService;
+        this.objectMapper = objectMapper;
+        this.summaryService = summaryService;
+        this.ragConversationSupport = ragConversationSupport;
     }
 
-    // ==================== 核心业务方法 ====================
-
-    /**
-     * 持久化RAG对话
-     * 将会话和消息存储到数据库，支持跨请求的上下文管理
-     */
     @Override
     public Flux<String> chat(String message, String sessionId, Long userId, String model) {
-        // 1. 准备会话
+        // 1. 准备会话并读取历史上下文，保证本轮对话有完整背景。
         String finalSessionId = prepareSession(message, sessionId, userId);
-
-        // 2. 构建上下文 (摘要 + 最近历史)
         List<Message> contextMessages = buildContext(finalSessionId, userId);
 
-        // 3. 保存当前用户消息
+        // 2. 用户消息先落库，便于问题追踪和异常恢复。
         chatMessageService.saveUserMessage(finalSessionId, userId, message);
-        log.info("已保存用户消息: sessionId={}, userId={}", finalSessionId, userId);
+        log.info("User message saved: sessionId={}, userId={}", finalSessionId, userId);
 
-        // 4. RAG检索
+        // 3. 做知识检索，并拼出最终发给模型的用户消息。
         List<Document> ragDocuments = performSearch(message);
         String enhancedMessage = formatMessageWithDocs(message, ragDocuments);
 
-        // 5. 选择模型
+        // 4. 检索结果出来后，再确定真正使用的模型。
         String effectiveModel = selectModel(model, ragDocuments);
 
-        // 6. 构建完整消息列表
+        // 5. 组装完整消息列表并开始流式输出。
         List<Message> allMessages = new ArrayList<>(contextMessages);
         allMessages.add(new UserMessage(enhancedMessage));
 
-        // 7. 记录对话日志
         logChatHistory(allMessages);
 
-        // 8. 执行流式对话
         return streamResponse(allMessages, effectiveModel, finalSessionId, userId)
-                .doOnComplete(() -> {
-                    // 9. 对话完成后，异步检查是否需要更新摘要 (滚动摘要)
-                    checkAndUpdateSummaryAsync(finalSessionId, userId);
-                });
+                .doOnComplete(() -> checkAndUpdateSummaryAsync(finalSessionId, userId));
     }
 
-    // ==================== 私有辅助方法 ====================
-
-    /**
-     * 异步检查并更新摘要
-     * 策略：每积攒 10 条新消息，触发一次滚动更新
-     */
+    // 摘要更新放到异步线程，避免阻塞主对话链路。
     private void checkAndUpdateSummaryAsync(String sessionId, Long userId) {
         CompletableFuture.runAsync(() -> {
             try {
-                // 1. 获取会话当前信息
                 ChatSession session = chatSessionMapper.selectByIdAndUserId(sessionId, userId);
-                if (session == null) return;
-
-                // 2. 获取所有消息数量
+                if (session == null) {
+                    return;
+                }
 
                 long totalMessages = ragConversationSupport.countMessagesBySession(sessionId);
-
-                // 每 10 条触发一次更新，容忍奇偶差异（余数0或1均触发）
-                // 这样即使因历史原因或中断导致消息总数变成奇数，也能在后续对话中触发更新
-                if (totalMessages > 0 && totalMessages % MEMORY_SIZE <= 1) {
-                    log.info("触发滚动摘要更新: sessionId={}, totalMessages={}", sessionId, totalMessages);
-
-                    // 动态计算需要获取的消息数量，确保覆盖所有新增消息（防止奇数偏移导致遗漏）
-                    // 如果余数是1，则多取1条；如果是0，则取标准长度
-                    int limit = MEMORY_SIZE + (int) (totalMessages % MEMORY_SIZE);
-
-                    // 获取最近的消息 (作为增量)
-                    List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, limit);
-                    // 注意：getRecentMessages 返回的是时间倒序的，需要反转
-                    Collections.reverse(recentMessages); // 转为正序
-
-                    // 获取当前摘要
-                    String oldSummary = session.getSummary();
-
-                    // 生成新摘要
-                    String newSummary = summaryService.refreshSummary(oldSummary, recentMessages);
-
-                    // 更新数据库
-                    chatSessionMapper.updateSummary(sessionId, newSummary);
-                    log.info("滚动摘要更新完成: sessionId={}", sessionId);
+                if (!shouldRefreshSummary(totalMessages)) {
+                    return;
                 }
+
+                log.info("Trigger rolling summary update: sessionId={}, totalMessages={}", sessionId, totalMessages);
+                int limit = calculateSummaryRefreshLimit(totalMessages);
+                List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, limit);
+                Collections.reverse(recentMessages);
+
+                String newSummary = summaryService.refreshSummary(session.getSummary(), recentMessages);
+                chatSessionMapper.updateSummary(sessionId, newSummary);
+                log.info("Rolling summary update completed: sessionId={}", sessionId);
             } catch (Exception e) {
-                log.error("异步更新摘要失败: sessionId={}", sessionId, e);
+                log.error("Rolling summary update failed: sessionId={}", sessionId, e);
             }
         });
     }
 
-    /**
-     * 准备会话：创建或获取现有会话
-     */
+    // 保持原有触发规则不变，只是把意图表达得更清楚。
+    private boolean shouldRefreshSummary(long totalMessages) {
+        return totalMessages > 0 && totalMessages % MEMORY_SIZE <= 1;
+    }
+
+    // 保持原有容错策略，兼容消息总数奇偶偏移。
+    private int calculateSummaryRefreshLimit(long totalMessages) {
+        return MEMORY_SIZE + (int) (totalMessages % MEMORY_SIZE);
+    }
+
     private String prepareSession(String message, String sessionId, Long userId) {
         return ragConversationSupport.prepareSession(message, sessionId, userId);
     }
@@ -217,28 +147,19 @@ public class RagServiceImpl implements RagService {
         return ragConversationSupport.selectModel(model, ragDocuments);
     }
 
-    /**
-     * 记录对话日志
-     */
+    // 这里保留完整上下文日志，方便线上排查具体输入链路。
     private void logChatHistory(List<Message> allMessages) {
         StringBuilder messagesLog = new StringBuilder();
-        messagesLog.append("\n==================== 完整会话上下文 START ====================\n");
+        messagesLog.append("\n==================== Conversation Context START ====================\n");
         for (int i = 0; i < allMessages.size(); i++) {
             Message msg = allMessages.get(i);
             String content = msg.getContent();
             String role = msg.getMessageType().getValue();
 
             messagesLog.append(String.format("[%d] Role: %s\n", i, role));
-
-            // 对于摘要类型的 SystemMessage，通常比较长，但我们也希望看到内容
-            // 对于最后一条用户消息，肯定要完整显示
-            // 对于其他历史消息，如果太长可以适当截断，但用户要求“看到log输出”，为了大厂调试风格，我们提供较长的预览
             if (i == allMessages.size() - 1) {
                 messagesLog.append("Content (User Input): ").append(content).append("\n");
-            } else if (role.equals("system") && content.contains("摘要总结")) {
-                messagesLog.append("Content (Summary): ").append(content).append("\n");
             } else {
-                // 增加截断长度到 100，并显示总长度
                 String displayContent = content.length() > 100
                         ? content.substring(0, 100) + "...(length: " + content.length() + ")"
                         : content;
@@ -246,21 +167,16 @@ public class RagServiceImpl implements RagService {
             }
             messagesLog.append("--------------------------------------------------\n");
         }
-        messagesLog.append("==================== 完整会话上下文 END ====================\n");
+        messagesLog.append("==================== Conversation Context END ====================\n");
         log.info(messagesLog.toString());
     }
 
-    /**
-     * 执行流式响应
-     */
+    // 统一处理模型流式输出，并在结束后落库 assistant 消息。
     private Flux<String> streamResponse(List<Message> allMessages, String model, String sessionId, Long userId) {
         long llmStartTime = System.currentTimeMillis();
 
-        // 构建 ChatClient
         ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
-
-        // 构建 PromptSpec
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
                 .system(promptService.getChatDefaultPrompt())
                 .messages(allMessages)
@@ -286,15 +202,13 @@ public class RagServiceImpl implements RagService {
                             String aiResponse = fullResponse.toString();
                             if (!aiResponse.isEmpty()) {
                                 chatMessageService.saveAssistantMessage(sessionId, userId, aiResponse);
-                                log.info("LLM调用完成: sessionId={}, 长度={}, 耗时{}ms",
+                                log.info("LLM stream completed: sessionId={}, length={}, cost={}ms",
                                         sessionId, aiResponse.length(), System.currentTimeMillis() - llmStartTime);
                             }
                         })
-                        .doOnError(e -> log.error("LLM调用失败: sessionId={}, error={}", sessionId, e.getMessage()))
+                        .doOnError(e -> log.error("LLM stream failed: sessionId={}, error={}", sessionId, e.getMessage()))
         );
     }
-
-    // ==================== 会话管理方法 ====================
 
     @Override
     public List<ChatMessage> getHistory(String sessionId, Long userId) {
@@ -306,58 +220,28 @@ public class RagServiceImpl implements RagService {
         return chatSessionService.getSessionsByUserId(userId);
     }
 
-    /**
-     * 删除会话（逻辑删除）
-     * 增加用户ID校验，确保用户只能删除自己的会话
-     *
-     * @param sessionId 会话ID
-     * @param userId    用户ID
-     * @return 是否删除成功
-     */
     @Override
     public boolean delete(String sessionId, Long userId) {
-        log.info("执行会话逻辑删除: sessionId={}, userId={}", sessionId, userId);
+        log.info("Delete session logically: sessionId={}, userId={}", sessionId, userId);
         return chatSessionService.deleteSession(sessionId, userId);
     }
 
-    /**
-     * 批量删除会话（逻辑删除）
-     *
-     * @param sessionIds 会话ID列表
-     * @param userId     用户ID
-     * @return 是否删除成功
-     */
     @Override
     public boolean deleteBatch(List<String> sessionIds, Long userId) {
-        log.info("执行会话批量逻辑删除: sessionIds={}, userId={}", sessionIds, userId);
+        log.info("Delete sessions logically in batch: sessionIds={}, userId={}", sessionIds, userId);
         return chatSessionService.deleteSessions(sessionIds, userId);
     }
 
-    // ==================== 辅助方法 ====================
-
-    /**
-     * RAG向量检索增强
-     * 从向量数据库检索相关文档，并附加到消息中
-     *
-     * @param message 原始消息
-     * @return 增强后的消息
-     */
     @Override
     public String enhance(String message) {
         List<Document> ragDocuments = performSearch(message);
         return formatMessageWithDocs(message, ragDocuments);
     }
 
-    /**
-     * 执行检索
-     */
     private List<Document> performSearch(String message) {
         return ragConversationSupport.performSearch(message);
     }
 
-    /**
-     * 格式化消息
-     */
     private String formatMessageWithDocs(String message, List<Document> ragDocuments) {
         return ragConversationSupport.formatMessageWithDocs(message, ragDocuments);
     }

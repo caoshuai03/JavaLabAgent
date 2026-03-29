@@ -7,7 +7,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cs.rag.common.BaseResponse;
 import com.cs.rag.common.ErrorCode;
 import com.cs.rag.common.ResultUtils;
-import com.cs.rag.entity.AliOssFile;
+import com.cs.rag.pojo.entity.AliOssFile;
 import com.cs.rag.mapper.AliOssFileMapper;
 import com.cs.rag.pojo.dto.QueryFileDTO;
 import com.cs.rag.pojo.dto.FileDownloadInfo;

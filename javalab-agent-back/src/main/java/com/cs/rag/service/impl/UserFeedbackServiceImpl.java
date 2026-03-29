@@ -1,7 +1,7 @@
 package com.cs.rag.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.cs.rag.entity.UserFeedback;
+import com.cs.rag.pojo.entity.UserFeedback;
 import com.cs.rag.mapper.UserFeedbackMapper;
 import com.cs.rag.pojo.dto.UserFeedbackDTO;
 import com.cs.rag.service.UserFeedbackService;

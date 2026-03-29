@@ -1,7 +1,7 @@
 package com.cs.rag.service;
 
 import com.cs.rag.common.PageResult;
-import com.cs.rag.entity.User;
+import com.cs.rag.pojo.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.cs.rag.pojo.dto.UserDTO;
 import com.cs.rag.pojo.dto.UserPageQueryDTO;

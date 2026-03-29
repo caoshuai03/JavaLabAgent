@@ -2,7 +2,6 @@ package com.cs.rag.common;
 
 import com.cs.rag.config.JwtProperties;
 import com.cs.rag.constant.JwtClaimsConstant;
-import com.cs.rag.context.BaseContext;
 import com.cs.rag.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;

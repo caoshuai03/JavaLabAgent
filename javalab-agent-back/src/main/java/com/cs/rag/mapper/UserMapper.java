@@ -2,7 +2,7 @@ package com.cs.rag.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.github.pagehelper.Page;
-import com.cs.rag.entity.User;
+import com.cs.rag.pojo.entity.User;
 import com.cs.rag.pojo.dto.UserPageQueryDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

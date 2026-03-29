@@ -10,7 +10,7 @@
 <mapper namespace="com.cs.rag.mapper.ChatSessionMapper">
 
     <!-- 结果映射：ChatSession实体 -->
-    <resultMap id="BaseResultMap" type="com.cs.rag.entity.ChatSession">
+    <resultMap id="BaseResultMap" type="com.cs.rag.pojo.entity.ChatSession">
         <id property="id" column="id"/>
         <result property="userId" column="user_id"/>
         <result property="title" column="title"/>
@@ -56,7 +56,7 @@
         
         @param chatSession 会话对象
     -->
-    <insert id="insert" parameterType="com.cs.rag.entity.ChatSession">
+    <insert id="insert" parameterType="com.cs.rag.pojo.entity.ChatSession">
         <!-- 使用数据库CURRENT_TIMESTAMP确保时间一致性 -->
         INSERT INTO chat_session (id, user_id, title, created_at, updated_at, deleted, summary)
         VALUES (#{id}::uuid, #{userId}, #{title}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, #{summary})

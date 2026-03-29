@@ -2,8 +2,8 @@ package com.cs.rag.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cs.rag.constant.RagConstant;
-import com.cs.rag.entity.ChatMessage;
-import com.cs.rag.entity.ChatSession;
+import com.cs.rag.pojo.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatSession;
 import com.cs.rag.mapper.ChatSessionMapper;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;

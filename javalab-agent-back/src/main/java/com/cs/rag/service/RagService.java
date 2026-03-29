@@ -1,8 +1,7 @@
 package com.cs.rag.service;
 
-import com.cs.rag.constant.RagConstant;
-import com.cs.rag.entity.ChatMessage;
-import com.cs.rag.entity.ChatSession;
+import com.cs.rag.pojo.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatSession;
 import reactor.core.publisher.Flux;
 
 import java.util.List;

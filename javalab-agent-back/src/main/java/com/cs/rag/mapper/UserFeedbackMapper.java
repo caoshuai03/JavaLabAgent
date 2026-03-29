@@ -1,7 +1,7 @@
 package com.cs.rag.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.cs.rag.entity.UserFeedback;
+import com.cs.rag.pojo.entity.UserFeedback;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

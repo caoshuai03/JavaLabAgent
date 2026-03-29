@@ -1,7 +1,7 @@
 package com.cs.rag.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.cs.rag.entity.ChatSession;
+import com.cs.rag.pojo.entity.ChatSession;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

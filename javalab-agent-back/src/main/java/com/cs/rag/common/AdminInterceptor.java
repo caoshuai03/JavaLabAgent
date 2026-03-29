@@ -1,7 +1,6 @@
 package com.cs.rag.common;
 
-import com.cs.rag.context.BaseContext;
-import com.cs.rag.entity.User;
+import com.cs.rag.pojo.entity.User;
 import com.cs.rag.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

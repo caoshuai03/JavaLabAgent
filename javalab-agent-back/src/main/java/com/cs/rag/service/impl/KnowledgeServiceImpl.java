@@ -5,7 +5,7 @@ import com.cs.rag.common.BaseResponse;
 import com.cs.rag.common.ErrorCode;
 import com.cs.rag.common.ResultUtils;
 import com.cs.rag.constant.FileMessageConstant;
-import com.cs.rag.entity.AliOssFile;
+import com.cs.rag.pojo.entity.AliOssFile;
 import com.cs.rag.service.AliOssFileService;
 import com.cs.rag.service.KnowledgeService;
 import com.cs.rag.utils.StorageUtil;

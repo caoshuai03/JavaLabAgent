@@ -1,7 +1,7 @@
 package com.cs.rag.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.cs.rag.entity.UserFeedback;
+import com.cs.rag.pojo.entity.UserFeedback;
 import com.cs.rag.pojo.dto.UserFeedbackDTO;
 
 /**

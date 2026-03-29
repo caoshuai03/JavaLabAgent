@@ -2,7 +2,7 @@ package com.cs.rag.mapper;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.cs.rag.entity.AliOssFile;
+import com.cs.rag.pojo.entity.AliOssFile;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 

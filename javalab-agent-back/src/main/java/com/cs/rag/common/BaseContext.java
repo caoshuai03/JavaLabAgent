@@ -1,4 +1,4 @@
-package com.cs.rag.context;
+package com.cs.rag.common;
 
 public class BaseContext {
 

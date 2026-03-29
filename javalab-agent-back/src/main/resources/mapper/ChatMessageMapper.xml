@@ -10,7 +10,7 @@
 <mapper namespace="com.cs.rag.mapper.ChatMessageMapper">
 
     <!-- 结果映射：ChatMessage实体 -->
-    <resultMap id="BaseResultMap" type="com.cs.rag.entity.ChatMessage">
+    <resultMap id="BaseResultMap" type="com.cs.rag.pojo.entity.ChatMessage">
         <id property="id" column="id"/>
         <result property="sessionId" column="session_id"/>
         <result property="userId" column="user_id"/>
@@ -70,7 +70,7 @@
         
         @param chatMessage 消息对象（包含 userId）
     -->
-    <insert id="insert" parameterType="com.cs.rag.entity.ChatMessage">
+    <insert id="insert" parameterType="com.cs.rag.pojo.entity.ChatMessage">
         INSERT INTO chat_message (id, session_id, user_id, role, content, created_at)
         VALUES (#{id}, #{sessionId}::uuid, #{userId}, #{role}, #{content}, #{createdAt})
     </insert>

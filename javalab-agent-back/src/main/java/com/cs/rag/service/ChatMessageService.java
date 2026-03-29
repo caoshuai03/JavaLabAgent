@@ -1,7 +1,7 @@
 package com.cs.rag.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.cs.rag.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatMessage;
 import org.springframework.ai.chat.messages.Message;
 
 import java.util.List;

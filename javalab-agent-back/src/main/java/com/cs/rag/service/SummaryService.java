@@ -1,6 +1,6 @@
 package com.cs.rag.service;
 
-import com.cs.rag.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatMessage;
 import java.util.List;
 
 /**

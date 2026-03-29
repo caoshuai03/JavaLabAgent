@@ -1,8 +1,8 @@
 package com.cs.rag.controller;
 
 import com.cs.rag.common.ApplicationConstant;
-import com.cs.rag.entity.ChatMessage;
-import com.cs.rag.entity.ChatSession;
+import com.cs.rag.pojo.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatSession;
 import com.cs.rag.pojo.dto.ChatRequestDTO;
 import com.cs.rag.pojo.dto.DeleteSessionRequestDTO;
 import com.cs.rag.pojo.dto.HistoryRequestDTO;

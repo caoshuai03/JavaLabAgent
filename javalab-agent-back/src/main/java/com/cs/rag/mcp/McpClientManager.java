@@ -42,6 +42,8 @@ import java.util.stream.Collectors;
 public class McpClientManager {
 
     private final ObjectMapper objectMapper;
+    private final McpConfigSupport mcpConfigSupport;
+    private final McpProtocolSupport mcpProtocolSupport;
 
     /** MCP配置文件路径 (classpath下) */
     private static final String CONFIG_FILE = "mcp-tools.json";
@@ -73,8 +75,12 @@ public class McpClientManager {
     /** HTTP客户端 (用于http和sse模式) */
     private final HttpClient httpClient;
 
-    public McpClientManager(ObjectMapper objectMapper) {
+    public McpClientManager(ObjectMapper objectMapper,
+                            McpConfigSupport mcpConfigSupport,
+                            McpProtocolSupport mcpProtocolSupport) {
         this.objectMapper = objectMapper;
+        this.mcpConfigSupport = mcpConfigSupport;
+        this.mcpProtocolSupport = mcpProtocolSupport;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -141,6 +147,10 @@ public class McpClientManager {
      * 优先从项目根目录加载外部配置，找不到则从classpath加载
      */
     public void loadConfig() {
+        if (useSupportDelegates()) {
+            currentConfig = mcpConfigSupport.loadConfig(Paths.get(EXTERNAL_CONFIG_FILE), CONFIG_FILE);
+            return;
+        }
         try {
             String jsonContent = null;
 
@@ -181,6 +191,10 @@ public class McpClientManager {
      * 归一化MCP配置，兼容仅填写url但未显式声明type的场景
      */
     private void normalizeConfig(McpToolsConfig config) {
+        if (useSupportDelegates()) {
+            mcpConfigSupport.normalizeConfig(config);
+            return;
+        }
         if (config == null) {
             return;
         }
@@ -210,6 +224,10 @@ public class McpClientManager {
      * 保存当前配置到外部文件
      */
     public void saveConfig() {
+        if (useSupportDelegates()) {
+            mcpConfigSupport.saveConfig(Paths.get(EXTERNAL_CONFIG_FILE), currentConfig);
+            return;
+        }
         try {
             Path externalPath = Paths.get(EXTERNAL_CONFIG_FILE);
             String json = objectMapper.writerWithDefaultPrettyPrinter()
@@ -235,6 +253,7 @@ public class McpClientManager {
      * 初始化单个MCP服务器连接
      */
     private void initServer(String name, McpServerConfig config) {
+        // 这里只做协议分发，具体实现放到各自方法。
         if ("stdio".equalsIgnoreCase(config.getType())) {
             initStdioServer(name, config);
         } else if ("sse".equalsIgnoreCase(config.getType())) {
@@ -370,6 +389,9 @@ public class McpClientManager {
      * @return 完整的JSON-RPC POST endpoint URL，未找到则返回null
      */
     private String readEndpointFromSseStream(BufferedReader reader, String baseUrl) throws IOException {
+        if (useSupportDelegates()) {
+            return mcpProtocolSupport.readEndpointFromSseStream(reader, baseUrl);
+        }
         boolean isEndpointEvent = false;
         String line;
         while ((line = reader.readLine()) != null) {
@@ -562,6 +584,7 @@ public class McpClientManager {
      * 发送JSON-RPC请求并等待响应
      */
     private synchronized JsonNode sendJsonRpc(String serverName, String method, Map<String, Object> params) {
+        // 所有 JSON-RPC 请求都从这里进入，再路由到具体协议。
         McpServerConfig config = currentConfig.getMcpServers().get(serverName);
         if (config == null) {
             log.warn("MCP服务器[{}]未找到配置", serverName);
@@ -582,6 +605,7 @@ public class McpClientManager {
      * 通过stdio发送JSON-RPC请求
      */
     private JsonNode sendJsonRpcStdio(String serverName, String method, Map<String, Object> params) {
+        // stdio 模式适合本地子进程型 MCP 服务。
         BufferedWriter writer = stdioWriters.get(serverName);
         BufferedReader reader = stdioReaders.get(serverName);
 
@@ -692,6 +716,7 @@ public class McpClientManager {
      * 通过HTTP发送JSON-RPC请求
      */
     private JsonNode sendJsonRpcHttp(String serverName, McpServerConfig config, String method, Map<String, Object> params) {
+        // http 模式直接发送标准 JSON-RPC 请求。
         try {
             int id = requestIdCounter.getAndIncrement();
 
@@ -745,6 +770,7 @@ public class McpClientManager {
      * 响应可能是标准JSON-RPC响应，也可能通过SSE事件流返回
      */
     private JsonNode sendJsonRpcSse(String serverName, String method, Map<String, Object> params) {
+        // SSE 模式下，请求和响应不一定在同一个通道返回。
         String endpointUrl = sseEndpoints.get(serverName);
         if (endpointUrl == null || endpointUrl.isBlank()) {
             log.warn("MCP服务器[{}]的SSE endpoint未就绪，无法发送请求", serverName);
@@ -818,6 +844,9 @@ public class McpClientManager {
      * 解析标准JSON-RPC响应
      */
     private JsonNode parseJsonRpcResponse(String serverName, String jsonContent) {
+        if (useSupportDelegates()) {
+            return mcpProtocolSupport.parseJsonRpcResponse(serverName, jsonContent);
+        }
         try {
             JsonNode responseNode = objectMapper.readTree(jsonContent);
             if (responseNode.has("error")) {
@@ -838,6 +867,9 @@ public class McpClientManager {
      * 查找匹配请求ID的 event:message 事件
      */
     private JsonNode parseSseMessageResponse(String serverName, String sseBody, int requestId) {
+        if (useSupportDelegates()) {
+            return mcpProtocolSupport.parseSseMessageResponse(serverName, sseBody, requestId);
+        }
         String[] lines = sseBody.split("\n");
         boolean nextIsMessage = false;
         for (String line : lines) {
@@ -1011,5 +1043,10 @@ public class McpClientManager {
         public boolean isSuccess() { return success; }
         public String getContent() { return content; }
         public String getErrorMessage() { return errorMessage; }
+    }
+
+    // 先通过委托方式平滑迁移，确认稳定后再删除旧实现。
+    private boolean useSupportDelegates() {
+        return true;
     }
 }

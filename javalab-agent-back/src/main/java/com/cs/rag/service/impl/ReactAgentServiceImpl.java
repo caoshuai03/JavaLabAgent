@@ -5,6 +5,7 @@ import com.cs.rag.llm.LLMProviderRegistry;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.PromptService;
 import com.cs.rag.service.ReactAgentService;
+import com.cs.rag.service.ReactAgentToolService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +19,7 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,11 +30,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import reactor.core.publisher.FluxSink;
 
 @Slf4j
 @Service
 public class ReactAgentServiceImpl implements ReactAgentService {
+
+    private static final String DEFAULT_PLAN_COMPLETED_ANSWER = "Tool analysis completed. Preparing final answer.";
+    private static final String DEFAULT_PLAN_ERROR_ANSWER = "Planning failed. Falling back to direct answer.";
+    private static final String DEFAULT_UNKNOWN_ERROR = "Unknown error";
 
     private final RagConversationSupport ragConversationSupport;
     private final LLMProviderRegistry llmProviderRegistry;
@@ -57,221 +62,240 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     @Override
     public Flux<String> chat(String message, String sessionId, Long userId, String model) {
-        // 预处理阶段（同步，快速完成）
-        String finalSessionId = ragConversationSupport.prepareSession(message, sessionId, userId);
-        List<Message> contextMessages = ragConversationSupport.buildContext(finalSessionId, userId);
-        chatMessageService.saveUserMessage(finalSessionId, userId, message);
-        List<Document> ragDocuments = ragConversationSupport.performSearch(message);
-        String enhancedMessage = ragConversationSupport.formatMessageWithDocs(message, ragDocuments);
-        String effectiveModel = ragConversationSupport.selectModel(model, ragDocuments);
-
-        List<Message> allMessages = new ArrayList<>(contextMessages);
-        allMessages.add(new UserMessage(enhancedMessage));
-
+        // 把本轮请求需要的上下文先整理好，后续链路统一围绕这一份上下文工作。
+        ReactAgentChatContext chatContext = prepareChatContext(message, sessionId, userId, model);
         String traceId = UUID.randomUUID().toString().replace("-", "");
         long start = System.currentTimeMillis();
 
-        // 使用 Flux.create 实现实时流式推送，工具调用事件逐个发送到前端
-        return Flux.<String>create(sink -> {
-            Thread thread = new Thread(() -> {
-                try {
-                    // 在子线程中执行规划循环，每个事件实时推送
-                    PlanOutcome planOutcome = runPlanningLoop(message, finalSessionId, userId, effectiveModel, traceId, sink);
-
-                    if (planOutcome.finalAnswer != null && !planOutcome.finalAnswer.isBlank()) {
-                        // 规划器直接给出了最终答案，流式推送 token 事件
-                        streamTextDirectly(sink, planOutcome.finalAnswer, finalSessionId, traceId);
-                        // 保存消息并发送 final 事件
-                        saveMessageWithThinkingProcess(finalSessionId, userId, planOutcome.finalAnswer, planOutcome.events);
-                        sink.next(eventJson("final", finalSessionId, traceId, Map.of("done", true)));
-                        log.info("ReactAgent完成(直接回答): sessionId={}, traceId={}, cost={}ms",
-                                finalSessionId, traceId, System.currentTimeMillis() - start);
-                        sink.complete();
-                        return;
-                    }
-
-                    // 需要 LLM 流式生成最终回答，切换到 Flux 订阅模式
-                    ChatModel targetChatModel = llmProviderRegistry.getChatModel(effectiveModel);
-                    ChatClient chatClient = ChatClient.builder(targetChatModel).build();
-                    // ReactAgent最终回答使用通用prompt，不限定Java领域，综合工具观察结果回答
-                    String reactFinalSystemPrompt = buildReactFinalSystemPrompt();
-                    ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
-                            .system(reactFinalSystemPrompt)
-                            .messages(buildFinalMessages(allMessages, planOutcome.observations))
-                            .options(ChatOptions.builder().model(effectiveModel).build());
-
-                    // 收集完整回复用于保存
-                    StringBuilder fullResponse = new StringBuilder();
-                    // 订阅 LLM 流式输出，逐 token 推送
-                    promptSpec.stream()
-                            .content()
-                            .doOnNext(chunk -> {
-                                fullResponse.append(chunk);
-                                sink.next(eventJson("token", finalSessionId, traceId, Map.of("content", chunk)));
-                            })
-                            .doOnComplete(() -> {
-                                String aiResponse = fullResponse.toString();
-                                if (!aiResponse.isEmpty()) {
-                                    saveMessageWithThinkingProcess(finalSessionId, userId, aiResponse, planOutcome.events);
-                                    log.info("ReactAgent完成: sessionId={}, traceId={}, length={}, cost={}ms",
-                                            finalSessionId, traceId, aiResponse.length(), System.currentTimeMillis() - start);
-                                }
-                                sink.next(eventJson("final", finalSessionId, traceId, Map.of("done", true)));
-                                sink.complete();
-                            })
-                            .doOnError(e -> {
-                                sink.next(eventJson("error", finalSessionId, traceId, Map.of("message", e.getMessage())));
-                                sink.complete();
-                            })
-                            .subscribe();
-                } catch (Exception e) {
-                    log.error("ReactAgent异常: sessionId={}, traceId={}", finalSessionId, traceId, e);
-                    sink.next(eventJson("error", finalSessionId, traceId, Map.of("message", e.getMessage() != null ? e.getMessage() : "未知错误")));
-                    sink.complete();
-                }
-            });
+        return Flux.create(sink -> {
+            Thread thread = new Thread(() -> handleChat(chatContext, traceId, start, sink));
             thread.setName("react-agent-" + traceId);
             thread.setDaemon(true);
             thread.start();
         });
     }
 
-    /**
-     * 执行规划循环，每个事件通过 sink 实时推送到前端（逐个显示工具调用）
-     *
-     * @param sink SSE 流的 sink，用于实时推送事件
-     * @return 规划结果（events 列表仅用于持久化，推送已通过 sink 完成）
-     */
-    private PlanOutcome runPlanningLoop(String message, String sessionId, Long userId, String model, String traceId, FluxSink<String> sink) {
-        // events 列表仅用于最终持久化保存，实时推送通过 sink 完成
+    private ReactAgentChatContext prepareChatContext(String message, String sessionId, Long userId, String model) {
+        // 1. 准备会话并拉取历史消息。
+        String finalSessionId = ragConversationSupport.prepareSession(message, sessionId, userId);
+        List<Message> contextMessages = ragConversationSupport.buildContext(finalSessionId, userId);
+        // 2. 当前用户消息先落库，保证链路中断时也能追溯输入。
+        chatMessageService.saveUserMessage(finalSessionId, userId, message);
+        // 3. 先做知识检索，再决定增强后的用户消息和最终模型。
+        List<Document> ragDocuments = ragConversationSupport.performSearch(message);
+        String enhancedMessage = ragConversationSupport.formatMessageWithDocs(message, ragDocuments);
+        String effectiveModel = ragConversationSupport.selectModel(model, ragDocuments);
+
+        List<Message> allMessages = new ArrayList<>(contextMessages);
+        allMessages.add(new UserMessage(enhancedMessage));
+        return new ReactAgentChatContext(finalSessionId, userId, message, effectiveModel, allMessages);
+    }
+
+    private void handleChat(ReactAgentChatContext chatContext, String traceId, long start, FluxSink<String> sink) {
+        try {
+            // 规划阶段负责决定“直接回答”还是“先调用工具再回答”。
+            ReactAgentPlanOutcome planOutcome = runPlanningLoop(chatContext, traceId, sink);
+            if (planOutcome.finalAnswer() != null && !planOutcome.finalAnswer().isBlank()) {
+                // 规划阶段已经拿到最终答案时，直接输出即可。
+                completeWithDirectAnswer(chatContext, traceId, start, sink, planOutcome);
+                return;
+            }
+            // 没有最终答案时，基于规划阶段产出的观察结果生成最后回复。
+            streamFinalAnswer(chatContext, traceId, start, sink, planOutcome);
+        } catch (Exception e) {
+            log.error("ReactAgent failed: sessionId={}, traceId={}", chatContext.sessionId(), traceId, e);
+            sink.next(eventJson("error", chatContext.sessionId(), traceId,
+                    Map.of("message", e.getMessage() != null ? e.getMessage() : DEFAULT_UNKNOWN_ERROR)));
+            sink.complete();
+        }
+    }
+
+    private void completeWithDirectAnswer(ReactAgentChatContext chatContext,
+                                          String traceId,
+                                          long start,
+                                          FluxSink<String> sink,
+                                          ReactAgentPlanOutcome planOutcome) {
+        streamTextDirectly(sink, planOutcome.finalAnswer(), chatContext.sessionId(), traceId);
+        saveMessageWithThinkingProcess(chatContext.sessionId(), chatContext.userId(), planOutcome.finalAnswer(), planOutcome.events());
+        sink.next(eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)));
+        log.info("ReactAgent completed with direct answer: sessionId={}, traceId={}, cost={}ms",
+                chatContext.sessionId(), traceId, System.currentTimeMillis() - start);
+        sink.complete();
+    }
+
+    private void streamFinalAnswer(ReactAgentChatContext chatContext,
+                                   String traceId,
+                                   long start,
+                                   FluxSink<String> sink,
+                                   ReactAgentPlanOutcome planOutcome) {
+        ChatModel targetChatModel = llmProviderRegistry.getChatModel(chatContext.effectiveModel());
+        ChatClient chatClient = ChatClient.builder(targetChatModel).build();
+        ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
+                .system(promptService.getReactAgentFinalPrompt())
+                .messages(buildFinalMessages(chatContext.allMessages(), planOutcome.observations()))
+                .options(ChatOptions.builder().model(chatContext.effectiveModel()).build());
+
+        StringBuilder fullResponse = new StringBuilder();
+        promptSpec.stream()
+                .content()
+                .doOnNext(chunk -> {
+                    fullResponse.append(chunk);
+                    sink.next(eventJson("token", chatContext.sessionId(), traceId, Map.of("content", chunk)));
+                })
+                .doOnComplete(() -> {
+                    String aiResponse = fullResponse.toString();
+                    if (!aiResponse.isEmpty()) {
+                        saveMessageWithThinkingProcess(chatContext.sessionId(), chatContext.userId(), aiResponse, planOutcome.events());
+                        log.info("ReactAgent completed: sessionId={}, traceId={}, length={}, cost={}ms",
+                                chatContext.sessionId(), traceId, aiResponse.length(), System.currentTimeMillis() - start);
+                    }
+                    sink.next(eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)));
+                    sink.complete();
+                })
+                .doOnError(e -> {
+                    sink.next(eventJson("error", chatContext.sessionId(), traceId, Map.of("message", e.getMessage())));
+                    sink.complete();
+                })
+                .subscribe();
+    }
+
+    private ReactAgentPlanOutcome runPlanningLoop(ReactAgentChatContext chatContext, String traceId, FluxSink<String> sink) {
+        // events 用于前端展示 thinking_process，observations 用于后续规划和最终回答。
         List<String> events = new ArrayList<>();
         List<String> observations = new ArrayList<>();
+        // 避免模型反复调用相同工具造成死循环。
         Set<String> toolSignatureHistory = new LinkedHashSet<>();
+        // 记录已经返回空结果的知识库查询，避免重复空检索。
         Set<String> emptyKnowledgeQueries = new LinkedHashSet<>();
 
-        // 辅助方法：同时推送到 sink 和记录到 events 列表
-        java.util.function.Consumer<String> emit = (event) -> {
+        java.util.function.Consumer<String> emit = event -> {
             sink.next(event);
             events.add(event);
         };
 
-        emit.accept(eventJson("session", sessionId, traceId, Map.of("sessionId", sessionId)));
-        emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "thinking")));
-        log.info("ReactAgent开始规划: sessionId={}, traceId={}, question={}", sessionId, traceId, message);
-        log.info("ReactAgent当前可调用工具列表: sessionId={}, traceId={}, tools={}",
-                sessionId, traceId, toJsonQuietly(reactAgentToolService.toolSchemas()));
-        int maxRounds = RagConstant.MAX_ROUNDS;
-        for (int i = 1; i <= maxRounds; i++) {
-            ActionDecision decision = decideNextAction(message, observations, model);
-            log.info("ReactAgent规划结果: sessionId={}, traceId={}, round={}, action={}, tool={}",
-                    sessionId, traceId, i, decision.action, decision.toolName);
-            if ("final".equals(decision.action)) {
-                String answer = decision.finalAnswer;
+        emit.accept(eventJson("session", chatContext.sessionId(), traceId, Map.of("sessionId", chatContext.sessionId())));
+        emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "thinking")));
+        log.info("ReactAgent planning started: sessionId={}, traceId={}, question={}",
+                chatContext.sessionId(), traceId, chatContext.originalMessage());
+        log.info("ReactAgent available tools: sessionId={}, traceId={}, tools={}",
+                chatContext.sessionId(), traceId, toJsonQuietly(reactAgentToolService.toolSchemas()));
+
+        for (int i = 1; i <= RagConstant.MAX_ROUNDS; i++) {
+            // 每一轮都让规划模型根据“问题 + 已有观察结果”决定下一步动作。
+            ReactAgentDecision decision = decideNextAction(chatContext.originalMessage(), observations, chatContext.effectiveModel());
+            log.info("ReactAgent decision: sessionId={}, traceId={}, round={}, action={}, tool={}",
+                    chatContext.sessionId(), traceId, i, decision.getAction(), decision.getToolName());
+
+            if ("final".equals(decision.getAction())) {
+                String answer = decision.getFinalAnswer();
                 if (answer == null || answer.isBlank()) {
-                    answer = "我已完成工具分析，下面给出总结。";
+                    answer = DEFAULT_PLAN_COMPLETED_ANSWER;
                 }
-                emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "ready_to_answer", "round", i)));
-                log.info("ReactAgent结束规划并直接回答: sessionId={}, traceId={}, round={}", sessionId, traceId, i);
-                return new PlanOutcome(events, observations, answer);
+                emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "ready_to_answer", "round", i)));
+                return new ReactAgentPlanOutcome(events, observations, answer);
             }
-            if (!"tool".equals(decision.action)) {
-                emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "ready_to_answer", "round", i)));
-                log.info("ReactAgent规划返回非tool动作，转直接回答: sessionId={}, traceId={}, round={}, raw={}",
-                        sessionId, traceId, i, decision.rawResponse);
-                return new PlanOutcome(events, observations, decision.rawResponse);
+
+            if (!"tool".equals(decision.getAction())) {
+                emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "ready_to_answer", "round", i)));
+                return new ReactAgentPlanOutcome(events, observations, decision.getRawResponse());
             }
-            String toolName = decision.toolName == null ? "" : decision.toolName;
-            Map<String, Object> toolInput = decision.toolInput == null ? new HashMap<>() : decision.toolInput;
+
+            String toolName = decision.getToolName() == null ? "" : decision.getToolName();
+            Map<String, Object> toolInput = decision.getToolInput() == null ? new HashMap<>() : decision.getToolInput();
             String toolSignature = toolName + "|" + toJsonQuietly(toolInput);
             if (toolSignatureHistory.contains(toolSignature)) {
-                emit.accept(eventJson("status", sessionId, traceId,
+                emit.accept(eventJson("status", chatContext.sessionId(), traceId,
                         Map.of("stage", "stop_repeated_tool", "round", i, "toolName", toolName)));
-                observations.add("检测到重复工具调用，停止继续调用并进入最终回答。");
-                log.info("ReactAgent阻止重复工具调用: sessionId={}, traceId={}, round={}, signature={}",
-                        sessionId, traceId, i, toolSignature);
-                return new PlanOutcome(events, observations, null);
+                observations.add("Repeated tool call detected. Stop planning and move to final answer.");
+                return new ReactAgentPlanOutcome(events, observations, null);
             }
+
             if ("knowledge_search".equals(toolName)) {
                 String query = extractKnowledgeQuery(toolInput);
                 if (query != null && emptyKnowledgeQueries.contains(query)) {
-                    emit.accept(eventJson("status", sessionId, traceId,
+                    emit.accept(eventJson("status", chatContext.sessionId(), traceId,
                             Map.of("stage", "skip_redundant_knowledge_search", "round", i, "query", query)));
-                    observations.add("同一检索词已无结果，停止重复检索并进入最终回答。");
-                    log.info("ReactAgent跳过重复空结果检索: sessionId={}, traceId={}, round={}, query={}",
-                            sessionId, traceId, i, query);
-                    return new PlanOutcome(events, observations, null);
+                    observations.add("The same knowledge search query already returned empty result.");
+                    return new ReactAgentPlanOutcome(events, observations, null);
                 }
             }
+
             toolSignatureHistory.add(toolSignature);
-            // 实时推送 tool_running 状态，前端立即显示该工具调用（带 loading 动画）
-            emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "tool_running", "round", i, "toolName", toolName)));
-            // 构建 tool_call 事件，包含工具描述供前端展示工具简介
-            Map<String, Object> toolCallPayload = new HashMap<>();
-            toolCallPayload.put("round", i);
-            toolCallPayload.put("toolName", toolName);
-            toolCallPayload.put("input", toolInput);
-            String toolDesc = reactAgentToolService.getToolDescription(toolName);
-            if (toolDesc != null) {
-                toolCallPayload.put("description", toolDesc);
-            }
-            emit.accept(eventJson("tool_call", sessionId, traceId, toolCallPayload));
-            log.info("ReactAgent调用工具: sessionId={}, traceId={}, round={}, tool={}, input={}",
-                    sessionId, traceId, i, toolName, toJsonQuietly(toolInput));
-            long toolStart = System.currentTimeMillis();
-            ReactAgentToolService.ToolExecutionResult result = reactAgentToolService.execute(toolName, toolInput, sessionId, userId);
-            Map<String, Object> resultPayload = new LinkedHashMap<>();
-            resultPayload.put("round", i);
-            resultPayload.put("toolName", result.getToolName());
-            resultPayload.put("success", result.isSuccess());
-            resultPayload.put("costMs", System.currentTimeMillis() - toolStart);
-            if (result.isSuccess()) {
-                resultPayload.put("data", result.getData());
-                if (isKnowledgeSearchNoResult(result.getToolName(), result.getData())) {
-                    // 知识库无结果时，给出更明确的引导信息，帮助planner选择其他工具
-                    String query = extractKnowledgeQuery(toolInput);
-                    if (query != null && !query.isBlank()) {
-                        emptyKnowledgeQueries.add(query);
-                    }
-                    observations.add("工具 knowledge_search 对查询\"" + (query != null ? query : "") +
-                            "\"返回0条结果，知识库中无相关内容。请勿再次调用knowledge_search，应尝试其他可用工具（如联网搜索类MCP工具）或直接基于通用知识回答。");
-                } else {
-                    observations.add("工具 " + result.getToolName() + " 返回: " + toJsonQuietly(result.getData()));
-                }
-            } else {
-                resultPayload.put("error", result.getErrorMessage());
-                observations.add("工具 " + result.getToolName() + " 错误: " + result.getErrorMessage());
-            }
-            // 实时推送工具结果，前端立即更新该工具调用状态（去掉 loading）
-            emit.accept(eventJson("tool_result", sessionId, traceId, resultPayload));
-            emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "tool_done", "round", i)));
-//            log.info("ReactAgent工具结果: sessionId={}, traceId={}, round={}, tool={}, success={}, costMs={}",
-//                    sessionId, traceId, i, result.getToolName(), result.isSuccess(), resultPayload.get("costMs"));
+            executeToolRound(chatContext, traceId, emit, observations, emptyKnowledgeQueries, i, toolName, toolInput);
         }
-        emit.accept(eventJson("status", sessionId, traceId, Map.of("stage", "plan_round_limit_reached", "round", maxRounds)));
-        log.info("ReactAgent达到最大规划轮次: sessionId={}, traceId={}, maxRounds={}", sessionId, traceId, maxRounds);
-        return new PlanOutcome(events, observations, null);
+
+        emit.accept(eventJson("status", chatContext.sessionId(), traceId,
+                Map.of("stage", "plan_round_limit_reached", "round", RagConstant.MAX_ROUNDS)));
+        return new ReactAgentPlanOutcome(events, observations, null);
     }
 
-    private ActionDecision decideNextAction(String message, List<String> observations, String model) {
+    private void executeToolRound(ReactAgentChatContext chatContext,
+                                  String traceId,
+                                  java.util.function.Consumer<String> emit,
+                                  List<String> observations,
+                                  Set<String> emptyKnowledgeQueries,
+                                  int round,
+                                  String toolName,
+                                  Map<String, Object> toolInput) {
+        // 先发工具运行事件，让前端能立刻展示当前执行中的工具。
+        emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_running", "round", round, "toolName", toolName)));
+
+        Map<String, Object> toolCallPayload = new HashMap<>();
+        toolCallPayload.put("round", round);
+        toolCallPayload.put("toolName", toolName);
+        toolCallPayload.put("input", toolInput);
+        String toolDesc = reactAgentToolService.getToolDescription(toolName);
+        if (toolDesc != null) {
+            toolCallPayload.put("description", toolDesc);
+        }
+        emit.accept(eventJson("tool_call", chatContext.sessionId(), traceId, toolCallPayload));
+
+        long toolStart = System.currentTimeMillis();
+        ReactAgentToolService.ToolExecutionResult result = reactAgentToolService.execute(toolName, toolInput, chatContext.sessionId(), chatContext.userId());
+
+        Map<String, Object> resultPayload = new HashMap<>();
+        resultPayload.put("round", round);
+        resultPayload.put("toolName", result.getToolName());
+        resultPayload.put("success", result.isSuccess());
+        resultPayload.put("costMs", System.currentTimeMillis() - toolStart);
+
+        if (result.isSuccess()) {
+            // 成功结果会沉淀到 observations，供下一轮规划或最终回答使用。
+            resultPayload.put("data", result.getData());
+            if (isKnowledgeSearchNoResult(result.getToolName(), result.getData())) {
+                String query = extractKnowledgeQuery(toolInput);
+                if (query != null && !query.isBlank()) {
+                    emptyKnowledgeQueries.add(query);
+                }
+                observations.add("knowledge_search returned empty result for query: " + (query == null ? "" : query));
+            } else {
+                observations.add("Tool " + result.getToolName() + " returned: " + toJsonQuietly(result.getData()));
+            }
+        } else {
+            resultPayload.put("error", result.getErrorMessage());
+            observations.add("Tool " + result.getToolName() + " failed: " + result.getErrorMessage());
+        }
+
+        emit.accept(eventJson("tool_result", chatContext.sessionId(), traceId, resultPayload));
+        emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_done", "round", round)));
+    }
+
+    private ReactAgentDecision decideNextAction(String message, List<String> observations, String model) {
+        // 规划模型收到的是统一 JSON 协议：工具列表、用户问题、已有观察结果。
         String toolList = toJsonQuietly(reactAgentToolService.toolSchemas());
-        String obs = observations.isEmpty() ? "无"
-                : observations.stream().map(s -> "- " + s).reduce((a, b) -> a + "\n" + b).orElse("无");
-
-        // 使用外部化的 ReAct 系统提示词（react-system-prompt.md）
+        String obs = observations.isEmpty() ? "none" : observations.stream().map(s -> "- " + s).reduce((a, b) -> a + "\n" + b).orElse("none");
         String systemPrompt = promptService.getReactAgentPrompt();
-
-        // 用户消息：提供可用工具列表、用户问题、已有观察
         String userPrompt = """
-                可用工具列表:
+                Available tools:
                 %s
 
-                用户问题:
+                User question:
                 %s
 
-                已有观察:
+                Existing observations:
                 %s
 
-                请输出你的决策JSON:
+                Please output your decision JSON:
                 """.formatted(toolList, message, obs);
         try {
             ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
@@ -282,77 +306,63 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                     .options(ChatOptions.builder().model(model).temperature(0.1).build())
                     .call()
                     .content();
-            // 记录LLM原始响应，便于排查规划异常（如不调用工具直接回答）
-            log.debug("ReactAgent规划器LLM原始响应: model={}, response={}", model, content);
+            log.debug("ReactAgent planner raw response: model={}, response={}", model, content);
             return parseDecision(content);
         } catch (Exception e) {
-            ActionDecision decision = new ActionDecision();
-            decision.action = "final";
-            decision.finalAnswer = "规划阶段异常，切换为直接回答。";
+            ReactAgentDecision decision = new ReactAgentDecision();
+            decision.setAction("final");
+            decision.setFinalAnswer(DEFAULT_PLAN_ERROR_ANSWER);
             return decision;
         }
     }
 
-    private ActionDecision parseDecision(String content) {
-        ActionDecision decision = new ActionDecision();
-        decision.rawResponse = content;
+    private ReactAgentDecision parseDecision(String content) {
+        ReactAgentDecision decision = new ReactAgentDecision();
+        decision.setRawResponse(content);
         try {
+            // 兼容 markdown 代码块、自然语言包裹 JSON 等输出形式，只抽取真正的 JSON 指令部分。
             String json = extractJson(content);
             JsonNode node = objectMapper.readTree(json);
-            decision.action = node.path("action").asText("final");
-            decision.toolName = node.path("toolName").asText(null);
+            decision.setAction(node.path("action").asText("final"));
+            decision.setToolName(node.path("toolName").asText(null));
             JsonNode toolInputNode = node.path("toolInput");
             if (toolInputNode.isObject()) {
-                decision.toolInput = objectMapper.convertValue(toolInputNode, new TypeReference<>() {
-                });
+                decision.setToolInput(objectMapper.convertValue(toolInputNode, new TypeReference<>() {
+                }));
             }
-            decision.finalAnswer = node.path("finalAnswer").asText(null);
+            decision.setFinalAnswer(node.path("finalAnswer").asText(null));
         } catch (Exception e) {
-            decision.action = "final";
-            decision.finalAnswer = content;
+            // 解析失败时兜底为最终回答，避免因为格式波动导致整轮对话中断。
+            decision.setAction("final");
+            decision.setFinalAnswer(content);
         }
         return decision;
     }
 
-    /**
-     * 构建 ReactAgent 最终回答阶段的系统提示词
-     * 比 chat-default.md 更通用，不限定 Java 领域，允许综合工具结果回答各类问题
-     */
-    private String buildReactFinalSystemPrompt() {
-        return """
-                你是一个智能助手。你需要根据用户的问题和整个对话上下文（包括工具调用及其结果）提供全面、准确的回答。
-
-                ## 处理工具调用上下文
-                当对话中包含工具调用及其结果时，你需要：
-                1. 仔细分析工具调用的目的和返回结果
-                2. 将工具返回的信息与用户的原始问题结合起来
-                3. 基于综合信息提供完整的回答
-                4. 如果工具返回了联网搜索结果，请整理并呈现关键信息
-
-                ## 回答要求
-                - 全面性：考虑整个对话历史和工具调用结果
-                - 准确性：基于工具返回的真实信息进行回答
-                - 清晰性：表达清晰，逻辑连贯，适当使用 Markdown 格式
-                - 实用性：提供有实际帮助的信息
-                - 如果涉及知识库检索到的内容，加上前缀"【根据知识库】："
-                - 如果涉及联网搜索到的内容，加上前缀"【根据联网搜索】："
-                - 如果是基于通用知识回答，加上前缀"【根据通用知识】："
-                """;
-    }
-
-    private List<Message> buildFinalMessages(List<Message> allMessages, List<String> observations) {
-        List<Message> messages = new ArrayList<>(allMessages);
-        if (!observations.isEmpty()) {
-            String joined = observations.stream().reduce((a, b) -> a + "\n" + b).orElse("");
-            messages.add(new SystemMessage("以下是工具观察结果，请综合回答:\n" + joined));
+    private String extractJson(String text) {
+        if (text == null) {
+            return "{}";
         }
-        return messages;
+        String trimmed = text.trim();
+        if (trimmed.startsWith("```")) {
+            // 去掉 ```json 包裹，保留代码块里的实际 JSON 内容。
+            int first = trimmed.indexOf('\n');
+            int last = trimmed.lastIndexOf("```");
+            if (first > -1 && last > first) {
+                trimmed = trimmed.substring(first + 1, last).trim();
+            }
+        }
+        // 只截取最外层 JSON 对象，忽略前后解释性文本。
+        int left = trimmed.indexOf('{');
+        int right = trimmed.lastIndexOf('}');
+        if (left >= 0 && right > left) {
+            return trimmed.substring(left, right + 1);
+        }
+        return trimmed;
     }
 
-    /**
-     * 将文本分块作为 token 事件直接推送到 sink（用于规划器直接回答的场景）
-     */
     private void streamTextDirectly(FluxSink<String> sink, String text, String sessionId, String traceId) {
+        // 最终回答统一拆成小块输出，保持前端与工具阶段一致的流式体验。
         sink.next(eventJson("status", sessionId, traceId, Map.of("stage", "finalizing")));
         int chunkSize = 25;
         for (int i = 0; i < text.length(); i += chunkSize) {
@@ -364,12 +374,21 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     private void saveMessageWithThinkingProcess(String sessionId, Long userId, String content, List<String> events) {
         String fullContent = content;
         if (events != null && !events.isEmpty()) {
-            // 将事件列表拼接成 JSON 数组字符串
+            // 通过注释标记包裹 thinking_process，既不影响原消息存储结构，也方便后续回放。
             String eventsJson = "[" + String.join(",", events) + "]";
-            // 添加特殊标记，用于前端解析
             fullContent = "<!-- thinking_process_start -->" + eventsJson + "<!-- thinking_process_end -->\n" + content;
         }
         chatMessageService.saveAssistantMessage(sessionId, userId, fullContent);
+    }
+
+    private List<Message> buildFinalMessages(List<Message> allMessages, List<String> observations) {
+        List<Message> messages = new ArrayList<>(allMessages);
+        if (!observations.isEmpty()) {
+            // 把工具观察结果以系统消息追加给模型，让最终回答阶段只关注“基于观察结果作答”。
+            String joined = observations.stream().reduce((a, b) -> a + "\n" + b).orElse("");
+            messages.add(new SystemMessage("Below are tool observations, please answer based on them.\n" + joined));
+        }
+        return messages;
     }
 
     private String eventJson(String eventType, String sessionId, String traceId, Map<String, Object> payload) {
@@ -382,31 +401,12 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return toJsonQuietly(data);
     }
 
-    private String extractJson(String text) {
-        if (text == null) {
-            return "{}";
-        }
-        String trimmed = text.trim();
-        if (trimmed.startsWith("```")) {
-            int first = trimmed.indexOf('\n');
-            int last = trimmed.lastIndexOf("```");
-            if (first > -1 && last > first) {
-                trimmed = trimmed.substring(first + 1, last).trim();
-            }
-        }
-        int left = trimmed.indexOf('{');
-        int right = trimmed.lastIndexOf('}');
-        if (left >= 0 && right > left) {
-            return trimmed.substring(left, right + 1);
-        }
-        return trimmed;
-    }
-
     private String toJsonQuietly(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
-            return "{\"eventType\":\"error\",\"payload\":{\"message\":\"json序列化失败\"}}";
+            // 事件序列化失败时返回最小错误事件，避免把异常继续抛到流式链路里。
+            return "{\"eventType\":\"error\",\"payload\":{\"message\":\"json serialization failed\"}}";
         }
     }
 
@@ -440,14 +440,69 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return query == null ? null : String.valueOf(query).trim();
     }
 
-    private static class ActionDecision {
-        String action;
-        String toolName;
-        Map<String, Object> toolInput;
-        String finalAnswer;
-        String rawResponse;
+    /**
+     * ReactAgent 对话上下文。
+     * 把一次请求里会反复用到的关键信息打包起来，避免主流程方法参数越来越多。
+     */
+    private record ReactAgentChatContext(String sessionId, Long userId, String originalMessage, String effectiveModel, List<Message> allMessages) {
     }
 
-    private record PlanOutcome(List<String> events, List<String> observations, String finalAnswer) {
+    /**
+     * 单轮规划执行结果。
+     * events 用于前端回放，observations 用于最终回答，finalAnswer 表示模型已经决定结束本轮流程。
+     */
+    private record ReactAgentPlanOutcome(List<String> events, List<String> observations, String finalAnswer) {
+    }
+
+    /**
+     * LLM 规划阶段输出的决策对象。
+     * 用来承接“继续调用工具”或“直接给最终答案”两类结果。
+     */
+    private static class ReactAgentDecision {
+        private String action;
+        private String toolName;
+        private Map<String, Object> toolInput;
+        private String finalAnswer;
+        private String rawResponse;
+
+        public String getAction() {
+            return action;
+        }
+
+        public void setAction(String action) {
+            this.action = action;
+        }
+
+        public String getToolName() {
+            return toolName;
+        }
+
+        public void setToolName(String toolName) {
+            this.toolName = toolName;
+        }
+
+        public Map<String, Object> getToolInput() {
+            return toolInput;
+        }
+
+        public void setToolInput(Map<String, Object> toolInput) {
+            this.toolInput = toolInput;
+        }
+
+        public String getFinalAnswer() {
+            return finalAnswer;
+        }
+
+        public void setFinalAnswer(String finalAnswer) {
+            this.finalAnswer = finalAnswer;
+        }
+
+        public String getRawResponse() {
+            return rawResponse;
+        }
+
+        public void setRawResponse(String rawResponse) {
+            this.rawResponse = rawResponse;
+        }
     }
 }

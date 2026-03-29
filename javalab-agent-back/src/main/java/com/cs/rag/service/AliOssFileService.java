@@ -1,7 +1,7 @@
 package com.cs.rag.service;
 
 import com.cs.rag.common.BaseResponse;
-import com.cs.rag.entity.AliOssFile;
+import com.cs.rag.pojo.entity.AliOssFile;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.cs.rag.pojo.dto.QueryFileDTO;
 import com.cs.rag.pojo.dto.FileDownloadInfo;

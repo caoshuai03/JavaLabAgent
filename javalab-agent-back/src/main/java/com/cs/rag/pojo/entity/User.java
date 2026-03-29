@@ -1,4 +1,4 @@
-package com.cs.rag.entity;
+package com.cs.rag.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
