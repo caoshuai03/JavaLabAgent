@@ -56,7 +56,7 @@
           </div>
           <div class="toolbar-right">
             <button
-              v-if="selectedIds.length > 0"
+              v-if="isAdmin && selectedIds.length > 0"
               @click="handleBatchDelete"
               class="batch-btn danger"
               :disabled="deleting"
@@ -196,6 +196,7 @@
                     <DownloadIcon :size="16" />
                   </button>
                   <button
+                    v-if="isAdmin"
                     @click="handleDelete(file.id, file.fileName)"
                     class="action-button delete"
                     :disabled="deleting"
@@ -450,6 +451,10 @@ const handleRowClick = (id) => {
 }
 
 const handleDelete = async (id, fileName) => {
+  if (!isAdmin.value) {
+    alert('仅管理员可操作知识库，请联系管理员')
+    return
+  }
   if (!confirm(`确定要删除文件 "${fileName}" 吗？`)) {
     return
   }
@@ -457,6 +462,10 @@ const handleDelete = async (id, fileName) => {
 }
 
 const handleBatchDelete = async () => {
+  if (!isAdmin.value) {
+    alert('仅管理员可操作知识库，请联系管理员')
+    return
+  }
   if (selectedIds.value.length === 0) return
   if (!confirm(`确定要删除选中的 ${selectedIds.value.length} 个文件吗？`)) {
     return
@@ -716,7 +725,12 @@ onMounted(() => {
     color: #fff;
     font-size: 13px;
     border-radius: 6px;
-    white-space: nowrap;
+    max-width: min(240px, calc(100vw - 32px));
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+    text-align: center;
+    box-sizing: border-box;
     z-index: 100;
     animation: fadeIn 0.2s ease;
 

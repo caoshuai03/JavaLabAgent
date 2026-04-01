@@ -50,7 +50,10 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
 
         // 注册管理员权限拦截器 - 只拦截知识库上传接口
         registry.addInterceptor(adminInterceptor)
-                .addPathPatterns("/api/v1/knowledge/file/upload");  // 只拦截上传路径
+                .addPathPatterns(
+                        "/api/v1/knowledge/file/upload",  // 上传接口
+                        "/api/v1/knowledge/delete"         // 删除接口
+                );
         
         log.info("管理员权限拦截器注册完成");
     }

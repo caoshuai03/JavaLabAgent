@@ -39,7 +39,7 @@ public class AdminInterceptor implements HandlerInterceptor {
             log.warn("管理员权限校验失败：用户ID={} 不是管理员", userId);
             response.setStatus(403);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":40300,\"message\":\"仅管理员可上传，请联系管理员\"}");
+            response.getWriter().write("{\"code\":40300,\"message\":\"仅管理员可操作知识库，请联系管理员\"}");
             return false;
         }
 
