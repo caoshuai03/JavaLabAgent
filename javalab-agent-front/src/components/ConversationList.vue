@@ -5,7 +5,7 @@
         v-for="conversation in chatStore.conversations"
         :key="conversation.id"
         :conversation="conversation"
-        :is-active="conversation.id === chatStore.currentConversationId"
+        :is-active="route.path === '/' && conversation.id === chatStore.currentConversationId"
         :is-selection-mode="isSelectionMode"
         :is-selected="selectedIds.includes(conversation.id)"
         @select="handleSelect"
@@ -94,6 +94,9 @@ const handleToggleSelect = (conversationId) => {
   
   .list-container {
     padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 }
 </style>

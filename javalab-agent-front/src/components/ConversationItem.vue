@@ -127,8 +127,8 @@ const handleDelete = () => {
   align-items: center;
   padding: 10px 12px;
   cursor: pointer;
-  border-radius: 6px;
-  margin-bottom: 2px;
+  border-radius: 12px;
+  margin-bottom: 0;
   position: relative;
   transition: background-color 0.2s;
   height: 44px;
@@ -143,10 +143,6 @@ const handleDelete = () => {
   
   &.active {
     background-color: var(--bg-active);
-    
-    .title {
-      font-weight: 500;
-    }
   }
 
   .checkbox-wrapper {
@@ -168,6 +164,7 @@ const handleDelete = () => {
     
     .title {
       font-size: 14px;
+      font-weight: 400;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;

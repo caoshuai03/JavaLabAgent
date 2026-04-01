@@ -17,7 +17,7 @@
       <div class="nav-menu">
         <button
           @click="handleNewConversation"
-          class="nav-item"
+          :class="['nav-item', { active: isNavActive('/') }]"
           :title="chatStore.sidebarCollapsed ? '新建对话' : ''"
         >
           <PlusIcon :size="18" />
@@ -26,7 +26,7 @@
 
         <button
           @click="handleKnowledgeManagement"
-          class="nav-item"
+          :class="['nav-item', { active: isNavActive('/knowledge') }]"
           :title="chatStore.sidebarCollapsed ? '知识库' : ''"
         >
           <FolderIcon :size="18" />
@@ -35,7 +35,7 @@
 
         <button
           @click="handleMcpSettings"
-          class="nav-item"
+          :class="['nav-item', { active: isNavActive('/mcp') }]"
           :title="chatStore.sidebarCollapsed ? 'MCP' : ''"
         >
           <ToolIcon :size="18" />
@@ -44,7 +44,7 @@
 
         <button
           @click="handleSkillsManagement"
-          class="nav-item"
+          :class="['nav-item', { active: isNavActive('/skills') }]"
           :title="chatStore.sidebarCollapsed ? 'Skills' : ''"
         >
           <BookIcon :size="18" />
@@ -163,6 +163,16 @@ const handleMcpSettings = () => {
 const handleSkillsManagement = () => {
   router.push('/skills')
 }
+
+// 判断当前路由是否与某个导航项匹配，便于给选中的入口加背景高亮
+// “新聊天”只在新对话状态下高亮，避免和历史会话的选中状态互相覆盖
+const isNavActive = (path) => {
+  if (path === '/') {
+    return route.path === '/' && chatStore.isNewConversation
+  }
+
+  return route.path === path
+}
 </script>
 
 <style lang="scss" scoped>
@@ -270,7 +280,7 @@ const handleSkillsManagement = () => {
     display: flex;
     flex-direction: column;
     padding: 0 8px 8px 8px;
-    gap: 0;
+    gap: 6px;
 
     .nav-item {
       display: flex;
@@ -279,7 +289,7 @@ const handleSkillsManagement = () => {
       padding: 10px 12px;
       background-color: transparent;
       border: none;
-      border-radius: 6px;
+      border-radius: 12px;
       color: var(--text-primary);
       cursor: pointer;
       font-size: 14px;
@@ -288,7 +298,16 @@ const handleSkillsManagement = () => {
       min-height: 40px;
 
       &:hover {
-        background-color: var(--bg-hover);
+        background-color: var(--nav-bg-hover);
+      }
+
+      &.active {
+        background-color: var(--nav-bg-active);
+        color: var(--primary-color);
+      }
+
+      &.active:hover {
+        background-color: var(--nav-bg-active);
       }
 
       &:focus {
@@ -297,7 +316,7 @@ const handleSkillsManagement = () => {
 
       &:focus-visible {
         outline: none;
-        background-color: var(--bg-hover);
+        background-color: var(--nav-bg-hover);
       }
 
       /* 统一侧边栏图标的描边粗细与线帽样式，避免不同图标看起来不一致 */

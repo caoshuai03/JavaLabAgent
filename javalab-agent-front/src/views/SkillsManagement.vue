@@ -41,12 +41,12 @@
             </div>
             <div v-if="currentSkill" class="skill-detail">
               <div class="detail-section">
-                <h4>描述</h4>
+                <h4>技能简介</h4>
                 <p class="description">{{ currentSkill.description }}</p>
               </div>
 
               <div v-if="skillDetail?.content" class="detail-section">
-                <h4>完整描述</h4>
+                <h4>详细说明</h4>
                 <div class="markdown-content" v-html="renderedContent"></div>
               </div>
             </div>
@@ -66,15 +66,64 @@ import Sidebar from '../components/Sidebar.vue'
 const chatStore = useChatStore()
 
 // 简单的 Markdown 渲染函数（不依赖外部库）
+// 这里会尽量把段落、列表和标题分开渲染，避免完整描述里出现过多空白
 const renderMarkdown = (content) => {
   if (!content) return ''
-  return content
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-    .replace(/\*(.*)\*/gim, '<em>$1</em>')
-    .replace(/\n/gim, '<br>')
+
+  const normalized = content
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  const escapeHtml = (text) => {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+  }
+
+  const formatInline = (text) => {
+    return escapeHtml(text)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`(.+?)`/g, '<code>$1</code>')
+  }
+
+  const blocks = normalized.split(/\n\n+/)
+
+  return blocks
+    .map((block) => {
+      const lines = block.split('\n').map((line) => line.trim()).filter(Boolean)
+      if (lines.length === 0) return ''
+
+      const firstLine = lines[0]
+
+      if (/^#{1,3}\s+/.test(firstLine)) {
+        const level = firstLine.match(/^#{1,3}/)?.[0].length || 1
+        const title = firstLine.replace(/^#{1,3}\s+/, '')
+        return `<h${level}>${formatInline(title)}</h${level}>`
+      }
+
+      if (lines.every((line) => /^[-*+]\s+/.test(line))) {
+        const items = lines
+          .map((line) => `<li>${formatInline(line.replace(/^[-*+]\s+/, ''))}</li>`)
+          .join('')
+        return `<ul>${items}</ul>`
+      }
+
+      if (lines.every((line) => /^\d+\.\s+/.test(line))) {
+        const items = lines
+          .map((line) => `<li>${formatInline(line.replace(/^\d+\.\s+/, ''))}</li>`)
+          .join('')
+        return `<ol>${items}</ol>`
+      }
+
+      return `<p>${formatInline(lines.join(' '))}</p>`
+    })
+    .filter(Boolean)
+    .join('')
 }
 
 const skills = ref([])
@@ -261,13 +310,15 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: linear-gradient(180deg, rgba(144, 19, 139, 0.04), transparent);
 
   h2 {
     margin: 0;
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 600;
     color: var(--text-primary);
+    letter-spacing: 0.2px;
   }
 
   .close-btn {
@@ -291,63 +342,100 @@ onMounted(() => {
 }
 
 .skill-detail {
-  padding: 20px 24px;
+  padding: 20px 24px 24px;
   overflow-y: auto;
 }
 
 .detail-section {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  padding: 6px 0 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 
   &:last-child {
     margin-bottom: 0;
   }
 
   h4 {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 800;
     color: var(--text-primary);
-    margin: 0 0 8px 0;
+    margin: 0 0 12px 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.2px;
+
+    &::before {
+      content: '';
+      width: 5px;
+      height: 16px;
+      border-radius: 999px;
+      background: #90138B;
+      flex-shrink: 0;
+    }
   }
 
   .description {
     margin: 0;
     font-size: 14px;
     color: var(--text-secondary);
-    line-height: 1.6;
+    line-height: 1.8;
+    white-space: pre-wrap;
   }
 }
 
 .markdown-content {
-  padding: 16px;
-  background-color: var(--bg-tertiary);
-  border-radius: 8px;
+  padding: 14px 0 0;
+  background: linear-gradient(180deg, rgba(144, 19, 139, 0.02), rgba(0, 0, 0, 0.01));
+  border: none;
+  border-radius: 0;
   font-size: 14px;
   line-height: 1.8;
   color: var(--text-primary);
+  word-break: break-word;
 
   :deep(h1),
   :deep(h2),
   :deep(h3) {
     color: var(--text-primary);
-    margin-top: 16px;
-    margin-bottom: 8px;
+    margin: 0 0 10px 0;
     font-weight: 600;
+    line-height: 1.35;
   }
 
   :deep(h1) {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   :deep(h2) {
-    font-size: 16px;
+    font-size: 18px;
   }
 
   :deep(h3) {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   :deep(p) {
-    margin: 8px 0;
+    margin: 0 0 12px 0;
+    color: var(--text-secondary);
+  }
+
+  :deep(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0 0 12px 0;
+    padding-left: 20px;
+    color: var(--text-secondary);
+  }
+
+  :deep(li) {
+    margin: 6px 0;
+    line-height: 1.7;
   }
 
   :deep(strong) {
@@ -360,11 +448,12 @@ onMounted(() => {
   }
 
   :deep(code) {
-    background-color: var(--bg-primary);
+    background-color: rgba(144, 19, 139, 0.08);
     padding: 2px 6px;
     border-radius: 4px;
     font-family: 'SFMono-Regular', 'Consolas', monospace;
-    font-size: 13px;
+    font-size: 12px;
+    color: #90138B;
   }
 }
 
@@ -381,6 +470,16 @@ onMounted(() => {
 
   .dialog-content {
     width: 95vw;
+  }
+
+  .dialog-header,
+  .skill-detail {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .detail-section {
+    padding-top: 4px;
   }
 }
 </style>

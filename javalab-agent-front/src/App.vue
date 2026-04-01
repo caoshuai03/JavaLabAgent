@@ -47,8 +47,12 @@ html, body {
   --bg-primary: #ffffff;
   --bg-secondary: #f7f7f8;
   --bg-tertiary: #f9f9f9;
+  /* 历史会话与通用卡片的灰色悬浮/选中背景 */
   --bg-hover: #e5e5e5;
   --bg-active: #ebebeb;
+  /* 导航栏单独保留紫色悬浮/选中背景，避免影响历史会话 */
+  --nav-bg-hover: rgba(144, 19, 139, 0.05);
+  --nav-bg-active: rgba(144, 19, 139, 0.09);
   --border-color: #e5e5e5;
   --border-color-hover: #d1d1d1;
   --text-primary: #353740;
