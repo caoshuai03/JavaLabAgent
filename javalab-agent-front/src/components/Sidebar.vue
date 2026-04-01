@@ -36,19 +36,19 @@
         <button
           @click="handleMcpSettings"
           class="nav-item"
-          :title="chatStore.sidebarCollapsed ? 'MCP 工具' : ''"
+          :title="chatStore.sidebarCollapsed ? 'MCP' : ''"
         >
           <ToolIcon :size="18" />
-          <span v-if="!chatStore.sidebarCollapsed">MCP 工具</span>
+          <span v-if="!chatStore.sidebarCollapsed">MCP</span>
         </button>
 
         <button
           @click="handleSkillsManagement"
           class="nav-item"
-          :title="chatStore.sidebarCollapsed ? 'Skills 技能' : ''"
+          :title="chatStore.sidebarCollapsed ? 'Skills' : ''"
         >
           <BookIcon :size="18" />
-          <span v-if="!chatStore.sidebarCollapsed">Skills 技能</span>
+          <span v-if="!chatStore.sidebarCollapsed">Skills</span>
         </button>
       </div>
     </div>
@@ -146,8 +146,8 @@ const handleNewConversation = () => {
   // 创建新对话（此时不会生成ID，等待后端返回）
   chatStore.createConversation()
 
-  // 如果当前在知识库页面，导航回对话界面
-  if (route.path === '/knowledge') {
+  // 如果当前不在聊天页面，导航回聊天界面
+  if (route.path !== '/') {
     router.push('/')
   }
 }
@@ -300,9 +300,15 @@ const handleSkillsManagement = () => {
         background-color: var(--bg-hover);
       }
 
+      /* 统一侧边栏图标的描边粗细与线帽样式，避免不同图标看起来不一致 */
       svg {
         flex-shrink: 0;
+        width: 18px;
+        height: 18px;
         stroke: currentColor;
+        stroke-width: 1.85;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
 
       span {

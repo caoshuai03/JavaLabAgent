@@ -41,8 +41,8 @@ const chatStore = useChatStore()
 
 const handleSelect = (conversationId) => {
   chatStore.switchConversation(conversationId)
-  // 如果当前在知识库页面，导航回聊天页面
-  if (route.path === '/knowledge') {
+  // 如果当前不在聊天页面，导航回聊天页面
+  if (route.path !== '/') {
     router.push('/')
   }
 }

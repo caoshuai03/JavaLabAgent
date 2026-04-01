@@ -1,82 +1,76 @@
 <template>
-  <div class="mcp-settings-page">
-    <!-- 顶部标题栏 -->
-    <div class="page-header">
-      <div class="header-left">
-        <button class="back-btn" @click="goBack" title="返回">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-        </button>
-        <h1 class="page-title">MCP 工具管理</h1>
-      </div>
-    </div>
+  <div class="mcp-container">
+    <Sidebar />
+    <div class="mcp-main">
+      <div class="mcp-content">
+        <!-- 加载状态 -->
+        <div v-if="loading" class="loading-state">
+          <div class="spinner"></div>
+          <span>加载中...</span>
+        </div>
 
+        <!-- 空状态 -->
+        <div v-else-if="servers.length === 0" class="empty-state">
+          <div class="empty-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+          </div>
+          <h3>尚未配置 MCP 服务器</h3>
+        </div>
 
-    <!-- 加载状态 -->
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <span>加载中...</span>
-    </div>
-
-    <!-- 空状态 -->
-    <div v-else-if="servers.length === 0" class="empty-state">
-      <div class="empty-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
-      </div>
-      <h3>尚未配置 MCP 服务器</h3>
-    </div>
-
-    <!-- 服务器列表 -->
-    <div v-else class="server-list">
-      <div
-        v-for="server in servers"
-        :key="server.name"
-        :class="['server-card', { disabled: !server.enabled }]"
-      >
-        <div class="server-header">
-          <div class="server-info">
-            <div class="server-name-row">
-              <span :class="['status-dot', server.enabled ? 'active' : 'inactive']"></span>
-              <h3 class="server-name">{{ server.name }}</h3>
-            </div>
-            <p class="server-desc" v-if="server.description">{{ server.description }}</p>
-            <!-- 工具名称标签（悬停显示描述） -->
-            <div class="tool-tags" v-if="server.tools && server.tools.length > 0">
-              <span
-                v-for="tool in server.tools"
-                :key="tool.name"
-                class="tool-tag"
-                @mouseenter="showToolTip($event, tool.description)"
-                @mouseleave="hideToolTip"
-              >{{ tool.name }}</span>
+        <!-- 服务器列表 -->
+        <div v-else class="server-list">
+          <div
+            v-for="server in servers"
+            :key="server.name"
+            :class="['server-card', { disabled: !server.enabled }]"
+          >
+            <div class="server-header">
+              <div class="server-info">
+                <div class="server-name-row">
+                  <span :class="['status-dot', server.enabled ? 'active' : 'inactive']"></span>
+                  <h3 class="server-name">{{ server.name }}</h3>
+                </div>
+                <p class="server-desc" v-if="server.description">{{ server.description }}</p>
+                <!-- 工具名称标签（悬停显示描述） -->
+                <div class="tool-tags" v-if="server.tools && server.tools.length > 0">
+                  <span
+                    v-for="tool in server.tools"
+                    :key="tool.name"
+                    class="tool-tag"
+                    @mouseenter="showToolTip($event, tool.description)"
+                    @mouseleave="hideToolTip"
+                  >{{ tool.name }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- 工具描述 Tooltip -->
+        <div
+          v-if="tooltip.visible"
+          class="tool-tooltip"
+          :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
+        >
+          {{ tooltip.text }}
+        </div>
+
+        <!-- Toast 提示 -->
+        <div v-if="toast.show" :class="['toast', toast.type]">
+          {{ toast.message }}
+        </div>
       </div>
-    </div>
-
-
-    <!-- 工具描述 Tooltip -->
-    <div
-      v-if="tooltip.visible"
-      class="tool-tooltip"
-      :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
-    >
-      {{ tooltip.text }}
-    </div>
-
-    <!-- Toast 提示 -->
-    <div v-if="toast.show" :class="['toast', toast.type]">
-      {{ toast.message }}
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { getMcpServers } from '../api/mcp'
+import { useChatStore } from '../stores/chat'
+import Sidebar from '../components/Sidebar.vue'
 
-const router = useRouter()
+const chatStore = useChatStore()
 
 // ==================== 状态 ====================
 const loading = ref(false)
@@ -87,11 +81,6 @@ const toast = ref({ show: false, message: '', type: 'info' })
 
 // 工具描述 Tooltip 状态
 const tooltip = ref({ visible: false, text: '', x: 0, y: 0 })
-
-// ==================== 方法 ====================
-const goBack = () => {
-  router.push('/')
-}
 
 /** 加载服务器列表 */
 const loadServers = async () => {
@@ -140,113 +129,36 @@ const showToast = (message, type = 'info') => {
 
 // ==================== 生命周期 ====================
 onMounted(() => {
+  chatStore.initialize()
   loadServers()
 })
 </script>
 
 <style lang="scss" scoped>
-.mcp-settings-page {
-  min-height: 100vh;
+.mcp-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   background-color: var(--bg-primary);
-  color: var(--text-primary);
-  padding: 0;
+  transition: background-color 0.3s ease;
 }
 
-// ==================== 顶部标题栏 ====================
-.page-header {
+.mcp-main {
+  flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 32px;
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .back-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: background-color 0.2s;
-
-    &:hover {
-      background-color: var(--bg-hover);
-    }
-  }
-
-  .page-title {
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .tool-count {
-    font-size: 13px;
-    color: var(--text-secondary);
-  }
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  min-width: 0;
 }
 
-.add-btn {
+.mcp-content {
+  flex: 1;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 8px;
-  background-color: #90138B;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: #9B2A96;
-  }
-}
-
-// ==================== 说明区域 ====================
-.info-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 24px 32px 0;
-  padding: 12px 16px;
-  background-color: rgba(144, 19, 139, 0.06);
-  border: 1px solid rgba(144, 19, 139, 0.15);
-  border-radius: 10px;
-
-  .info-icon {
-    color: #90138B;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  p {
-    margin: 0;
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.6;
-  }
+  flex-direction: column;
+  padding: 24px;
+  overflow: auto;
 }
 
 // ==================== 加载 & 空状态 ====================
@@ -295,7 +207,6 @@ onMounted(() => {
 
 // ==================== 服务器列表 ====================
 .server-list {
-  padding: 24px 32px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -763,16 +674,8 @@ onMounted(() => {
 
 // ==================== 响应式 ====================
 @media (max-width: 768px) {
-  .page-header {
-    padding: 12px 16px;
-  }
-
-  .info-banner {
-    margin: 16px 16px 0;
-  }
-
-  .server-list {
-    padding: 16px;
+  .mcp-content {
+    padding: 12px;
   }
 
   .server-actions {
