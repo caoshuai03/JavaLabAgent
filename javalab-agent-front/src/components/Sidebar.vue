@@ -41,6 +41,15 @@
           <ToolIcon :size="18" />
           <span v-if="!chatStore.sidebarCollapsed">MCP 工具</span>
         </button>
+
+        <button
+          @click="handleSkillsManagement"
+          class="nav-item"
+          :title="chatStore.sidebarCollapsed ? 'Skills 技能' : ''"
+        >
+          <BookIcon :size="18" />
+          <span v-if="!chatStore.sidebarCollapsed">Skills 技能</span>
+        </button>
       </div>
     </div>
 
@@ -92,6 +101,7 @@ import UserProfile from './UserProfile.vue'
 import PlusIcon from './icons/PlusIcon.vue'
 import FolderIcon from './icons/FolderIcon.vue'
 import ToolIcon from './icons/ToolIcon.vue'
+import BookIcon from './icons/BookIcon.vue'
 import EditIcon from './icons/EditIcon.vue'
 
 import ChevronLeftIcon from './icons/ChevronLeftIcon.vue'
@@ -148,6 +158,10 @@ const handleKnowledgeManagement = () => {
 
 const handleMcpSettings = () => {
   router.push('/mcp')
+}
+
+const handleSkillsManagement = () => {
+  router.push('/skills')
 }
 </script>
 

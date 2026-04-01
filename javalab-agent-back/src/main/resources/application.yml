@@ -2,6 +2,9 @@ server:
   port: 8989                    # 应用服务端口
 
 spring:
+  application:
+    name: JavaLabAgent
+
   # 允许 Bean 定义覆盖
   main:
     allow-bean-definition-overriding: true
@@ -104,3 +107,7 @@ cs:
     user-secret-key: cssecret
     user-ttl: 86400000
     user-token-name: Authorization
+
+# ==================== Skills 配置 ====================
+skills:
+  directory: skills  # 使用 classpath 相对路径，适配 jar 包部署

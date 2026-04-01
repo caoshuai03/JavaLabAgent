@@ -215,6 +215,15 @@ const handleAgentEvent = (event, lastMessage) => {
     return
   }
 
+  if (event.eventType === 'skill_loaded') {
+    chatStore.addToolEventToLastMessage({
+      eventType: event.eventType,
+      payload,
+      ts: event.ts
+    })
+    return
+  }
+
   if (event.eventType === 'tool_call' || event.eventType === 'tool_result' || event.eventType === 'status') {
     chatStore.addToolEventToLastMessage({
       eventType: event.eventType,

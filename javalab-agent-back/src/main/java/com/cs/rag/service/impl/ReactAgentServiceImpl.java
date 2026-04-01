@@ -6,6 +6,8 @@ import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.PromptService;
 import com.cs.rag.service.ReactAgentService;
 import com.cs.rag.service.ReactAgentToolService;
+import com.cs.rag.skill.SkillInfo;
+import com.cs.rag.skill.SkillMatchService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +46,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     private final PromptService promptService;
     private final ChatMessageService chatMessageService;
     private final ReactAgentToolService reactAgentToolService;
+    private final SkillMatchService skillMatchService;
     private final ObjectMapper objectMapper;
 
     public ReactAgentServiceImpl(RagConversationSupport ragConversationSupport,
@@ -51,12 +54,14 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                                  PromptService promptService,
                                  ChatMessageService chatMessageService,
                                  ReactAgentToolService reactAgentToolService,
+                                 SkillMatchService skillMatchService,
                                  ObjectMapper objectMapper) {
         this.ragConversationSupport = ragConversationSupport;
         this.llmProviderRegistry = llmProviderRegistry;
         this.promptService = promptService;
         this.chatMessageService = chatMessageService;
         this.reactAgentToolService = reactAgentToolService;
+        this.skillMatchService = skillMatchService;
         this.objectMapper = objectMapper;
     }
 
@@ -174,6 +179,23 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         };
 
         emit.accept(eventJson("session", chatContext.sessionId(), traceId, Map.of("sessionId", chatContext.sessionId())));
+        
+        // 匹配 Skills 并发送事件通知前端
+        List<SkillInfo> matchedSkills = skillMatchService.matchSkills(chatContext.originalMessage());
+        if (!matchedSkills.isEmpty()) {
+            List<Map<String, Object>> skillEvents = new ArrayList<>();
+            for (SkillInfo skill : matchedSkills) {
+                Map<String, Object> skillEvent = new LinkedHashMap<>();
+                skillEvent.put("name", skill.getMetadata().getName());
+                skillEvent.put("description", skill.getMetadata().getDescription());
+                skillEvent.put("triggerKeywords", skill.getMetadata().getTriggerKeywords());
+                skillEvents.add(skillEvent);
+            }
+            emit.accept(eventJson("skill_loaded", chatContext.sessionId(), traceId, 
+                Map.of("skills", skillEvents, "count", matchedSkills.size())));
+            log.info("ReactAgent loaded {} skills for session: {}", matchedSkills.size(), chatContext.sessionId());
+        }
+        
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "thinking")));
         log.info("ReactAgent planning started: sessionId={}, traceId={}, question={}",
                 chatContext.sessionId(), traceId, chatContext.originalMessage());
@@ -281,22 +303,17 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     }
 
     private ReactAgentDecision decideNextAction(String message, List<String> observations, String model) {
-        // 规划模型收到的是统一 JSON 协议：工具列表、用户问题、已有观察结果。
         String toolList = toJsonQuietly(reactAgentToolService.toolSchemas());
         String obs = observations.isEmpty() ? "none" : observations.stream().map(s -> "- " + s).reduce((a, b) -> a + "\n" + b).orElse("none");
-        String systemPrompt = promptService.getReactAgentPrompt();
-        String userPrompt = """
-                Available tools:
-                %s
-
-                User question:
-                %s
-
-                Existing observations:
-                %s
-
-                Please output your decision JSON:
-                """.formatted(toolList, message, obs);
+        
+        // 匹配并注入 Skills（只在第一轮决策时匹配）
+        List<SkillInfo> matchedSkills = observations.isEmpty() ? skillMatchService.matchSkills(message) : List.of();
+        String systemPrompt = matchedSkills.isEmpty() 
+            ? promptService.getReactAgentPrompt() 
+            : promptService.buildReactAgentPromptWithSkills(matchedSkills);
+        
+        // 使用模板构建 User Prompt
+        String userPrompt = promptService.buildReactUserPrompt(toolList, message, obs);
         try {
             ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
             ChatClient chatClient = ChatClient.builder(targetChatModel).build();

@@ -14,10 +14,10 @@
 
               <div class="tool-call-content">
                 <div class="tool-icon-wrapper">
-                  <span class="tool-icon" v-html="getToolIconSvg(item.call.payload.toolName)"></span>
+                  <span class="tool-icon" v-html="getToolIconSvg(item.type === 'skill' ? 'skill:' + item.call.payload.skillName : item.call.payload.toolName)"></span>
                 </div>
                 <div class="tool-text">
-                  <span class="tool-name">{{ getToolDisplayName(item.call.payload.toolName) }}</span>
+                  <span class="tool-name">{{ item.type === 'skill' ? item.call.payload.skillName : getToolDisplayName(item.call.payload.toolName) }}</span>
                   <span class="tool-divider" v-if="getToolSummary(item)">|</span>
                   <span
                     class="tool-summary"
@@ -28,6 +28,7 @@
                 </div>
                 <div class="tool-status-icon">
                   <span v-if="!item.result" class="loading-spinner"></span>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="success-icon"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
               </div>
             </div>
@@ -183,7 +184,25 @@ const toolCalls = computed(() => {
   const activeCalls = new Map()
 
   props.message.toolEvents.forEach(e => {
-    if (e.eventType === 'tool_call') {
+    // 处理 Skill 激活事件
+    if (e.eventType === 'skill_loaded') {
+      const skills = e.payload?.skills || []
+      skills.forEach(skill => {
+        list.push({
+          type: 'skill',
+          call: {
+            eventType: 'skill_loaded',
+            payload: {
+              skillName: skill.name,
+              description: skill.description,
+              triggerKeywords: skill.triggerKeywords
+            },
+            ts: e.ts
+          },
+          result: { success: true }  // Skills 加载完成即为成功
+        })
+      })
+    } else if (e.eventType === 'tool_call') {
       const round = e.payload?.round
       const callItem = {
         type: 'tool',
@@ -207,6 +226,10 @@ const toolCalls = computed(() => {
 })
 
 const getToolIconSvg = (toolName) => {
+  // Skills 使用书本图标
+  if (toolName && toolName.startsWith('skill:')) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`
+  }
   if (toolName === 'knowledge_search' || toolName === 'web_search') {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`
   }
@@ -220,6 +243,10 @@ const getToolIconSvg = (toolName) => {
 }
 
 const getToolDisplayName = (toolName) => {
+  // Skills 特殊处理
+  if (toolName && toolName.startsWith('skill:')) {
+    return toolName.substring(6) // 移除 'skill:' 前缀
+  }
   // 内置工具名称映射
   const builtinNames = {
     'knowledge_search': '知识检索',
@@ -238,6 +265,10 @@ const getToolDisplayName = (toolName) => {
 
 const getToolSummary = (item) => {
   try {
+    // Skills 显示描述
+    if (item.type === 'skill') {
+      return item.call.payload.description || ''
+    }
     // 优先使用后端返回的工具描述
     if (item.call.payload.description) {
       return item.call.payload.description

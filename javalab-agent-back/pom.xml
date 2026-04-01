@@ -138,6 +138,12 @@
             <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Jackson YAML 支持，用于解析 Skills 的 YAML frontmatter -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+
     </dependencies>
     <dependencyManagement>
         <dependencies>
