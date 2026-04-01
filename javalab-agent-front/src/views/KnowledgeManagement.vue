@@ -10,17 +10,17 @@
           </div>
         </div>
         <!-- 顶部操作栏 -->
-        <div class="toolbar">
+        <div class="toolbar" v-if="!loading">
           <div class="toolbar-left">
             <!-- 上传按钮：管理员可直接上传，普通用户点击显示气泡提示 -->
             <div class="upload-wrapper">
               <button 
                 @click="handleUploadClick" 
-                class="upload-button" 
+                class="primary-button" 
                 :class="{ 'disabled-style': !isAdmin }"
                 :disabled="uploading"
               >
-                <UploadIcon :size="18" />
+                <UploadIcon :size="16" />
                 <span>上传文件</span>
               </button>
               <!-- 气泡提示：仅普通用户点击时显示 -->
@@ -36,14 +36,13 @@
               @change="handleFileSelect"
               style="display: none"
             />
-          </div>
-          <div class="toolbar-center">
+            <!-- 搜索框 -->
             <div class="search-box">
               <SearchIcon :size="18" />
               <input
                 v-model="searchKeyword"
                 type="text"
-                placeholder="搜索文件名..."
+                placeholder="搜索"
                 @input="handleSearch"
               />
               <button
@@ -59,26 +58,66 @@
             <button
               v-if="selectedIds.length > 0"
               @click="handleBatchDelete"
-              class="batch-button delete"
+              class="batch-btn danger"
               :disabled="deleting"
             >
               <TrashIcon :size="16" />
-              <span>批量删除 ({{ selectedIds.length }})</span>
+              <span>批量删除</span>
             </button>
             <button
               v-if="selectedIds.length > 0"
               @click="handleBatchDownload"
-              class="batch-button download"
+              class="batch-btn"
               :disabled="downloading"
             >
               <DownloadIcon :size="16" />
-              <span>批量下载 ({{ selectedIds.length }})</span>
+              <span>批量下载</span>
             </button>
           </div>
         </div>
 
-        <!-- 文件列表表格 -->
-        <div class="table-container">
+        <!-- 加载状态 -->
+        <div v-if="loading" class="loading-state">
+          <div class="spinner"></div>
+          <span>加载中...</span>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-else-if="fileList.length === 0 && !searchKeyword" class="empty-state">
+          <h3>暂无记录</h3>
+        </div>
+
+        <!-- 搜索无结果状态 -->
+        <div v-else-if="fileList.length === 0 && searchKeyword" class="empty-state">
+          <div class="empty-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+          </div>
+          <h3>未找到相关文件</h3>
+          <p>尝试使用其他关键词搜索</p>
+        </div>
+
+        <!-- 文件列表 -->
+        <div v-else-if="fileList.length > 0" class="file-list">
+          <div
+            v-for="file in fileList"
+            :key="file.id"
+            :class="['file-card', { selected: selectedIds.includes(file.id) }]"
+            @click="handleRowClick(file.id)"
+          >
+            <div class="file-header">
+              <div class="file-info">
+                <h3 class="file-name" :title="file.fileName">{{ file.fileName }}</h3>
+                <p class="file-time">{{ formatDate(file.createTime) }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 旧表格保留作为备用 -->
+        <div v-if="false" class="table-container">
           <table class="file-table">
             <thead>
               <tr>
@@ -100,14 +139,31 @@
                   <div class="loading-spinner">加载中...</div>
                 </td>
               </tr>
-              <tr v-else-if="fileList.length === 0" class="empty-row">
-                <td colspan="4" class="empty-cell">
-                  <div class="empty-state">
-                    <FolderIcon :size="48" />
-                    <p>{{ searchKeyword ? '未找到相关文件' : '暂无文件，请上传文件' }}</p>
-                  </div>
-                </td>
-              </tr>
+              <!-- 空状态 -->
+              <div v-else-if="fileList.length === 0 && !searchKeyword" class="empty-state">
+                <div class="empty-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </div>
+                <h3>暂无记录，点击新建下方按钮创建一个</h3>
+                <button @click="handleUploadClick" class="primary-button" :disabled="uploading">
+                  <UploadIcon :size="16" />
+                  <span>上传文件</span>
+                </button>
+              </div>
+
+              <!-- 搜索无结果状态 -->
+              <div v-else-if="fileList.length === 0 && searchKeyword" class="empty-state">
+                <div class="empty-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                  </svg>
+                </div>
+                <h3>未找到相关文件</h3>
+                <p>尝试使用其他关键词搜索</p>
+              </div>
               <tr
                 v-else
                 v-for="file in fileList"
@@ -587,20 +643,53 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
+// ==================== 加载 & 空状态 ====================
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: var(--text-secondary);
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: #90138B;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 80px 0;
+  color: var(--text-secondary);
+
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-primary);
+  }
+}
+
 // 顶部操作栏
 .toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
-  padding: 16px;
-  background-color: var(--bg-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
   
   .toolbar-left {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
   }
 
   // 上传按钮包装器（用于定位气泡提示）
@@ -610,7 +699,7 @@ onMounted(() => {
   }
 
   // 普通用户上传按钮禁用样式
-  .upload-button.disabled-style {
+  .primary-button.disabled-style {
     opacity: 0.6;
     cursor: not-allowed;
   }
@@ -654,36 +743,32 @@ onMounted(() => {
     }
   }
   
-  .toolbar-center {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-  }
-  
   .toolbar-right {
     display: flex;
     gap: 8px;
+    flex-shrink: 0;
   }
   
-  .upload-button {
+  .primary-button {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background-color: transparent;
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
+    gap: 6px;
+    padding: 8px 20px;
+    background-color: #90138B;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
+    font-weight: 500;
     transition: all 0.2s ease;
     
     &:hover:not(:disabled) {
-      background-color: var(--bg-hover);
+      background-color: #9B2A96;
     }
     
     &:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
     }
   }
@@ -693,12 +778,16 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    background-color: var(--bg-primary);
+    padding: 8px 16px;
+    background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    width: 100%;
-    max-width: 400px;
+    border-radius: 20px;
+    width: 280px;
+    transition: all 0.2s ease;
+
+    &:focus-within {
+      border-color: rgba(144, 19, 139, 0.3);
+    }
     
     svg {
       color: var(--text-secondary);
@@ -738,39 +827,139 @@ onMounted(() => {
     }
   }
   
-  .batch-button {
+  .batch-btn {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 12px;
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    padding: 6px 14px;
+    border: none;
     border-radius: 6px;
-    cursor: pointer;
+    background: rgba(144, 19, 139, 0.1);
+    color: #90138B;
     font-size: 13px;
-    transition: all 0.2s ease;
-    
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+
     &:hover:not(:disabled) {
-      background-color: var(--bg-hover);
+      background: rgba(144, 19, 139, 0.15);
     }
-    
+
     &:disabled {
-      opacity: 0.6;
+      opacity: 0.4;
       cursor: not-allowed;
     }
-    
-    &.delete {
+
+    &.danger {
+      background: rgba(220, 53, 69, 0.1);
       color: #dc3545;
-      
+
       &:hover:not(:disabled) {
-        background-color: rgba(220, 53, 69, 0.1);
+        background: rgba(220, 53, 69, 0.15);
       }
     }
   }
 }
 
-// 表格容器
+// ==================== 文件列表 ====================
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  overflow: auto;
+}
+
+.file-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 18px;
+  background-color: var(--bg-secondary);
+  transition: all 0.2s;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(144, 19, 139, 0.03);
+  }
+
+  &.selected {
+    background-color: rgba(144, 19, 139, 0.08);
+    border-color: rgba(144, 19, 139, 0.2);
+  }
+}
+
+.file-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-time {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  &.danger {
+    &:hover:not(:disabled) {
+      background-color: rgba(220, 53, 69, 0.1);
+      color: #dc3545;
+    }
+  }
+}
+
+// 表格容器（备用）
 .table-container {
   flex: 1;
   overflow: auto;
@@ -856,40 +1045,6 @@ onMounted(() => {
   
   .action-col {
     width: 150px;
-    
-    .action-button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      margin-right: 8px;
-      background-color: transparent;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      color: var(--text-primary);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      
-      &:hover:not(:disabled) {
-        background-color: var(--bg-hover);
-        border-color: var(--text-primary);
-      }
-      
-      &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      
-      &.delete {
-        color: #dc3545;
-        
-        &:hover:not(:disabled) {
-          background-color: rgba(220, 53, 69, 0.1);
-          border-color: #dc3545;
-        }
-      }
-    }
   }
   
   .loading-cell,
@@ -920,7 +1075,7 @@ onMounted(() => {
   }
 }
 
-// 分页组件
+// ==================== 分页组件 ====================
 .pagination {
   display: flex;
   justify-content: space-between;
@@ -928,7 +1083,7 @@ onMounted(() => {
   margin-top: 16px;
   padding: 12px 16px;
   background-color: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid var(--border-color);
   
   .pagination-info {
@@ -942,21 +1097,22 @@ onMounted(() => {
     gap: 8px;
     
     .page-button {
-      padding: 6px 12px;
-      background-color: var(--bg-primary);
+      padding: 6px 14px;
+      background-color: transparent;
       color: var(--text-primary);
       border: 1px solid var(--border-color);
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
       font-size: 13px;
       transition: all 0.2s ease;
       
       &:hover:not(:disabled) {
         background-color: var(--bg-hover);
+        border-color: rgba(144, 19, 139, 0.3);
       }
       
       &:disabled {
-        opacity: 0.5;
+        opacity: 0.4;
         cursor: not-allowed;
       }
     }
@@ -964,34 +1120,39 @@ onMounted(() => {
     .page-input {
       width: 60px;
       padding: 6px 8px;
-      background-color: var(--bg-primary);
+      background-color: var(--bg-secondary);
       color: var(--text-primary);
       border: 1px solid var(--border-color);
-      border-radius: 4px;
+      border-radius: 6px;
       text-align: center;
       font-size: 13px;
       
       &:focus {
         outline: none;
-        border-color: var(--accent-color);
+        border-color: #90138B;
       }
     }
     
     .page-size-select {
       padding: 6px 8px;
-      background-color: var(--bg-primary);
+      background-color: var(--bg-secondary);
       color: var(--text-primary);
       border: 1px solid var(--border-color);
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
       font-size: 13px;
       
       &:focus {
         outline: none;
-        border-color: var(--accent-color);
+        border-color: #90138B;
       }
     }
   }
+}
+
+// ==================== 动画 ====================
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 // 响应式设计
