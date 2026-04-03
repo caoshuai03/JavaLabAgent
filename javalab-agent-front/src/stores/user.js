@@ -35,7 +35,7 @@ export const useUserStore = defineStore('user', () => {
         id: data.id,
         userName: data.userName,
         name: data.name,
-        role: data.role || 0  // 用户角色：0-普通用户，1-管理员
+        role: data.role || 0, // 用户角色：0-普通用户，1-管理员
       }
 
       // 保存token和用户信息到localStorage
@@ -111,7 +111,7 @@ export const useUserStore = defineStore('user', () => {
         // 更新成功，更新本地存储的用户信息
         userInfo.value = {
           ...userInfo.value,
-          ...userData
+          ...userData,
         }
         localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
         return data
@@ -139,7 +139,7 @@ export const useUserStore = defineStore('user', () => {
         // id由后端从Token中获取，不再需要前端传递
         oldPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword,
-        confirmPassword: passwordData.confirmNewPassword
+        confirmPassword: passwordData.confirmNewPassword,
       })
       const { code, data, message } = response.data
 
@@ -178,6 +178,6 @@ export const useUserStore = defineStore('user', () => {
     validateToken,
     updateUserInfo,
     changePassword,
-    isAdmin
+    isAdmin,
   }
 })

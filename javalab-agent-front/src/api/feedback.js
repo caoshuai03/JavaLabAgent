@@ -16,7 +16,7 @@ export const feedbackApi = {
    * @param {string} data.sessionId 关联会话ID（可选）
    * @returns {Promise} 提交结果
    */
-  submit: (data) => apiClient.post('/v1/feedback/submit', data)
+  submit: (data) => apiClient.post('/v1/feedback/submit', data),
 }
 
 export default feedbackApi

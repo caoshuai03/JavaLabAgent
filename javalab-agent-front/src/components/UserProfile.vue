@@ -13,7 +13,10 @@
       </div>
 
       <transition name="dropdown">
-        <div v-show="showDropdown" :class="['dropdown-menu', { collapsed: chatStore.sidebarCollapsed }]">
+        <div
+          v-show="showDropdown"
+          :class="['dropdown-menu', { collapsed: chatStore.sidebarCollapsed }]"
+        >
           <button @click="handleMenuClick('profile')" class="menu-item">
             <UserIcon :size="18" />
             <span v-if="!chatStore.sidebarCollapsed">个人资料</span>
@@ -34,20 +37,11 @@
       </transition>
     </div>
 
-    <ProfileModal
-      v-if="showProfileModalFlag"
-      @close="closeProfileModal"
-    />
+    <ProfileModal v-if="showProfileModalFlag" @close="closeProfileModal" />
 
-    <PasswordModal
-      v-if="showChangePasswordModalFlag"
-      @close="closeChangePasswordModal"
-    />
+    <PasswordModal v-if="showChangePasswordModalFlag" @close="closeChangePasswordModal" />
 
-    <FeedbackModal
-      v-if="showFeedbackModalFlag"
-      @close="closeFeedbackModal"
-    />
+    <FeedbackModal v-if="showFeedbackModalFlag" @close="closeFeedbackModal" />
   </div>
 </template>
 
@@ -124,7 +118,7 @@ const modalActions = {
   profile: showProfileModal,
   password: showChangePasswordModal,
   feedback: showFeedbackModal,
-  logout: handleLogout
+  logout: handleLogout,
 }
 
 const handleMenuClick = (action) => {
@@ -145,14 +139,16 @@ const vClickOutside = {
     if (el.clickOutsideEvent) {
       document.removeEventListener('click', el.clickOutsideEvent, true)
     }
-  }
+  },
 }
 </script>
 
 <style lang="scss" scoped>
 .user-profile {
   padding: 8px;
-  transition: border-color 0.3s ease, padding 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    padding 0.3s ease;
 
   &.collapsed {
     padding: 0;
@@ -171,7 +167,7 @@ const vClickOutside = {
       justify-content: center;
     }
 
-      .profile-header {
+    .profile-header {
       display: flex;
       align-items: center;
       gap: 12px;
@@ -293,7 +289,6 @@ const vClickOutside = {
         }
       }
     }
-
   }
 }
 

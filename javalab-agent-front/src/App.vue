@@ -8,6 +8,42 @@
 import 'highlight.js/styles/github.css'
 </script>
 
+<style>
+/* 全局悬停提示 (v-tooltip) */
+.global-tooltip {
+  position: fixed;
+  transform: translateX(-50%) translateY(-100%);
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 9999;
+  animation: globalTooltipFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    0 1px 2px rgba(255, 255, 255, 0.1) inset;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@keyframes globalTooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-100%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-100%) translateY(0);
+  }
+}
+</style>
+
 <style lang="scss">
 * {
   margin: 0;
@@ -15,26 +51,29 @@ import 'highlight.js/styles/github.css'
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   width: 100%;
   overflow: hidden;
   font-family:
-    "Inter",
+    'Inter',
     -apple-system,
     BlinkMacSystemFont,
-    "Segoe UI",
+    'Segoe UI',
     Roboto,
-    "Helvetica Neue",
+    'Helvetica Neue',
     Arial,
-    "PingFang SC",
-    "Microsoft YaHei",
-    "Hiragino Sans GB",
-    "WenQuanYi Micro Hei",
+    'PingFang SC',
+    'Microsoft YaHei',
+    'Hiragino Sans GB',
+    'WenQuanYi Micro Hei',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 #app {
@@ -58,9 +97,9 @@ html, body {
   --text-primary: #353740;
   --text-secondary: #6e6e80;
   --text-tertiary: #8e8ea0;
-  --accent-color: #90138B;
-  --primary-color: #90138B;
-  --user-message-bg: #f0f0f0;
+  --accent-color: #90138b;
+  --primary-color: #90138b;
+  --user-message-bg: rgba(144, 19, 139, 0.06);
   --user-message-text: #353740;
   --assistant-message-bg: #ffffff;
   --assistant-message-text: #353740;

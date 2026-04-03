@@ -7,12 +7,11 @@ export const useThemeStore = defineStore('theme', () => {
     root.classList.remove('dark-theme')
     root.classList.add('light-theme')
   }
-  
+
   // 初始化
   initTheme()
-  
+
   return {
-    initTheme
+    initTheme,
   }
 })
-

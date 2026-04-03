@@ -12,7 +12,21 @@
         <!-- 空状态 -->
         <div v-else-if="servers.length === 0" class="empty-state">
           <div class="empty-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+              ></path>
+            </svg>
           </div>
           <h3>尚未配置 MCP 服务器</h3>
         </div>
@@ -37,22 +51,13 @@
                     v-for="tool in server.tools"
                     :key="tool.name"
                     class="tool-tag"
-                    @mouseenter="showToolTip($event, tool.description)"
-                    @mouseleave="hideToolTip"
-                  >{{ tool.name }}</span>
+                    v-tooltip="tool.description"
+                    >{{ tool.name }}</span
+                  >
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
-        <!-- 工具描述 Tooltip -->
-        <div
-          v-if="tooltip.visible"
-          class="tool-tooltip"
-          :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
-        >
-          {{ tooltip.text }}
         </div>
 
         <!-- Toast 提示 -->
@@ -79,9 +84,6 @@ const servers = ref([])
 // Toast 提示
 const toast = ref({ show: false, message: '', type: 'info' })
 
-// 工具描述 Tooltip 状态
-const tooltip = ref({ visible: false, text: '', x: 0, y: 0 })
-
 /** 加载服务器列表 */
 const loadServers = async () => {
   loading.value = true
@@ -94,29 +96,6 @@ const loadServers = async () => {
   } finally {
     loading.value = false
   }
-}
-
-/** 鼠标移入工具标签时显示描述 Tooltip */
-const showToolTip = (event, description) => {
-  if (!description) return
-  const rect = event.target.getBoundingClientRect()
-  const tooltipMaxWidth = 320
-  const padding = 12 // 距离视口边缘的最小距离
-  // 居中对齐标签，同时限制不超出视口左右边界
-  let x = rect.left + rect.width / 2
-  x = Math.max(padding + tooltipMaxWidth / 2, x)
-  x = Math.min(window.innerWidth - padding - tooltipMaxWidth / 2, x)
-  tooltip.value = {
-    visible: true,
-    text: description,
-    x,
-    y: rect.top - 8 // tooltip 显示在标签上方
-  }
-}
-
-/** 鼠标移出时隐藏 Tooltip */
-const hideToolTip = () => {
-  tooltip.value.visible = false
 }
 
 /** 显示 Toast */
@@ -174,7 +153,7 @@ onMounted(() => {
     width: 32px;
     height: 32px;
     border: 3px solid var(--border-color);
-    border-top-color: #90138B;
+    border-top-color: #90138b;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -256,7 +235,7 @@ onMounted(() => {
   flex-shrink: 0;
 
   &.active {
-    background-color: #90138B;
+    background-color: #90138b;
     box-shadow: 0 0 4px rgba(144, 19, 139, 0.4);
   }
 
@@ -276,7 +255,7 @@ onMounted(() => {
   padding: 2px 8px;
   border-radius: 4px;
   background-color: rgba(144, 19, 139, 0.1);
-  color: #90138B;
+  color: #90138b;
   font-weight: 500;
   text-transform: uppercase;
 }
@@ -310,7 +289,7 @@ onMounted(() => {
     padding: 2px 8px;
     border-radius: 4px;
     background-color: rgba(144, 19, 139, 0.08);
-    color: #90138B;
+    color: #90138b;
     font-weight: 500;
   }
 }
@@ -330,11 +309,13 @@ onMounted(() => {
   color: var(--text-secondary);
   font-family: 'SFMono-Regular', 'Consolas', monospace;
   cursor: default;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 
   &:hover {
     background-color: rgba(144, 19, 139, 0.12);
-    color: #90138B;
+    color: #90138b;
   }
 }
 
@@ -411,7 +392,7 @@ onMounted(() => {
   }
 
   &.success {
-    color: #90138B;
+    color: #90138b;
     border-color: rgba(144, 19, 139, 0.3);
   }
 }
@@ -435,7 +416,7 @@ onMounted(() => {
 
   &.success {
     background-color: rgba(144, 19, 139, 0.08);
-    color: #90138B;
+    color: #90138b;
     border: 1px solid rgba(144, 19, 139, 0.2);
   }
 
@@ -535,7 +516,7 @@ onMounted(() => {
   box-sizing: border-box;
 
   &:focus {
-    border-color: #90138B;
+    border-color: #90138b;
   }
 
   &::placeholder {
@@ -559,7 +540,7 @@ onMounted(() => {
   box-sizing: border-box;
 
   &:focus {
-    border-color: #90138B;
+    border-color: #90138b;
   }
 
   &::placeholder {
@@ -580,8 +561,8 @@ onMounted(() => {
   font-size: 14px;
   cursor: pointer;
 
-  input[type="radio"] {
-    accent-color: #90138B;
+  input[type='radio'] {
+    accent-color: #90138b;
   }
 }
 
@@ -611,14 +592,14 @@ onMounted(() => {
   padding: 8px 24px;
   border: none;
   border-radius: 8px;
-  background-color: #90138B;
+  background-color: #90138b;
   color: #fff;
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s;
 
   &:hover:not(:disabled) {
-    background-color: #9B2A96;
+    background-color: #9b2a96;
   }
 
   &:disabled {
@@ -640,7 +621,7 @@ onMounted(() => {
   animation: fadeInUp 0.3s ease;
 
   &.success {
-    background-color: #90138B;
+    background-color: #90138b;
     color: #fff;
   }
 
@@ -658,7 +639,9 @@ onMounted(() => {
 
 // ==================== 动画 ====================
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes fadeInUp {

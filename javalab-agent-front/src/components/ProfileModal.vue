@@ -5,12 +5,7 @@
       <form @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="name">姓名</label>
-          <input
-            id="name"
-            v-model="form.name"
-            type="text"
-            placeholder="设置您的显示名称"
-          />
+          <input id="name" v-model="form.name" type="text" placeholder="设置您的显示名称" />
         </div>
         <div class="form-group">
           <label for="userName">用户名</label>
@@ -52,25 +47,25 @@ const successMessage = ref('')
 const form = ref({
   id: null,
   name: '',
-  userName: ''
+  userName: '',
 })
 
 onMounted(async () => {
   try {
     const response = await apiClient.get(`/v1/user/${userStore.userInfo.id}`)
     const userData = response.data.data
-    
+
     form.value = {
       id: userData.id,
       name: userData.name || '',
-      userName: userData.userName || ''
+      userName: userData.userName || '',
     }
   } catch (error) {
     console.error('获取用户信息失败:', error)
     form.value = {
       id: userStore.userInfo?.id || null,
       name: userStore.userInfo?.name || '',
-      userName: userStore.userInfo?.userName || ''
+      userName: userStore.userInfo?.userName || '',
     }
   }
 })
@@ -83,10 +78,10 @@ const handleSubmit = async () => {
   updating.value = true
   errorMessage.value = ''
   successMessage.value = ''
-  
+
   try {
     const result = await userStore.updateUserInfo(form.value)
-    
+
     if (result !== undefined) {
       successMessage.value = '用户信息更新成功！'
       setTimeout(() => {
@@ -124,7 +119,7 @@ const handleSubmit = async () => {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   width: 100%;
   max-width: 440px;
-  
+
   h2 {
     text-align: left;
     margin-bottom: 1.5rem;
@@ -134,10 +129,10 @@ const handleSubmit = async () => {
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border-color);
   }
-  
+
   .form-group {
     margin-bottom: 1.25rem;
-    
+
     label {
       display: block;
       margin-bottom: 0.5rem;
@@ -145,7 +140,7 @@ const handleSubmit = async () => {
       font-weight: 500;
       color: var(--text-primary);
     }
-    
+
     input {
       width: 100%;
       padding: 8px 12px; // 统一为 8px 12px
@@ -156,26 +151,26 @@ const handleSubmit = async () => {
       color: var(--text-primary);
       box-sizing: border-box;
       transition: all 0.2s ease;
-      
+
       &:focus {
         outline: none;
-        border-color: #90138B;
+        border-color: #90138b;
         box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
       }
-      
+
       &::placeholder {
         color: var(--text-secondary);
         opacity: 0.6;
       }
     }
   }
-  
+
   .form-actions {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
     margin-top: 2rem;
-    
+
     button {
       padding: 0.5rem 1.25rem;
       border: none;
@@ -184,27 +179,27 @@ const handleSubmit = async () => {
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s ease;
-      
+
       &:first-child {
         background-color: transparent;
         color: var(--text-secondary);
         border: 1px solid var(--border-color);
-        
+
         &:hover {
           background-color: var(--bg-hover);
           color: var(--text-primary);
         }
       }
-      
+
       &:last-child {
-        background-color: #90138B;
+        background-color: #90138b;
         color: white;
-        
+
         &:hover:not(:disabled) {
-          background-color: #A01BA0;
+          background-color: #a01ba0;
           box-shadow: 0 2px 8px rgba(144, 19, 139, 0.2);
         }
-        
+
         &:disabled {
           background-color: var(--border-color);
           opacity: 0.5;
@@ -213,7 +208,7 @@ const handleSubmit = async () => {
       }
     }
   }
-  
+
   .error-message {
     color: #f8d7da;
     text-align: center;
@@ -223,7 +218,7 @@ const handleSubmit = async () => {
     background-color: rgba(220, 53, 69, 0.2);
     border: 1px solid rgba(220, 53, 69, 0.5);
   }
-  
+
   .success-message {
     color: #d4edda;
     text-align: center;
@@ -235,4 +230,3 @@ const handleSubmit = async () => {
   }
 }
 </style>
-

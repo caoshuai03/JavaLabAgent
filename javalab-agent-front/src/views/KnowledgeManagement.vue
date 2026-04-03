@@ -13,20 +13,18 @@
         <div class="toolbar" v-if="!loading">
           <div class="toolbar-left">
             <!-- 上传按钮：管理员可直接上传，普通用户点击显示气泡提示 -->
-            <div class="upload-wrapper">
-              <button 
-                @click="handleUploadClick" 
-                class="primary-button" 
-                :class="{ 'disabled-style': !isAdmin }"
-                :disabled="uploading"
+            <div class="header-actions">
+              <button
+                class="action-button upload"
+                @click="triggerFileInput"
+                :disabled="!isAdmin || uploading"
+                @mouseenter="showAdminTip = !isAdmin"
+                @mouseleave="showAdminTip = false"
+                v-tooltip="!isAdmin ? '仅管理员可上传，请联系管理员' : ''"
               >
                 <UploadIcon :size="16" />
                 <span>上传文件</span>
               </button>
-              <!-- 气泡提示：仅普通用户点击时显示 -->
-              <div v-if="showAdminTip" class="tooltip">
-                仅管理员可上传，请联系管理员
-              </div>
             </div>
             <input
               ref="fileInput"
@@ -39,19 +37,8 @@
             <!-- 搜索框 -->
             <div class="search-box">
               <SearchIcon :size="18" />
-              <input
-                v-model="searchKeyword"
-                type="text"
-                placeholder="搜索"
-                @input="handleSearch"
-              />
-              <button
-                v-if="searchKeyword"
-                @click="clearSearch"
-                class="clear-search"
-              >
-                ×
-              </button>
+              <input v-model="searchKeyword" type="text" placeholder="搜索" @input="handleSearch" />
+              <button v-if="searchKeyword" @click="clearSearch" class="clear-search">×</button>
             </div>
           </div>
           <div class="toolbar-right">
@@ -90,7 +77,17 @@
         <!-- 搜索无结果状态 -->
         <div v-else-if="fileList.length === 0 && searchKeyword" class="empty-state">
           <div class="empty-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="64"
+              height="64"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <circle cx="11" cy="11" r="8"></circle>
               <path d="m21 21-4.35-4.35"></path>
             </svg>
@@ -109,7 +106,7 @@
           >
             <div class="file-header">
               <div class="file-info">
-                <h3 class="file-name" :title="file.fileName">{{ file.fileName }}</h3>
+                <h3 class="file-name" v-tooltip="file.fileName">{{ file.fileName }}</h3>
                 <p class="file-time">{{ formatDate(file.createTime) }}</p>
               </div>
             </div>
@@ -122,11 +119,7 @@
             <thead>
               <tr>
                 <th class="checkbox-col">
-                  <input
-                    type="checkbox"
-                    :checked="isAllSelected"
-                    @change="handleSelectAll"
-                  />
+                  <input type="checkbox" :checked="isAllSelected" @change="handleSelectAll" />
                 </th>
                 <th class="name-col">文件名</th>
                 <th class="time-col">上传时间</th>
@@ -142,8 +135,20 @@
               <!-- 空状态 -->
               <div v-else-if="fileList.length === 0 && !searchKeyword" class="empty-state">
                 <div class="empty-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="64"
+                    height="64"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path
+                      d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                    ></path>
                   </svg>
                 </div>
                 <h3>暂无记录，点击新建下方按钮创建一个</h3>
@@ -156,7 +161,17 @@
               <!-- 搜索无结果状态 -->
               <div v-else-if="fileList.length === 0 && searchKeyword" class="empty-state">
                 <div class="empty-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="64"
+                    height="64"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <circle cx="11" cy="11" r="8"></circle>
                     <path d="m21 21-4.35-4.35"></path>
                   </svg>
@@ -179,7 +194,7 @@
                   />
                 </td>
                 <td class="name-col">
-                  <div class="file-name" :title="file.fileName">
+                  <div class="file-name" v-tooltip="file.fileName">
                     {{ file.fileName }}
                   </div>
                 </td>
@@ -191,7 +206,7 @@
                     @click="handleDownload(file.id)"
                     class="action-button download"
                     :disabled="downloading"
-                    title="下载"
+                    v-tooltip="'下载'"
                   >
                     <DownloadIcon :size="16" />
                   </button>
@@ -200,7 +215,7 @@
                     @click="handleDelete(file.id, file.fileName)"
                     class="action-button delete"
                     :disabled="deleting"
-                    title="删除"
+                    v-tooltip="'删除'"
                   >
                     <TrashIcon :size="16" />
                   </button>
@@ -316,7 +331,7 @@ const fetchFileList = async () => {
   try {
     const params = {
       page: currentPage.value,
-      pageSize: pageSize.value
+      pageSize: pageSize.value,
     }
     if (searchKeyword.value) {
       params.fileName = searchKeyword.value
@@ -383,7 +398,7 @@ const handleFileSelect = async (event) => {
   uploading.value = true
   try {
     const formData = new FormData()
-    files.forEach(file => {
+    files.forEach((file) => {
       formData.append('file', file)
     })
 
@@ -410,7 +425,10 @@ const handleFileSelect = async (event) => {
     } else if (error?.response?.status === 413) {
       showMessage('文件过大，上传失败（413）')
     } else if (error?.response?.status) {
-      showMessage(`文件上传失败（${error.response.status}）: ` + (error.response.data?.message || error.message || '网络错误'))
+      showMessage(
+        `文件上传失败（${error.response.status}）: ` +
+          (error.response.data?.message || error.message || '网络错误'),
+      )
     } else {
       showMessage('文件上传失败: ' + (error.message || '网络错误'))
     }
@@ -429,13 +447,13 @@ const handleSelectFile = (id, checked) => {
       selectedIds.value.push(id)
     }
   } else {
-    selectedIds.value = selectedIds.value.filter(i => i !== id)
+    selectedIds.value = selectedIds.value.filter((i) => i !== id)
   }
 }
 
 const handleSelectAll = (event) => {
   if (event.target.checked) {
-    selectedIds.value = fileList.value.map(file => file.id)
+    selectedIds.value = fileList.value.map((file) => file.id)
   } else {
     selectedIds.value = []
   }
@@ -505,13 +523,13 @@ const downloadFiles = async (ids) => {
   downloading.value = true
   try {
     // 获取要下载的文件信息
-    const filesToDownload = fileList.value.filter(file => ids.includes(file.id))
-    
+    const filesToDownload = fileList.value.filter((file) => ids.includes(file.id))
+
     for (const file of filesToDownload) {
       try {
         // 优先使用新的文件流下载API
         const response = await knowledgeApi.downloadFile(file.id)
-        
+
         // 处理blob下载
         if (response.data instanceof Blob) {
           const blob = response.data
@@ -523,13 +541,13 @@ const downloadFiles = async (ids) => {
           link.click()
           document.body.removeChild(link)
           window.URL.revokeObjectURL(url)
-          
+
           // 添加延迟避免浏览器阻止多个下载
-          await new Promise(resolve => setTimeout(resolve, 200))
+          await new Promise((resolve) => setTimeout(resolve, 200))
         }
       } catch (apiError) {
         console.error(`API下载文件 ${file.id} 失败:`, apiError)
-        
+
         // API失败时，尝试使用OSS URL作为备选方案
         if (file.url) {
           try {
@@ -540,8 +558,8 @@ const downloadFiles = async (ids) => {
             document.body.appendChild(link)
             link.click()
             document.body.removeChild(link)
-            
-            await new Promise(resolve => setTimeout(resolve, 200))
+
+            await new Promise((resolve) => setTimeout(resolve, 200))
           } catch (urlError) {
             console.error(`URL下载文件 ${file.id} 也失败:`, urlError)
             alert(`下载文件 "${file.fileName}" 失败`)
@@ -648,8 +666,12 @@ onMounted(() => {
 }
 
 @keyframes uploadingSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 // ==================== 加载 & 空状态 ====================
@@ -665,7 +687,7 @@ onMounted(() => {
     width: 32px;
     height: 32px;
     border: 3px solid var(--border-color);
-    border-top-color: #90138B;
+    border-top-color: #90138b;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -693,7 +715,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
-  
+
   .toolbar-left {
     display: flex;
     align-items: center;
@@ -702,7 +724,7 @@ onMounted(() => {
   }
 
   // 上传按钮包装器（用于定位气泡提示）
-  .upload-wrapper {
+  .header-actions {
     position: relative;
     display: inline-block;
   }
@@ -713,62 +735,48 @@ onMounted(() => {
     cursor: not-allowed;
   }
 
-  // 气泡提示样式
-  .tooltip {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    margin-top: 8px;
-    padding: 8px 12px;
-    background-color: #333;
-    color: #fff;
-    font-size: 13px;
+  .action-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: none;
     border-radius: 6px;
-    max-width: min(240px, calc(100vw - 32px));
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.4;
-    text-align: center;
-    box-sizing: border-box;
-    z-index: 100;
-    animation: fadeIn 0.2s ease;
+    background: rgba(144, 19, 139, 0.1);
+    color: #90138b;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
 
-    // 小三角箭头
-    &::before {
-      content: '';
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      border: 6px solid transparent;
-      border-bottom-color: #333;
+    &:hover:not(:disabled) {
+      background: rgba(144, 19, 139, 0.15);
     }
   }
 
   @keyframes fadeIn {
-    from { 
-      opacity: 0; 
-      transform: translateX(-50%) translateY(-4px); 
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-4px);
     }
-    to { 
-      opacity: 1; 
-      transform: translateX(-50%) translateY(0); 
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
   }
-  
+
   .toolbar-right {
     display: flex;
     gap: 8px;
     flex-shrink: 0;
   }
-  
+
   .primary-button {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 8px 20px;
-    background-color: #90138B;
+    background-color: #90138b;
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -776,17 +784,17 @@ onMounted(() => {
     font-size: 14px;
     font-weight: 500;
     transition: all 0.2s ease;
-    
+
     &:hover:not(:disabled) {
-      background-color: #9B2A96;
+      background-color: #9b2a96;
     }
-    
+
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
   }
-  
+
   .search-box {
     position: relative;
     display: flex;
@@ -802,12 +810,12 @@ onMounted(() => {
     &:focus-within {
       border-color: rgba(144, 19, 139, 0.3);
     }
-    
+
     svg {
       color: var(--text-secondary);
       flex-shrink: 0;
     }
-    
+
     input {
       flex: 1;
       border: none;
@@ -815,12 +823,12 @@ onMounted(() => {
       color: var(--text-primary);
       font-size: 14px;
       outline: none;
-      
+
       &::placeholder {
         color: var(--text-secondary);
       }
     }
-    
+
     .clear-search {
       background: transparent;
       border: none;
@@ -834,13 +842,13 @@ onMounted(() => {
       display: flex;
       align-items: center;
       justify-content: center;
-      
+
       &:hover {
         color: var(--text-primary);
       }
     }
   }
-  
+
   .batch-btn {
     display: flex;
     align-items: center;
@@ -849,7 +857,7 @@ onMounted(() => {
     border: none;
     border-radius: 6px;
     background: rgba(144, 19, 139, 0.1);
-    color: #90138B;
+    color: #90138b;
     font-size: 13px;
     cursor: pointer;
     transition: all 0.2s;
@@ -985,13 +993,13 @@ onMounted(() => {
 .file-table {
   width: 100%;
   border-collapse: collapse;
-  
+
   thead {
     background-color: var(--bg-tertiary);
     position: sticky;
     top: 0;
     z-index: 10;
-    
+
     th {
       padding: 12px 16px;
       text-align: left;
@@ -1001,20 +1009,20 @@ onMounted(() => {
       border-bottom: 1px solid var(--border-color);
     }
   }
-  
+
   tbody {
     tr {
       border-bottom: 1px solid var(--border-color);
       transition: background-color 0.2s ease;
-      
+
       &:hover {
         background-color: var(--bg-hover);
       }
-      
+
       &.selected {
         background-color: var(--bg-active);
       }
-      
+
       &.loading-row,
       &.empty-row {
         &:hover {
@@ -1022,26 +1030,26 @@ onMounted(() => {
         }
       }
     }
-    
+
     td {
       padding: 12px 16px;
       font-size: 14px;
       color: var(--text-primary);
     }
   }
-  
+
   .checkbox-col {
     width: 50px;
     text-align: center;
-    
-    input[type="checkbox"] {
+
+    input[type='checkbox'] {
       cursor: pointer;
     }
   }
-  
+
   .name-col {
     min-width: 200px;
-    
+
     .file-name {
       cursor: pointer;
       overflow: hidden;
@@ -1050,37 +1058,37 @@ onMounted(() => {
       max-width: 400px;
     }
   }
-  
+
   .time-col {
     width: 180px;
     color: var(--text-secondary);
     font-size: 13px;
   }
-  
+
   .action-col {
     width: 150px;
   }
-  
+
   .loading-cell,
   .empty-cell {
     text-align: center;
     padding: 48px 16px;
-    
+
     .loading-spinner {
       color: var(--text-secondary);
     }
-    
+
     .empty-state {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 16px;
       color: var(--text-secondary);
-      
+
       svg {
         opacity: 0.5;
       }
-      
+
       p {
         margin: 0;
         font-size: 14px;
@@ -1099,17 +1107,17 @@ onMounted(() => {
   background-color: var(--bg-secondary);
   border-radius: 12px;
   border: 1px solid var(--border-color);
-  
+
   .pagination-info {
     color: var(--text-secondary);
     font-size: 13px;
   }
-  
+
   .pagination-controls {
     display: flex;
     align-items: center;
     gap: 8px;
-    
+
     .page-button {
       padding: 6px 14px;
       background-color: transparent;
@@ -1119,18 +1127,18 @@ onMounted(() => {
       cursor: pointer;
       font-size: 13px;
       transition: all 0.2s ease;
-      
+
       &:hover:not(:disabled) {
         background-color: var(--bg-hover);
         border-color: rgba(144, 19, 139, 0.3);
       }
-      
+
       &:disabled {
         opacity: 0.4;
         cursor: not-allowed;
       }
     }
-    
+
     .page-input {
       width: 60px;
       padding: 6px 8px;
@@ -1140,13 +1148,13 @@ onMounted(() => {
       border-radius: 6px;
       text-align: center;
       font-size: 13px;
-      
+
       &:focus {
         outline: none;
-        border-color: #90138B;
+        border-color: #90138b;
       }
     }
-    
+
     .page-size-select {
       padding: 6px 8px;
       background-color: var(--bg-secondary);
@@ -1155,10 +1163,10 @@ onMounted(() => {
       border-radius: 6px;
       cursor: pointer;
       font-size: 13px;
-      
+
       &:focus {
         outline: none;
-        border-color: #90138B;
+        border-color: #90138b;
       }
     }
   }
@@ -1166,7 +1174,9 @@ onMounted(() => {
 
 // ==================== 动画 ====================
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 // 响应式设计
@@ -1174,53 +1184,53 @@ onMounted(() => {
   .knowledge-content {
     padding: 12px;
   }
-  
+
   .toolbar {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
-    
+
     .toolbar-left,
     .toolbar-center,
     .toolbar-right {
       width: 100%;
     }
-    
+
     .toolbar-right {
       flex-direction: column;
     }
   }
-  
+
   .file-table {
     font-size: 12px;
-    
-    th, td {
+
+    th,
+    td {
       padding: 8px;
     }
-    
+
     .name-col .file-name {
       max-width: 150px;
     }
-    
+
     .time-col {
       width: 120px;
       font-size: 11px;
     }
-    
+
     .action-col {
       width: 100px;
     }
   }
-  
+
   .pagination {
     flex-direction: column;
     gap: 12px;
     align-items: stretch;
-    
+
     .pagination-controls {
       justify-content: center;
     }
   }
 }
 </style>
-

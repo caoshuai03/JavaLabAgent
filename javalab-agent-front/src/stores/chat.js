@@ -34,7 +34,7 @@ export const useChatStore = defineStore('chat', () => {
   const chatMode = ref('ask')
 
   const currentConversation = computed(() => {
-    return conversations.value.find(conv => conv.id === currentConversationId.value)
+    return conversations.value.find((conv) => conv.id === currentConversationId.value)
   })
 
   const generateConversationId = () => {
@@ -73,7 +73,6 @@ export const useChatStore = defineStore('chat', () => {
     localStorage.setItem('chat_current_conversation_id', sessionId)
   }
 
-
   /**
    * 切换到指定会话，从数据库加载历史消息
    * @param {string} conversationId - 会话ID
@@ -83,7 +82,7 @@ export const useChatStore = defineStore('chat', () => {
     isNewConversation.value = false
     localStorage.setItem('chat_current_conversation_id', conversationId)
 
-    const conversation = conversations.value.find(conv => conv.id === conversationId)
+    const conversation = conversations.value.find((conv) => conv.id === conversationId)
 
     if (conversation) {
       // 从数据库加载历史消息
@@ -105,13 +104,13 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const userStore = useUserStore()
       const userId = userStore.userInfo?.id || 1
-      
+
       // 调用后端API删除会话，传递 userId 进行权限校验
       const response = await deleteSession(conversationId, userId)
-      
+
       // 删除成功后更新本地状态
       if (response.data === true) {
-        const index = conversations.value.findIndex(conv => conv.id === conversationId)
+        const index = conversations.value.findIndex((conv) => conv.id === conversationId)
         if (index !== -1) {
           conversations.value.splice(index, 1)
         }
@@ -126,7 +125,7 @@ export const useChatStore = defineStore('chat', () => {
             isNewConversation.value = true
           }
         }
-        
+
         console.log('会话删除成功:', conversationId)
         return true
       } else {
@@ -147,18 +146,20 @@ export const useChatStore = defineStore('chat', () => {
   const deleteConversations = async (conversationIds) => {
     try {
       if (!conversationIds || conversationIds.length === 0) return false
-      
+
       const userStore = useUserStore()
       const userId = userStore.userInfo?.id || 1
-      
+
       // 调用后端API批量删除会话
       const response = await deleteSessions(conversationIds, userId)
-      
+
       // 删除成功后更新本地状态
       if (response.data === true) {
         // 过滤掉已删除的会话
-        conversations.value = conversations.value.filter(conv => !conversationIds.includes(conv.id))
-        
+        conversations.value = conversations.value.filter(
+          (conv) => !conversationIds.includes(conv.id),
+        )
+
         // 如果当前会话被删除了，切换到其他会话
         if (conversationIds.includes(currentConversationId.value)) {
           if (conversations.value.length > 0) {
@@ -169,7 +170,7 @@ export const useChatStore = defineStore('chat', () => {
             isNewConversation.value = true
           }
         }
-        
+
         console.log('批量删除会话成功:', conversationIds)
         return true
       } else {
@@ -188,7 +189,7 @@ export const useChatStore = defineStore('chat', () => {
    * TODO: 后续可以添加后端更新接口
    */
   const renameConversation = (conversationId, newTitle) => {
-    const conversation = conversations.value.find(conv => conv.id === conversationId)
+    const conversation = conversations.value.find((conv) => conv.id === conversationId)
     if (conversation) {
       conversation.title = newTitle || '新对话'
       // 不更新 updatedAt，保持数据库时间
@@ -200,11 +201,9 @@ export const useChatStore = defineStore('chat', () => {
    * 注意：仅更新前端显示标题，不修改 updatedAt（时间由数据库管理）
    */
   const updateConversationTitle = (conversationId, firstMessage) => {
-    const conversation = conversations.value.find(conv => conv.id === conversationId)
+    const conversation = conversations.value.find((conv) => conv.id === conversationId)
     if (conversation && conversation.title === '新对话') {
-      const title = firstMessage.length > 30
-        ? firstMessage.substring(0, 30) + '...'
-        : firstMessage
+      const title = firstMessage.length > 30 ? firstMessage.substring(0, 30) + '...' : firstMessage
       conversation.title = title
       // 不更新 updatedAt，保持数据库时间
     }
@@ -222,7 +221,7 @@ export const useChatStore = defineStore('chat', () => {
       sender: sender,
       content: content,
       timestamp: new Date().toISOString(),
-      toolEvents: []
+      toolEvents: [],
     }
 
     messages.value.push(message)
@@ -241,7 +240,7 @@ export const useChatStore = defineStore('chat', () => {
       id: sessionId,
       title: title.length > 30 ? title.substring(0, 30) + '...' : title,
       createdAt: null, // 时间由数据库管理，下次刷新会话列表时同步
-      updatedAt: null  // 时间由数据库管理，下次刷新会话列表时同步
+      updatedAt: null, // 时间由数据库管理，下次刷新会话列表时同步
     }
 
     // 添加到列表顶部
@@ -280,32 +279,33 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const userStore = useUserStore()
       const userId = userStore.userInfo?.id || 1
-      
+
       const response = await getSessionHistory(sessionId, userId)
       const dbMessages = response.data || []
-      
+
       // 转换后端消息格式为前端格式
-      messages.value = dbMessages.map(msg => {
+      messages.value = dbMessages.map((msg) => {
         let content = msg.content || ''
         let toolEvents = []
-        
+
         // 解析思考过程
         // 格式: <!-- thinking_process_start -->[...]<!-- thinking_process_end -->
-        const thinkingRegex = /<!-- thinking_process_start -->([\s\S]*?)<!-- thinking_process_end -->\n?/
+        const thinkingRegex =
+          /<!-- thinking_process_start -->([\s\S]*?)<!-- thinking_process_end -->\n?/
         const match = content.match(thinkingRegex)
-        
+
         if (match) {
           try {
             // 解析 JSON 数组
             const eventsJson = match[1]
             // 后端保存的是 JSON 对象数组的字符串形式
             const events = JSON.parse(eventsJson)
-            
+
             // 转换事件格式 (如果需要) - 目前看后端返回的结构和前端需要的结构基本一致
             // 前端 MessageItem 需要 toolEvents 包含 eventType, payload 等字段
             // 后端 eventJson 生成的正是这种结构
             toolEvents = events
-            
+
             // 从内容中移除思考过程部分
             content = content.replace(match[0], '')
           } catch (e) {
@@ -318,7 +318,7 @@ export const useChatStore = defineStore('chat', () => {
           sender: msg.role === 'user' ? 'user' : 'assistant',
           content: content,
           timestamp: msg.createdAt || new Date().toISOString(),
-          toolEvents: toolEvents
+          toolEvents: toolEvents,
         }
       })
     } catch (error) {
@@ -334,17 +334,17 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const userStore = useUserStore()
       const userId = userStore.userInfo?.id || 1
-      
+
       const response = await getUserSessions(userId)
       const dbSessions = response.data || []
-      
+
       // 转换后端会话格式为前端格式
       // 注意：后端字段名是 createdAt/updatedAt（驼峰命名）
-      conversations.value = dbSessions.map(session => ({
+      conversations.value = dbSessions.map((session) => ({
         id: session.id,
         title: session.title || '新对话',
         createdAt: session.createdAt || null,
-        updatedAt: session.updatedAt || null
+        updatedAt: session.updatedAt || null,
       }))
     } catch (error) {
       console.error('加载会话列表失败:', error)
@@ -372,15 +372,15 @@ export const useChatStore = defineStore('chat', () => {
    */
   const initialize = async () => {
     await loadConversationsFromDB()
-    
+
     // 如果当前已经是新对话状态（比如从其他页面点击“新对话”跳转过来时），则不自动加载历史会话
     if (isNewConversation.value && currentConversationId.value === null) {
       return
     }
-    
+
     // 如果有保存的当前会话ID，尝试切换到该会话
     const currentId = localStorage.getItem('chat_current_conversation_id')
-    if (currentId && conversations.value.find(conv => conv.id === currentId)) {
+    if (currentId && conversations.value.find((conv) => conv.id === currentId)) {
       await switchConversation(currentId)
     } else if (conversations.value.length > 0) {
       // 否则选择第一个会话
@@ -418,6 +418,6 @@ export const useChatStore = defineStore('chat', () => {
     toggleSidebar,
     focusInput,
     initialize,
-    loadConversationsFromDB
+    loadConversationsFromDB,
   }
 })

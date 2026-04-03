@@ -45,15 +45,11 @@
         </div>
         <div class="form-group">
           <button type="submit" :disabled="loading">
-            {{
-              loading ? (isRegister ? '注册中...' : '登录中...') : (isRegister ? '注册' : '登录')
-            }}
+            {{ loading ? (isRegister ? '注册中...' : '登录中...') : isRegister ? '注册' : '登录' }}
           </button>
         </div>
         <div class="form-group" v-if="!isRegister">
-          <button type="button" class="toggle-button" @click="goRegister">
-            注册
-          </button>
+          <button type="button" class="toggle-button" @click="goRegister">注册</button>
         </div>
         <div v-if="errorMessage" class="error-message">
           {{ errorMessage }}
@@ -64,9 +60,9 @@
 </template>
 
 <script setup>
-import {ref} from 'vue'
-import {useRouter} from 'vue-router'
-import {useUserStore} from '../stores/user'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useUserStore } from '../stores/user'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -78,7 +74,7 @@ const errorMessage = ref('')
 const form = ref({
   userName: '',
   password: '',
-  confirmPassword: ''
+  confirmPassword: '',
 })
 
 const resetForm = () => {
@@ -86,7 +82,7 @@ const resetForm = () => {
   form.value = {
     userName: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   }
 }
 
@@ -119,7 +115,7 @@ const handleLogin = async () => {
   try {
     await userStore.login({
       userName: form.value.userName,
-      password: form.value.password
+      password: form.value.password,
     })
     router.push('/')
   } catch (error) {
@@ -156,7 +152,7 @@ const handleRegister = async () => {
     // 注册时传递用户输入的用户名和密码
     const registerResult = await userStore.register({
       userName: form.value.userName,
-      password: form.value.password
+      password: form.value.password,
     })
 
     // 检查注册是否成功
@@ -212,7 +208,9 @@ const handleRegister = async () => {
       background: rgba(0, 0, 0, 0);
       color: rgba(0, 0, 0, 0.6);
       cursor: pointer;
-      transition: background-color 0.2s ease, color 0.2s ease;
+      transition:
+        background-color 0.2s ease,
+        color 0.2s ease;
 
       &:hover {
         background: rgba(0, 0, 0, 0.1);
@@ -257,14 +255,14 @@ const handleRegister = async () => {
 
         &:focus {
           outline: none;
-          border-color: #90138B;
+          border-color: #90138b;
         }
       }
 
       button {
         width: 100%;
         padding: 0.75rem;
-        background-color: #90138B;
+        background-color: #90138b;
         color: white;
         border: none;
         border-radius: 4px;
@@ -273,7 +271,7 @@ const handleRegister = async () => {
         transition: background-color 0.3s;
 
         &:hover:not(:disabled) {
-          background-color: #9B2A96;
+          background-color: #9b2a96;
         }
 
         &:disabled {
@@ -283,10 +281,10 @@ const handleRegister = async () => {
       }
 
       .toggle-button {
-        background-color: #2454FF;
+        background-color: #2454ff;
 
         &:hover:not(:disabled) {
-          background-color: #204BE5;
+          background-color: #204be5;
         }
       }
     }

@@ -12,8 +12,8 @@ export const knowledgeApi = {
   uploadFiles: (formData) => {
     return apiClient.post('/v1/knowledge/file/upload', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+        'Content-Type': 'multipart/form-data',
+      },
     })
   },
 
@@ -37,7 +37,7 @@ export const knowledgeApi = {
   deleteFiles: (ids) => {
     // Spring Boot接受List参数时，需要将数组转换为查询字符串格式
     const params = new URLSearchParams()
-    ids.forEach(id => params.append('ids', id))
+    ids.forEach((id) => params.append('ids', id))
     return apiClient.delete(`/v1/knowledge/delete?${params.toString()}`)
   },
 
@@ -49,9 +49,9 @@ export const knowledgeApi = {
   downloadFiles: (ids) => {
     // Spring Boot接受List参数时，需要将数组转换为查询字符串格式
     const params = new URLSearchParams()
-    ids.forEach(id => params.append('ids', id))
+    ids.forEach((id) => params.append('ids', id))
     return apiClient.get(`/v1/knowledge/download?${params.toString()}`, {
-      responseType: 'blob'
+      responseType: 'blob',
     })
   },
 
@@ -62,8 +62,7 @@ export const knowledgeApi = {
    */
   downloadFile: (id) => {
     return apiClient.get(`/v1/knowledge/downloadFile/${id}`, {
-      responseType: 'blob'
+      responseType: 'blob',
     })
-  }
+  },
 }
-

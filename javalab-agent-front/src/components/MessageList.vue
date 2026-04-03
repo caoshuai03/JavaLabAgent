@@ -1,17 +1,7 @@
 <template>
   <div class="message-list-wrapper">
-    <div
-      class="message-list"
-      ref="messageListRef"
-      @scroll="handleScroll"
-    >
-
-
-      <MessageItem
-        v-for="message in chatStore.messages"
-        :key="message.id"
-        :message="message"
-      />
+    <div class="message-list" ref="messageListRef" @scroll="handleScroll">
+      <MessageItem v-for="message in chatStore.messages" :key="message.id" :message="message" />
 
       <div v-if="chatStore.isStreaming" class="typing-indicator">
         <span></span>
@@ -133,7 +123,7 @@ watch(
     if (autoScrollEnabled.value && !isUserScrolling) {
       scrollToBottom()
     }
-  }
+  },
 )
 
 watch(
@@ -147,7 +137,7 @@ watch(
     if (chatStore.isStreaming && autoScrollEnabled.value && !isUserScrolling) {
       scrollToBottom()
     }
-  }
+  },
 )
 
 watch(
@@ -156,7 +146,7 @@ watch(
     if (isStreaming && autoScrollEnabled.value && !isUserScrolling) {
       scrollToBottom()
     }
-  }
+  },
 )
 
 // 初始化：检查初始位置
@@ -203,8 +193,6 @@ onMounted(() => {
       background: var(--scrollbar-thumb-hover);
     }
   }
-
-
 
   .typing-indicator {
     display: flex;
@@ -270,7 +258,9 @@ onMounted(() => {
 }
 
 @keyframes typing {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
     opacity: 0.7;
   }

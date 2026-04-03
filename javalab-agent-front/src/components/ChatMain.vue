@@ -1,13 +1,16 @@
 <template>
-  <div class="chat-main" :class="{ 'is-empty': chatStore.messages.length === 0 }"
-       @click="handleMainClick">
+  <div
+    class="chat-main"
+    :class="{ 'is-empty': chatStore.messages.length === 0 }"
+    @click="handleMainClick"
+  >
     <!-- 顶部模型选择区域 -->
     <div class="top-bar">
       <button
         v-if="showMobileMenuButton"
         @click.stop="toggleSidebar"
         class="mobile-menu-button"
-        title="打开菜单"
+        v-tooltip="'打开菜单'"
       >
         ☰
       </button>
@@ -16,12 +19,15 @@
       <div class="model-selector-container" v-click-outside="closeModelDropdown">
         <div
           class="model-selector-trigger"
-          :class="{ 'disabled': chatStore.isStreaming }"
+          :class="{ disabled: chatStore.isStreaming }"
           @click="toggleModelDropdown"
         >
           <span class="model-label">{{ currentModelLabel }}</span>
-          <ChevronDownIcon :size="16" class="dropdown-icon"
-                           :class="{ 'is-open': showModelDropdown }"/>
+          <ChevronDownIcon
+            :size="16"
+            class="dropdown-icon"
+            :class="{ 'is-open': showModelDropdown }"
+          />
         </div>
 
         <transition name="dropdown-fade">
@@ -30,7 +36,7 @@
               v-for="model in availableModels"
               :key="model.value"
               class="model-option"
-              :class="{ 'active': chatStore.selectedModel === model.value }"
+              :class="{ active: chatStore.selectedModel === model.value }"
               @click="selectModel(model.value)"
             >
               {{ model.label }}
@@ -40,7 +46,7 @@
       </div>
     </div>
 
-    <MessageList v-show="chatStore.messages.length > 0"/>
+    <MessageList v-show="chatStore.messages.length > 0" />
 
     <div v-if="chatStore.messages.length === 0" class="welcome-container">
       <div class="welcome-content">
@@ -49,7 +55,7 @@
       </div>
     </div>
 
-    <ChatInput/>
+    <ChatInput />
 
     <div class="footer-container">
       <p>以上内容均由AI生成, 仅供参考和借鉴。版权所有 © shuaicao01@163.com</p>
@@ -58,8 +64,8 @@
 </template>
 
 <script setup>
-import {ref, computed, onMounted, onUnmounted} from 'vue'
-import {useChatStore} from '../stores/chat'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useChatStore } from '../stores/chat'
 import MessageList from './MessageList.vue'
 import ChatInput from './ChatInput.vue'
 import ChevronDownIcon from './icons/ChevronDownIcon.vue'
@@ -70,10 +76,10 @@ const showModelDropdown = ref(false)
 
 // 可用模型列表
 const availableModels = ref([
-  {label: 'Qwen3-8B', value: 'qwen3:8b'},
-  {label: 'Ernie 4.5-300B', value: 'ernie-4.5-turbo-128k-preview'},
-  {label: 'DeepSeek V3', value: 'deepseek-v3'},
-  {label: 'DeepSeek R1', value: 'deepseek-r1'}
+  { label: 'Qwen3-8B', value: 'qwen3:8b' },
+  { label: 'Ernie 4.5-300B', value: 'ernie-4.5-turbo-128k-preview' },
+  { label: 'DeepSeek V3', value: 'deepseek-v3' },
+  { label: 'DeepSeek R1', value: 'deepseek-r1' },
 ])
 
 const showMobileMenuButton = computed(() => {
@@ -81,7 +87,7 @@ const showMobileMenuButton = computed(() => {
 })
 
 const currentModelLabel = computed(() => {
-  const model = availableModels.value.find(m => m.value === chatStore.selectedModel)
+  const model = availableModels.value.find((m) => m.value === chatStore.selectedModel)
   return model ? model.label : chatStore.selectedModel
 })
 
@@ -130,7 +136,7 @@ const vClickOutside = {
     if (el.clickOutsideEvent) {
       document.removeEventListener('click', el.clickOutsideEvent, true)
     }
-  }
+  },
 }
 
 onMounted(() => {
@@ -149,11 +155,17 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--bg-primary);
-  overflow: hidden;
-  min-width: 0;
-  transition: background-color 0.3s ease;
+  width: calc(100% - 260px);
   position: relative;
+  overflow: hidden;
+
+  // 侧边栏折叠时给悬浮按钮留出空间
+  .sidebar.collapsed + &,
+  .sidebar.collapsed ~ & {
+    .top-bar {
+      padding-left: 60px;
+    }
+  }
 
   &.is-empty {
     justify-content: center;
@@ -219,7 +231,8 @@ onUnmounted(() => {
   z-index: 100;
   pointer-events: none;
 
-  .mobile-menu-button, .model-selector-container {
+  .mobile-menu-button,
+  .model-selector-container {
     pointer-events: auto;
   }
 
@@ -292,17 +305,18 @@ onUnmounted(() => {
     position: absolute;
     top: 100%;
     left: 0;
-    margin-top: 4px;
+    margin-top: 8px; // 增加间距
     background-color: var(--bg-primary);
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    padding: 4px;
+    border-radius: 12px; // 更圆润的边角，与对话记录一致
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); // 统一的阴影效果
+    padding: 6px; // 稍微增加内边距
     min-width: 160px;
     z-index: 1000;
+    border: 1px solid var(--border-color); // 添加边框
 
     .model-option {
-      padding: 8px 12px;
-      border-radius: 6px;
+      padding: 10px 12px; // 与对话记录一致的padding
+      border-radius: 8px; // 更圆润的选项边角
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -310,13 +324,18 @@ onUnmounted(() => {
       font-size: 14px;
       color: var(--text-primary);
       transition: background-color 0.2s ease;
+      margin-bottom: 2px; // 选项之间的间距
+
+      &:last-child {
+        margin-bottom: 0; // 最后一个选项去掉间距
+      }
 
       &:hover {
         background-color: var(--bg-hover);
       }
 
       &.active {
-        background-color: var(--bg-hover); // 使用 hover 背景作为选中背景
+        background-color: var(--bg-active); // 使用active背景色
         font-weight: 500;
       }
     }

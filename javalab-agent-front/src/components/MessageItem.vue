@@ -3,10 +3,7 @@
     <div class="message-container">
       <div class="message-content">
         <!-- 思考过程与工具调用面板 -->
-        <div
-          v-if="message.sender === 'assistant' && toolCalls.length > 0"
-          class="tool-calls-panel"
-        >
+        <div v-if="message.sender === 'assistant' && toolCalls.length > 0" class="tool-calls-panel">
           <div class="tool-calls-list">
             <div v-for="(item, idx) in toolCalls" :key="`tool-${idx}`" class="tool-call-item">
               <!-- 左侧连接线 -->
@@ -14,36 +11,49 @@
 
               <div class="tool-call-content">
                 <div class="tool-icon-wrapper">
-                  <span class="tool-icon" v-html="getToolIconSvg(item.type === 'skill' ? 'skill:' + item.call.payload.skillName : item.call.payload.toolName)"></span>
+                  <span
+                    class="tool-icon"
+                    v-html="
+                      getToolIconSvg(
+                        item.type === 'skill'
+                          ? 'skill:' + item.call.payload.skillName
+                          : item.call.payload.toolName,
+                      )
+                    "
+                  ></span>
                 </div>
                 <div class="tool-text">
-                  <span class="tool-name">{{ item.type === 'skill' ? item.call.payload.skillName : getToolDisplayName(item.call.payload.toolName) }}</span>
+                  <!-- 根据工具类型显示不同的文字格式 -->
+                  <span class="tool-name">
+                    <template v-if="item.type === 'skill'">
+                      调用 Skill：{{ item.call.payload.skillName }}
+                    </template>
+                    <template v-else-if="item.type === 'tool' && item.call.payload.toolName && item.call.payload.toolName.includes('mcp:')">
+                      调用 MCP：{{ getToolDisplayName(item.call.payload.toolName) }}
+                    </template>
+                    <template v-else>
+                      调用 Tool：{{ getToolDisplayName(item.call.payload.toolName) }}
+                    </template>
+                  </span>
                   <span class="tool-divider" v-if="getToolSummary(item)">|</span>
                   <span
                     class="tool-summary"
                     v-if="getToolSummary(item)"
-                    @mouseenter="showToolTip($event, getToolSummary(item))"
-                    @mouseleave="hideToolTip"
-                  >{{ truncateText(getToolSummary(item)) }}</span>
+                    v-tooltip="getToolSummary(item)"
+                    >{{ truncateText(getToolSummary(item)) }}</span
+                  >
                 </div>
-                <div class="tool-status-icon">
-                  <span v-if="!item.result" class="loading-spinner"></span>
-                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="success-icon"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                </div>
+                <!-- 移除右侧的状态图标 -->
               </div>
             </div>
           </div>
         </div>
-        <div class="message-text" v-html="formatContent(message.content)" ref="messageTextRef" @click="handleCodeBlockClick"></div>
-
-        <!-- 工具描述 Tooltip -->
         <div
-          v-if="toolTip.visible"
-          class="tool-desc-tooltip"
-          :style="{ top: toolTip.y + 'px', left: toolTip.x + 'px' }"
-        >
-          {{ toolTip.text }}
-        </div>
+          class="message-text"
+          v-html="formatContent(message.content)"
+          ref="messageTextRef"
+          @click="handleCodeBlockClick"
+        ></div>
 
         <!-- 消息底部区域：操作按钮 + 时间 -->
         <div class="message-footer">
@@ -52,24 +62,52 @@
             <button
               @click="handleCopy"
               :class="['action-button', { copied: copied }]"
-              :title="copied ? '已复制' : '复制'"
+              v-tooltip="copied ? '已复制' : '复制'"
             >
               <!-- 复制成功显示勾选图标，否则显示复制图标 -->
-              <svg v-if="copied" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                v-if="copied"
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
             <!-- 反馈按钮 -->
-            <button
-              @click="openFeedbackModal"
-              class="action-button"
-              title="反馈"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button @click="openFeedbackModal" class="action-button" v-tooltip="'反馈'">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
               </svg>
             </button>
@@ -97,17 +135,14 @@ import FeedbackModal from './FeedbackModal.vue'
 const props = defineProps({
   message: {
     type: Object,
-    required: true
-  }
+    required: true,
+  },
 })
 
 const chatStore = useChatStore()
 const messageTextRef = ref(null)
 const copied = ref(false) // 复制成功状态
 const showFeedbackModal = ref(false) // 反馈弹窗状态
-
-// 工具描述 Tooltip 状态
-const toolTip = ref({ visible: false, text: '', x: 0, y: 0 })
 
 // 打开反馈弹窗
 const openFeedbackModal = () => {
@@ -126,29 +161,6 @@ const truncateText = (text, maxLen = 20) => {
   return text.substring(0, maxLen) + '...'
 }
 
-/** 鼠标移入工具描述时显示完整 Tooltip */
-const showToolTip = (event, fullText) => {
-  if (!fullText) return
-  const rect = event.target.getBoundingClientRect()
-  const tooltipMaxWidth = 360
-  const padding = 12
-  // 居中对齐，同时限制不超出视口左右边界
-  let x = rect.left + rect.width / 2
-  x = Math.max(padding + tooltipMaxWidth / 2, x)
-  x = Math.min(window.innerWidth - padding - tooltipMaxWidth / 2, x)
-  toolTip.value = {
-    visible: true,
-    text: fullText,
-    x,
-    y: rect.top - 8
-  }
-}
-
-/** 鼠标移出时隐藏 Tooltip */
-const hideToolTip = () => {
-  toolTip.value.visible = false
-}
-
 const formatContent = (content) => {
   if (!content) return ''
 
@@ -158,9 +170,7 @@ const formatContent = (content) => {
   }
 
   // 用户消息：简单的文本格式化，将换行转换为 <br>
-  return content
-    .replace(/\n/g, '<br>')
-    .replace(/ {2}/g, '&nbsp;&nbsp;')
+  return content.replace(/\n/g, '<br>').replace(/ {2}/g, '&nbsp;&nbsp;')
 }
 
 const prettyJson = (obj) => {
@@ -183,11 +193,11 @@ const toolCalls = computed(() => {
   // 使用 map 暂存正在进行的调用，以 round 为 key
   const activeCalls = new Map()
 
-  props.message.toolEvents.forEach(e => {
+  props.message.toolEvents.forEach((e) => {
     // 处理 Skill 激活事件
     if (e.eventType === 'skill_loaded') {
       const skills = e.payload?.skills || []
-      skills.forEach(skill => {
+      skills.forEach((skill) => {
         list.push({
           type: 'skill',
           call: {
@@ -195,11 +205,11 @@ const toolCalls = computed(() => {
             payload: {
               skillName: skill.name,
               description: skill.description,
-              triggerKeywords: skill.triggerKeywords
+              triggerKeywords: skill.triggerKeywords,
             },
-            ts: e.ts
+            ts: e.ts,
           },
-          result: { success: true }  // Skills 加载完成即为成功
+          result: { success: true }, // Skills 加载完成即为成功
         })
       })
     } else if (e.eventType === 'tool_call') {
@@ -208,7 +218,7 @@ const toolCalls = computed(() => {
         type: 'tool',
         call: e,
         result: null,
-        round: round
+        round: round,
       }
       activeCalls.set(round, callItem)
       list.push(callItem)
@@ -249,14 +259,14 @@ const getToolDisplayName = (toolName) => {
   }
   // 内置工具名称映射
   const builtinNames = {
-    'knowledge_search': '知识检索',
-    'web_search': '搜索网页',
-    'read_file': '阅读',
-    'write_file': '写入',
-    'run_command': '运行命令',
-    'session_recall': '会话回顾',
-    'current_time': '获取时间',
-    'calculator': '计算器'
+    knowledge_search: '知识检索',
+    web_search: '搜索网页',
+    read_file: '阅读',
+    write_file: '写入',
+    run_command: '运行命令',
+    session_recall: '会话回顾',
+    current_time: '获取时间',
+    calculator: '计算器',
   }
   if (builtinNames[toolName]) return builtinNames[toolName]
   // MCP外部工具：直接显示工具名
@@ -276,14 +286,14 @@ const getToolSummary = (item) => {
     // 内置工具描述兜底映射
     const toolName = item.call.payload.toolName
     const builtinDescriptions = {
-      'knowledge_search': '查询知识库',
-      'web_search': '搜索网页',
-      'read_file': '读取文件内容',
-      'write_file': '写入文件内容',
-      'run_command': '执行终端命令',
-      'session_recall': '回顾当前会话消息',
-      'current_time': '获取当前时间',
-      'calculator': '计算数学表达式'
+      knowledge_search: '查询知识库',
+      web_search: '搜索网页',
+      read_file: '读取文件内容',
+      write_file: '写入文件内容',
+      run_command: '执行终端命令',
+      session_recall: '回顾当前会话消息',
+      current_time: '获取当前时间',
+      calculator: '计算数学表达式',
     }
     return builtinDescriptions[toolName] || ''
   } catch (e) {
@@ -331,12 +341,20 @@ const handleCodeBlockClick = async (event) => {
         try {
           await navigator.clipboard.writeText(codeText)
           // 显示复制成功提示
-          const originalText = copyButton.textContent
-          copyButton.textContent = '已复制'
           copyButton.classList.add('copied')
+          copyButton.setAttribute('data-tooltip', '已复制')
+          
+          // Re-render tooltip if it's currently showing
+          if (copyButton._tooltipEl) {
+            copyButton._tooltipEl.textContent = '已复制'
+          }
+          
           setTimeout(() => {
-            copyButton.textContent = originalText
             copyButton.classList.remove('copied')
+            copyButton.setAttribute('data-tooltip', '复制代码')
+            if (copyButton._tooltipEl) {
+              copyButton._tooltipEl.textContent = '复制代码'
+            }
           }, 2000)
         } catch (err) {
           console.error('复制代码失败:', err)
@@ -357,8 +375,60 @@ const addCopyButtons = () => {
 
     const copyButton = document.createElement('button')
     copyButton.className = 'code-block-copy'
-    copyButton.textContent = '复制'
-    copyButton.title = '复制代码'
+    copyButton.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+    `
+    // Add tooltip via data attribute instead of v-tooltip directive since it's dynamically created DOM
+    copyButton.setAttribute('data-tooltip', '复制代码')
+
+    // Add event listeners for custom tooltip behavior
+    copyButton.addEventListener('mouseenter', () => {
+      const tooltipText = copyButton.getAttribute('data-tooltip')
+      if (!tooltipText) return
+
+      // We simulate v-tooltip logic for dynamically created elements
+      let tooltipTimer = setTimeout(() => {
+        const tooltipEl = document.createElement('div')
+        tooltipEl.className = 'global-tooltip'
+        tooltipEl.textContent = tooltipText
+        document.body.appendChild(tooltipEl)
+
+        const rect = copyButton.getBoundingClientRect()
+        const padding = 12
+        const estimatedWidth = tooltipText.length * 13 + 28
+        const estimatedHalfWidth = estimatedWidth / 2
+
+        let x = rect.left + rect.width / 2
+        x = Math.max(padding + estimatedHalfWidth, x)
+        x = Math.min(window.innerWidth - padding - estimatedHalfWidth, x)
+
+        let y = rect.top - 8
+        tooltipEl.style.top = `${y}px`
+        tooltipEl.style.left = `${x}px`
+
+        requestAnimationFrame(() => {
+          const tooltipRect = tooltipEl.getBoundingClientRect()
+          if (tooltipRect.top < padding) {
+            tooltipEl.style.top = `${rect.bottom + 8}px`
+          }
+        })
+
+        copyButton._tooltipEl = tooltipEl
+      }, 400)
+
+      copyButton._tooltipTimer = tooltipTimer
+    })
+
+    copyButton.addEventListener('mouseleave', () => {
+      if (copyButton._tooltipTimer) clearTimeout(copyButton._tooltipTimer)
+      if (copyButton._tooltipEl) {
+        copyButton._tooltipEl.remove()
+        copyButton._tooltipEl = null
+      }
+    })
 
     const header = block.querySelector('.code-block-header')
     if (header) {
@@ -375,11 +445,15 @@ onMounted(() => {
 })
 
 // 监听消息内容变化（流式更新时）
-watch(() => props.message.content, () => {
-  nextTick(() => {
-    addCopyButtons()
-  })
-}, { flush: 'post' })
+watch(
+  () => props.message.content,
+  () => {
+    nextTick(() => {
+      addCopyButtons()
+    })
+  },
+  { flush: 'post' },
+)
 </script>
 
 <style lang="scss" scoped>
@@ -500,7 +574,8 @@ watch(() => props.message.content, () => {
     }
   }
 
-  :deep(ul), :deep(ol) {
+  :deep(ul),
+  :deep(ol) {
     margin: 0.5em 0;
     padding-left: 1.5em;
   }
@@ -513,7 +588,7 @@ watch(() => props.message.content, () => {
     margin: 1em 0;
     padding: 0.5em 1em;
     padding-left: 1em;
-    border-left: 4px solid #90138B;
+    border-left: 4px solid #90138b;
     background-color: rgba(144, 19, 139, 0.05);
     border-radius: 4px;
     color: var(--text-secondary);
@@ -524,7 +599,8 @@ watch(() => props.message.content, () => {
   :deep(code:not(pre code)) {
     padding: 2px 6px;
     border-radius: 4px;
-    font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-family:
+      'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
     font-size: 0.9em;
     background-color: rgba(175, 184, 193, 0.2);
     color: #d73a49;
@@ -558,27 +634,30 @@ watch(() => props.message.content, () => {
       }
 
       .code-block-copy {
-        padding: 4px 12px;
-        font-size: 12px;
+        padding: 6px;
         background-color: transparent;
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 6px;
-        color: #656d76;
+        border: none;
+        color: var(--text-tertiary);
         cursor: pointer;
-        transition: all 0.2s ease;
-        font-family: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        border-radius: 6px;
+        
+        svg {
+          width: 16px;
+          height: 16px;
+        }
 
         &:hover {
-          background-color: rgba(0, 0, 0, 0.05);
-          border-color: rgba(0, 0, 0, 0.25);
-          color: #24292f;
+          color: var(--text-primary);
+          background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
         }
 
         &.copied {
-      background-color: #90138B;
-      border-color: #90138B;
-      color: #fff;
-    }
+          color: #90138b;
+        }
       }
     }
 
@@ -595,7 +674,9 @@ watch(() => props.message.content, () => {
         font-size: 0.875em;
         line-height: 1.6;
         color: #24292f;
-        font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+        font-family:
+          'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', 'Monaco', 'Courier New',
+          monospace;
         display: block;
       }
     }
@@ -617,7 +698,8 @@ watch(() => props.message.content, () => {
       font-size: 0.875em;
       line-height: 1.6;
       color: #24292f;
-      font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-family:
+        'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
     }
   }
 
@@ -629,7 +711,8 @@ watch(() => props.message.content, () => {
     border-radius: 8px;
     overflow: hidden;
 
-    th, td {
+    th,
+    td {
       padding: 12px 16px;
       border: 1px solid var(--border-color);
       text-align: left;
@@ -651,17 +734,22 @@ watch(() => props.message.content, () => {
   }
 
   :deep(a) {
-    color: #90138B;
+    color: #90138b;
     text-decoration: none;
     border-bottom: 1px solid transparent;
     transition: border-color 0.2s ease;
 
     &:hover {
-      border-bottom-color: #90138B;
+      border-bottom-color: #90138b;
     }
   }
 
-  :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
     margin: 0.8em 0 0.4em 0;
     font-weight: 600;
 
@@ -670,12 +758,24 @@ watch(() => props.message.content, () => {
     }
   }
 
-  :deep(h1) { font-size: 1.5em; }
-  :deep(h2) { font-size: 1.3em; }
-  :deep(h3) { font-size: 1.1em; }
-  :deep(h4) { font-size: 1em; }
-  :deep(h5) { font-size: 0.9em; }
-  :deep(h6) { font-size: 0.8em; }
+  :deep(h1) {
+    font-size: 1.5em;
+  }
+  :deep(h2) {
+    font-size: 1.3em;
+  }
+  :deep(h3) {
+    font-size: 1.1em;
+  }
+  :deep(h4) {
+    font-size: 1em;
+  }
+  :deep(h5) {
+    font-size: 0.9em;
+  }
+  :deep(h6) {
+    font-size: 0.8em;
+  }
 
   :deep(hr) {
     margin: 1em 0;
@@ -735,7 +835,7 @@ watch(() => props.message.content, () => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-right: 12px;
+  margin-right: 8px; // 减少与文字的距离
 }
 
 .tool-icon {
@@ -759,6 +859,8 @@ watch(() => props.message.content, () => {
   color: var(--text-primary, #374151);
   font-weight: 500;
   flex-shrink: 0;
+  font-family: inherit; // 继承字体，保持中英文和谐
+  line-height: 1.4; // 调整行高
 }
 
 .tool-divider {
@@ -777,67 +879,12 @@ watch(() => props.message.content, () => {
   transition: color 0.2s;
 
   &:hover {
-    color: #90138B;
+    color: #90138b;
   }
 }
 
 // 工具描述 Tooltip（聊天消息内）
-.tool-desc-tooltip {
-  position: fixed;
-  transform: translateX(-50%) translateY(-100%);
-  max-width: 360px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  background-color: var(--bg-secondary, #fff);
-  color: var(--text-primary, #1f2937);
-  font-size: 13px;
-  line-height: 1.5;
-  border: 1px solid var(--border-color, #e5e7eb);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  pointer-events: none;
-  z-index: 3000;
-  animation: tooltipFadeIn 0.15s ease;
-  word-break: break-word;
-}
-
-@keyframes tooltipFadeIn {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-100%) translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(-100%);
-  }
-}
-
-.tool-status-icon {
-  margin-left: 12px;
-  display: flex;
-  align-items: center;
-  color: var(--text-tertiary, #9ca3af);
-  flex-shrink: 0;
-}
-
-.arrow-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary, #6b7280);
-}
-
-.loading-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border-color, #e5e7eb);
-  border-top-color: var(--text-secondary, #6b7280);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+// 移除原有的 tool-desc-tooltip 样式
 
 // 消息底部区域：复制按钮 + 时间
 .message-footer {
@@ -880,7 +927,7 @@ watch(() => props.message.content, () => {
 
     // 复制成功时的状态
     &.copied {
-      color: #90138B;
+      color: #90138b;
     }
   }
 }

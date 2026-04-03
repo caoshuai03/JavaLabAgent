@@ -8,42 +8,42 @@ const routes = [
     path: '/',
     name: 'Chat',
     component: Chat,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     path: '/knowledge',
     name: 'Knowledge',
     component: () => import('../views/KnowledgeManagement.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     path: '/mcp',
     name: 'McpSettings',
     component: () => import('../views/McpSettings.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     path: '/skills',
     name: 'SkillsManagement',
     component: () => import('../views/SkillsManagement.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
   },
   {
     path: '/login',
     name: 'Login',
-    component: Login
-  }
+    component: Login,
+  },
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
 })
 
 // 全局前置守卫
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
-  
+
   if (to.meta.requiresAuth) {
     // 验证token有效性
     const isValid = await userStore.validateToken()

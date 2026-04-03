@@ -82,7 +82,7 @@ const sendSseMessage = (url, params, callbacks) => {
 
   const headers = {
     'Content-Type': 'application/json',
-    'Accept': 'text/event-stream',
+    Accept: 'text/event-stream',
   }
 
   // 仅在 token 存在时携带 Authorization，避免发送 "Bearer null"

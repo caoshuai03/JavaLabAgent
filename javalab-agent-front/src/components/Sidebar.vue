@@ -2,13 +2,13 @@
   <div :class="['sidebar', { collapsed: chatStore.sidebarCollapsed }]">
     <div class="sidebar-header">
       <div class="sidebar-top">
-        <div class="logo-area" v-if="!chatStore.sidebarCollapsed" @click="handleNewConversation" title="新聊天">
+        <div class="logo-area" v-if="!chatStore.sidebarCollapsed" @click="handleNewConversation">
           <img src="../assets/logo.png" alt="JavaLab Logo" class="logo-img" />
         </div>
         <button
           @click="chatStore.toggleSidebar"
           class="toggle-button"
-          :title="chatStore.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+          v-tooltip="chatStore.sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'"
         >
           <ChevronLeftIcon v-if="!chatStore.sidebarCollapsed" :size="16" />
           <ChevronRightIcon v-else :size="16" />
@@ -18,7 +18,7 @@
         <button
           @click="handleNewConversation"
           :class="['nav-item', { active: isNavActive('/') }]"
-          :title="chatStore.sidebarCollapsed ? '新建对话' : ''"
+          v-tooltip="chatStore.sidebarCollapsed ? '新建对话' : ''"
         >
           <PlusIcon :size="18" />
           <span v-if="!chatStore.sidebarCollapsed">新聊天</span>
@@ -27,7 +27,7 @@
         <button
           @click="handleKnowledgeManagement"
           :class="['nav-item', { active: isNavActive('/knowledge') }]"
-          :title="chatStore.sidebarCollapsed ? '知识库' : ''"
+          v-tooltip="chatStore.sidebarCollapsed ? '知识库' : ''"
         >
           <FolderIcon :size="18" />
           <span v-if="!chatStore.sidebarCollapsed">知识库</span>
@@ -36,7 +36,7 @@
         <button
           @click="handleMcpSettings"
           :class="['nav-item', { active: isNavActive('/mcp') }]"
-          :title="chatStore.sidebarCollapsed ? 'MCP' : ''"
+          v-tooltip="chatStore.sidebarCollapsed ? 'MCP' : ''"
         >
           <ToolIcon :size="18" />
           <span v-if="!chatStore.sidebarCollapsed">MCP</span>
@@ -45,7 +45,7 @@
         <button
           @click="handleSkillsManagement"
           :class="['nav-item', { active: isNavActive('/skills') }]"
-          :title="chatStore.sidebarCollapsed ? 'Skills' : ''"
+          v-tooltip="chatStore.sidebarCollapsed ? 'Skills' : ''"
         >
           <BookIcon :size="18" />
           <span v-if="!chatStore.sidebarCollapsed">Skills</span>
@@ -55,27 +55,19 @@
 
     <div class="list-header" v-if="!chatStore.sidebarCollapsed">
       <span class="title">历史会话</span>
-      <button class="edit-btn" @click="toggleSelectionMode" :title="isSelectionMode ? '完成' : '批量编辑'">
-        <span v-if="isSelectionMode" class="text-btn">完成</span>
-        <EditIcon v-else :size="14" />
-      </button>
     </div>
 
     <ConversationList
       v-if="!chatStore.sidebarCollapsed"
       :is-selection-mode="isSelectionMode"
       :selected-ids="selectedIds"
-      @update:selected-ids="val => selectedIds = val"
+      @update:selected-ids="(val) => (selectedIds = val)"
+      @enterBatchMode="handleEnterBatchModeFromItem"
     />
 
     <div class="sidebar-bottom" v-if="isSelectionMode && !chatStore.sidebarCollapsed">
       <div class="batch-actions">
-        <button
-          class="batch-btn cancel"
-          @click="cancelSelectionMode"
-        >
-          取消
-        </button>
+        <button class="batch-btn cancel" @click="cancelSelectionMode">取消</button>
         <button
           class="batch-btn delete"
           @click="handleBatchDelete"
@@ -102,7 +94,6 @@ import PlusIcon from './icons/PlusIcon.vue'
 import FolderIcon from './icons/FolderIcon.vue'
 import ToolIcon from './icons/ToolIcon.vue'
 import BookIcon from './icons/BookIcon.vue'
-import EditIcon from './icons/EditIcon.vue'
 
 import ChevronLeftIcon from './icons/ChevronLeftIcon.vue'
 import ChevronRightIcon from './icons/ChevronRightIcon.vue'
@@ -114,16 +105,15 @@ const chatStore = useChatStore()
 const isSelectionMode = ref(false)
 const selectedIds = ref([])
 
-const toggleSelectionMode = () => {
-  isSelectionMode.value = !isSelectionMode.value
-  if (!isSelectionMode.value) {
-    selectedIds.value = []
-  }
-}
-
 const cancelSelectionMode = () => {
   isSelectionMode.value = false
   selectedIds.value = []
+}
+
+// 从会话项菜单进入批量模式
+const handleEnterBatchModeFromItem = () => {
+  isSelectionMode.value = true
+  // 不自动选择任何会话，让用户自己选择
 }
 
 const handleBatchDelete = async () => {
@@ -182,18 +172,18 @@ const isNavActive = (path) => {
   background-color: var(--bg-secondary);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease, background-color 0.3s ease;
-  border-right: 1px solid var(--border-color);
+  transition:
+    width 0.3s ease,
+    background-color 0.3s ease;
+  border-right: none;
   flex-shrink: 0;
   position: relative;
 
   &.collapsed {
-    width: 64px;
-
-    // 确保折叠状态下内容居中
-    .sidebar-header {
-      align-items: center;
-    }
+    width: 0;
+    overflow: visible;
+    background-color: transparent;
+    border-right: none;
   }
 
   // 移动端响应式
@@ -203,12 +193,16 @@ const isNavActive = (path) => {
     top: 0;
     z-index: 1000;
     transform: translateX(0);
-    transition: transform 0.3s ease, background-color 0.3s ease, width 0.3s ease;
+    transition:
+      transform 0.3s ease,
+      background-color 0.3s ease,
+      width 0.3s ease;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
 
     &.collapsed {
-      transform: translateX(-100%);
-      width: 260px; // 移动端折叠时完全隐藏，保持原始宽度
+      transform: translateX(-260px);
+      width: 0;
+      overflow: hidden;
     }
   }
 
@@ -217,7 +211,8 @@ const isNavActive = (path) => {
     width: 220px;
 
     &.collapsed {
-      width: 64px;
+      width: 0;
+      overflow: hidden;
     }
   }
 }
@@ -225,7 +220,6 @@ const isNavActive = (path) => {
 .sidebar-header {
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border-color);
   transition: all 0.3s ease;
 
   .sidebar-top {
@@ -335,39 +329,35 @@ const isNavActive = (path) => {
         white-space: nowrap;
       }
     }
-
   }
 }
 
 .sidebar.collapsed {
   .sidebar-header {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1001;
+
     .sidebar-top {
-      padding: 16px 8px 12px 8px;
-      justify-content: center;
+      padding: 12px;
 
       .logo-area {
         display: none;
       }
 
       .toggle-button {
-        width: 40px;
-        height: 40px;
+        width: 32px;
+        height: 32px;
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        transition: none;
       }
     }
 
     .nav-menu {
-      align-items: center;
-      padding: 0 8px 8px 8px;
-
-      .nav-item {
-        justify-content: center;
-        width: 40px;
-        padding: 10px;
-
-        span {
-          display: none;
-        }
-      }
+      display: none;
     }
   }
 }
@@ -376,18 +366,15 @@ const isNavActive = (path) => {
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border-color);
 
   .sidebar.collapsed & {
-    align-items: center;
-    justify-content: center;
+    display: none;
   }
 }
 
 .list-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 12px 16px 8px;
 
   .title {
@@ -396,28 +383,6 @@ const isNavActive = (path) => {
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-  }
-
-  .edit-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--text-secondary);
-    padding: 4px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    font-size: 12px;
-
-    &:hover {
-      background-color: var(--bg-hover);
-      color: var(--text-primary);
-    }
-
-    .text-btn {
-      color: var(--primary-color);
-      font-weight: 500;
-    }
   }
 }
 

@@ -22,7 +22,7 @@ onMounted(async () => {
   if (window.innerWidth <= 768) {
     chatStore.sidebarCollapsed = true
   }
-  
+
   // 从数据库加载会话（异步操作）
   await chatStore.initialize()
 })

@@ -1,5 +1,5 @@
 <template>
-  <!-- 反馈图标 - 消息气泡样式 -->
+  <!-- 三个点菜单图标组件 -->
   <svg
     xmlns="http://www.w3.org/2000/svg"
     :width="size"
@@ -7,19 +7,25 @@
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    stroke-width="2"
+    :stroke-width="strokeWidth"
     stroke-linecap="round"
     stroke-linejoin="round"
   >
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="19" cy="12" r="1" />
+    <circle cx="5" cy="12" r="1" />
   </svg>
 </template>
 
 <script setup>
 defineProps({
   size: {
-    type: [Number, String],
-    default: 24,
+    type: Number,
+    default: 16,
+  },
+  strokeWidth: {
+    type: Number,
+    default: 2,
   },
 })
 </script>

@@ -12,53 +12,98 @@
         @input="handleInput"
       ></textarea>
 
-      <div class="input-actions">
-        <div
-          v-if="!chatStore.isStreaming"
-          class="mode-switch"
-          :class="[{ disabled: chatStore.isStreaming }, `mode-${chatStore.chatMode}`]"
-        >
-          <span class="mode-slider" aria-hidden="true"></span>
-          <button
-            type="button"
-            class="mode-option"
-            :class="{ active: chatStore.chatMode === 'ask' }"
-            :disabled="chatStore.isStreaming"
-            @click="setChatMode('ask')"
-          >
-            Ask
-          </button>
-          <button
-            type="button"
-            class="mode-option"
-            :class="{ active: chatStore.chatMode === 'agent' }"
-            :disabled="chatStore.isStreaming"
-            @click="setChatMode('agent')"
-          >
-            Agent
-          </button>
-        </div>
-
+      <div class="input-footer">
         <button
-          v-if="chatStore.isStreaming"
-          class="action-button stop-button"
-          title="停止生成"
-          @click="handleStop"
+          type="button"
+          class="action-button attach-button disabled-btn"
+          v-tooltip="'附件上传功能开发中'"
+          aria-label="附件上传功能开发中"
         >
-          <svg stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-        </button>
-        <button
-          v-else
-          class="action-button send-button"
-          :disabled="!canSend"
-          :title="chatStore.chatMode === 'agent' ? '以 Agent 模式发送(Enter)' : '以 Ask 模式发送(Enter)'"
-          @click="handleSend"
-        >
-          <svg stroke="currentColor" fill="none" stroke-width="2.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" height="1.2em" width="1.2em" xmlns="http://www.w3.org/2000/svg">
-            <path d="m5 12 7-7 7 7"></path>
-            <path d="M12 19V5"></path>
+          <svg
+            stroke="currentColor"
+            fill="none"
+            stroke-width="2.2"
+            viewBox="0 0 24 24"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            height="1em"
+            width="1em"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
           </svg>
         </button>
+
+        <div class="input-actions">
+          <div
+            v-if="!chatStore.isStreaming"
+            class="mode-switch"
+            :class="[{ disabled: chatStore.isStreaming }, `mode-${chatStore.chatMode}`]"
+          >
+            <span class="mode-slider" aria-hidden="true"></span>
+            <button
+              type="button"
+              class="mode-option"
+              :class="{ active: chatStore.chatMode === 'ask' }"
+              :disabled="chatStore.isStreaming"
+              @click="setChatMode('ask')"
+            >
+              Ask
+            </button>
+            <button
+              type="button"
+              class="mode-option"
+              :class="{ active: chatStore.chatMode === 'agent' }"
+              :disabled="chatStore.isStreaming"
+              @click="setChatMode('agent')"
+            >
+              Agent
+            </button>
+          </div>
+
+          <button
+            v-if="chatStore.isStreaming"
+            class="action-button stop-button"
+            v-tooltip="'停止生成'"
+            @click="handleStop"
+          >
+            <svg
+              stroke="currentColor"
+              fill="none"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              height="1em"
+              width="1em"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            </svg>
+          </button>
+          <button
+            v-else
+            class="action-button send-button"
+            :class="{ 'disabled-btn': !canSend }"
+            v-tooltip="
+              chatStore.chatMode === 'agent' ? '以 Agent 模式发送(Enter)' : '以 Ask 模式发送(Enter)'
+            "
+            @click="handleSend"
+          >
+            <svg
+              stroke="currentColor"
+              fill="none"
+              stroke-width="2.5"
+              viewBox="0 0 24 24"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M12 20V4M5 11l7-7 7 7" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -188,8 +233,8 @@ const handleSend = async () => {
       },
       onComplete: () => {
         handleStop()
-      }
-    }
+      },
+    },
   )
 }
 
@@ -219,16 +264,20 @@ const handleAgentEvent = (event, lastMessage) => {
     chatStore.addToolEventToLastMessage({
       eventType: event.eventType,
       payload,
-      ts: event.ts
+      ts: event.ts,
     })
     return
   }
 
-  if (event.eventType === 'tool_call' || event.eventType === 'tool_result' || event.eventType === 'status') {
+  if (
+    event.eventType === 'tool_call' ||
+    event.eventType === 'tool_result' ||
+    event.eventType === 'status'
+  ) {
     chatStore.addToolEventToLastMessage({
       eventType: event.eventType,
       payload,
-      ts: event.ts
+      ts: event.ts,
     })
     return
   }
@@ -260,14 +309,17 @@ const handleStop = async () => {
   }
 }
 
-watch(() => chatStore.shouldFocusInput, (shouldFocus) => {
-  if (shouldFocus && inputRef.value) {
-    nextTick(() => {
-      inputRef.value.focus()
-      chatStore.shouldFocusInput = false
-    })
-  }
-})
+watch(
+  () => chatStore.shouldFocusInput,
+  (shouldFocus) => {
+    if (shouldFocus && inputRef.value) {
+      nextTick(() => {
+        inputRef.value.focus()
+        chatStore.shouldFocusInput = false
+      })
+    }
+  },
+)
 
 onMounted(() => {
   if (inputRef.value) {
@@ -286,29 +338,93 @@ onUnmounted(() => {
 .chat-input-container {
   padding: 0 24px 0 24px;
   background-color: var(--bg-primary);
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease;
 
   .input-wrapper {
-    max-width: 832px;
+    max-width: 952px;
     margin: 0 auto;
     display: flex;
-    gap: 12px;
-    align-items: flex-end;
+    flex-direction: column;
+    gap: 14px;
+    align-items: stretch;
     position: relative;
-    background-color: var(--input-bg);
-    border: 1px solid var(--input-border);
-    border-radius: 26px;
-    padding: 10px 10px 10px 12px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.98) 0%,
+      rgba(250, 250, 252, 0.95) 100%
+    );
+    border: 1px solid rgba(229, 231, 235, 1);
+    border-radius: 42px;
+    min-height: 144px;
+    padding: 20px 20px 16px 20px;
+    box-shadow:
+      0 8px 22px rgba(17, 24, 39, 0.05),
+      0 1px 0 rgba(255, 255, 255, 0.88) inset;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
   }
 
   @media (max-width: 768px) {
     padding: 0 16px 0 16px;
 
     .input-wrapper {
-      gap: 8px;
-      padding: 8px;
+      gap: 10px;
+      min-height: 128px;
+      padding: 16px 14px 12px 14px;
+      border-radius: 34px;
+    }
+  }
+}
+
+.input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+
+  .action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: white;
+
+    &.attach-button {
+      width: 24px;
+      height: 24px;
+      background-color: transparent;
+      border: none;
+      color: #999;
+      cursor: not-allowed;
+      flex-shrink: 0;
+
+      &.disabled-btn {
+        opacity: 0.8;
+      }
+
+      &:hover:not(.disabled-btn) {
+        color: #666;
+      }
+
+      svg {
+        width: 20px;
+        height: 20px;
+        stroke-width: 2;
+      }
     }
   }
 }
@@ -318,24 +434,32 @@ onUnmounted(() => {
   grid-template-columns: repeat(2, 1fr);
   align-items: center;
   position: relative;
-  width: 112px;
-  padding: 2px;
+  width: 111px;
+  padding: 3px;
   border-radius: 999px;
-  background: transparent;
-  border: 1px solid var(--input-border);
+  background: rgba(144, 19, 139, 0.05);
+  border: none;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 1px 3px rgba(144, 19, 139, 0.06);
   flex-shrink: 0;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  transition:
+    box-shadow 0.25s ease,
+    transform 0.2s ease;
 
   .mode-slider {
     position: absolute;
-    top: 2px;
-    left: 2px;
-    width: calc((100% - 4px) / 2);
-    height: calc(100% - 4px);
+    top: 3px;
+    left: 3px;
+    width: calc((100% - 6px) / 2);
+    height: calc(100% - 6px);
     border-radius: 999px;
-    background: #90138B;
-    box-shadow: 0 4px 12px rgba(144, 19, 139, 0.18);
-    transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s ease, box-shadow 0.28s ease;
+    background: linear-gradient(180deg, rgba(144, 19, 139, 0.16) 0%, rgba(144, 19, 139, 0.1) 100%);
+    box-shadow: 0 1px 2px rgba(144, 19, 139, 0.08);
+    transition:
+      transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 0.28s ease,
+      box-shadow 0.28s ease;
     pointer-events: none;
   }
 
@@ -344,21 +468,21 @@ onUnmounted(() => {
   }
 
   &.disabled {
-    opacity: 0.7;
+    opacity: 0.55;
   }
 
   .mode-option {
     width: 100%;
-    height: 26px;
-    padding: 0 8px;
+    height: 30px;
+    padding: 0 10px;
     border: none;
     border-radius: 999px;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     font-size: 14px;
     font-family: inherit;
-    font-weight: 600;
-    line-height: 26px;
+    font-weight: 500;
+    line-height: 30px;
     cursor: pointer;
     position: relative;
     z-index: 1;
@@ -368,7 +492,9 @@ onUnmounted(() => {
     text-align: center;
     vertical-align: middle;
     outline: none;
-    transition: color 0.24s ease, transform 0.22s ease;
+    transition:
+      color 0.24s ease,
+      transform 0.22s ease;
 
     &:hover:not(:disabled) {
       color: var(--text-primary);
@@ -389,20 +515,24 @@ onUnmounted(() => {
     }
 
     &.active {
-      color: #fff;
+      color: #5f115c;
+      font-weight: 600;
 
       &:hover:not(:disabled) {
-        color: #fff;
+        color: #5f115c;
       }
     }
   }
 
   @media (max-width: 768px) {
-    width: 104px;
+    width: 120px;
+    padding: 3px;
 
     .mode-option {
       padding: 0 8px;
       font-size: 13px;
+      height: 28px;
+      line-height: 28px;
     }
   }
 }
@@ -462,7 +592,7 @@ onUnmounted(() => {
 .input-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 
   .action-button {
@@ -479,28 +609,75 @@ onUnmounted(() => {
     color: white;
 
     &.send-button {
-      background-color: #90138B;
+      width: 32px;
+      height: 32px;
+      background-color: #90138b;
 
-      &:hover:not(:disabled) {
-        background-color: #9B2A96;
+      svg {
+        width: 1.2em;
+        height: 1.2em;
       }
 
-      &:disabled {
-        background-color: #e5e5e5;
-        color: #acacac;
+      &:hover:not(.disabled-btn) {
+        background-color: #9b2a96;
+      }
+
+      &.disabled-btn {
+        background-color: #e5e5ea;
+        color: #8e8e93;
         cursor: not-allowed;
       }
     }
 
     &.stop-button {
+      width: 24px;
+      height: 24px;
       background-color: transparent;
       color: var(--text-primary);
       border: 1px solid var(--border-color);
+
+      svg {
+        width: 1em;
+        height: 1em;
+      }
 
       &:hover {
         background-color: var(--bg-hover);
       }
     }
+  }
+}
+
+.chat-tooltip {
+  position: fixed;
+  transform: translateX(-50%) translateY(-100%);
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 12px; /* 更加圆润 */
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3000;
+  animation: chatTooltipFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.15),
+    0 1px 2px rgba(255, 255, 255, 0.1) inset;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@keyframes chatTooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-100%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-100%) translateY(0);
   }
 }
 </style>

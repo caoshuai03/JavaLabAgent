@@ -9,7 +9,7 @@ function escapeHtml(str) {
     '<': '&lt;',
     '>': '&gt;',
     '"': '&quot;',
-    "'": '&#039;'
+    "'": '&#039;',
   }
   return str.replace(/[&<>"']/g, (m) => map[m])
 }
@@ -44,7 +44,7 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   const langLabel = lang || 'text'
   // 添加 highlight.js 的语言类名
   const codeClass = lang ? `language-${lang}` : ''
-  
+
   return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-block-lang">${langLabel}</span></div><pre class="hljs"><code class="${codeClass}">${highlighted}</code></pre></div>\n`
 }
 
@@ -53,4 +53,3 @@ export const renderMarkdown = (content) => {
   if (!content) return ''
   return md.render(content)
 }
-

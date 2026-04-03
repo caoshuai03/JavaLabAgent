@@ -60,7 +60,7 @@ const successMessage = ref('')
 const form = ref({
   currentPassword: '',
   newPassword: '',
-  confirmNewPassword: ''
+  confirmNewPassword: '',
 })
 
 const handleClose = () => {
@@ -69,7 +69,7 @@ const handleClose = () => {
   form.value = {
     currentPassword: '',
     newPassword: '',
-    confirmNewPassword: ''
+    confirmNewPassword: '',
   }
   errorMessage.value = ''
   successMessage.value = ''
@@ -79,35 +79,35 @@ const handleSubmit = async () => {
   changing.value = true
   errorMessage.value = ''
   successMessage.value = ''
-  
+
   // 基本验证
   if (!form.value.currentPassword) {
     errorMessage.value = '请输入当前密码'
     changing.value = false
     return
   }
-  
+
   if (!form.value.newPassword) {
     errorMessage.value = '请输入新密码'
     changing.value = false
     return
   }
-  
+
   if (form.value.newPassword.length < 6) {
     errorMessage.value = '新密码长度不能少于6位'
     changing.value = false
     return
   }
-  
+
   if (form.value.newPassword !== form.value.confirmNewPassword) {
     errorMessage.value = '两次输入的新密码不一致'
     changing.value = false
     return
   }
-  
+
   try {
     const result = await userStore.changePassword(form.value)
-    
+
     if (result !== undefined) {
       successMessage.value = '密码修改成功！'
       setTimeout(() => {
@@ -145,7 +145,7 @@ const handleSubmit = async () => {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   width: 100%;
   max-width: 440px;
-  
+
   h2 {
     text-align: left;
     margin-bottom: 1.5rem;
@@ -155,10 +155,10 @@ const handleSubmit = async () => {
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border-color);
   }
-  
+
   .form-group {
     margin-bottom: 1.25rem;
-    
+
     label {
       display: block;
       margin-bottom: 0.5rem;
@@ -166,7 +166,7 @@ const handleSubmit = async () => {
       font-weight: 500;
       color: var(--text-primary);
     }
-    
+
     input {
       width: 100%;
       padding: 8px 12px;
@@ -177,26 +177,26 @@ const handleSubmit = async () => {
       color: var(--text-primary);
       box-sizing: border-box;
       transition: all 0.2s ease;
-      
+
       &:focus {
         outline: none;
-        border-color: #90138B;
+        border-color: #90138b;
         box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
       }
-      
+
       &::placeholder {
         color: var(--text-secondary);
         opacity: 0.6;
       }
     }
   }
-  
+
   .form-actions {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
     margin-top: 2rem;
-    
+
     button {
       padding: 8px 16px;
       border: none;
@@ -205,27 +205,27 @@ const handleSubmit = async () => {
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s ease;
-      
+
       &:first-child {
         background-color: transparent;
         color: var(--text-secondary);
         border: 1px solid var(--border-color);
-        
+
         &:hover {
           background-color: var(--bg-hover);
           color: var(--text-primary);
         }
       }
-      
+
       &:last-child {
-        background-color: #90138B;
+        background-color: #90138b;
         color: white;
-        
+
         &:hover:not(:disabled) {
-          background-color: #A01BA0;
+          background-color: #a01ba0;
           box-shadow: 0 2px 8px rgba(144, 19, 139, 0.2);
         }
-        
+
         &:disabled {
           background-color: var(--border-color);
           opacity: 0.5;
@@ -234,7 +234,7 @@ const handleSubmit = async () => {
       }
     }
   }
-  
+
   .error-message {
     color: #dc3545;
     text-align: center;
@@ -245,7 +245,7 @@ const handleSubmit = async () => {
     border: 1px solid rgba(220, 53, 69, 0.1);
     font-size: 13px;
   }
-  
+
   .success-message {
     color: #28a745;
     text-align: center;
@@ -258,4 +258,3 @@ const handleSubmit = async () => {
   }
 }
 </style>
-

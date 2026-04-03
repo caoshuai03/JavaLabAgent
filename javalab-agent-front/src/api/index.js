@@ -30,7 +30,7 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error)
-  }
+  },
 )
 
 // 响应拦截器
@@ -45,7 +45,7 @@ apiClient.interceptors.response.use(
       window.location.href = '/login'
     }
     return Promise.reject(error)
-  }
+  },
 )
 
 export default apiClient
@@ -54,17 +54,17 @@ export default apiClient
 export const userApi = {
   // 登录API需要使用表单格式参数
   login: (data) => {
-    const params = new URLSearchParams();
-    params.append('userName', data.userName);
-    params.append('password', data.password);
+    const params = new URLSearchParams()
+    params.append('userName', data.userName)
+    params.append('password', data.password)
     return apiClient.post('/v1/user/login', params, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-    });
+    })
   },
   logout: () => apiClient.post('/v1/user/logout'),
   register: (data) => apiClient.post('/v1/user/register', data),
   // 获取用户信息
-  getUserInfo: (id) => apiClient.get(`/v1/user/${id}`)
+  getUserInfo: (id) => apiClient.get(`/v1/user/${id}`),
 }

@@ -12,7 +12,20 @@
         <!-- 空状态 -->
         <div v-else-if="skills.length === 0" class="empty-state">
           <div class="empty-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
           </div>
           <h3>暂无 Skills</h3>
         </div>
@@ -58,10 +71,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { getSkills, getSkillDetail } from '../api/skills'
-import { useChatStore } from '../stores/chat'
 import Sidebar from '../components/Sidebar.vue'
+import { useChatStore } from '../stores/chat'
 
 const chatStore = useChatStore()
 
@@ -95,7 +108,10 @@ const renderMarkdown = (content) => {
 
   return blocks
     .map((block) => {
-      const lines = block.split('\n').map((line) => line.trim()).filter(Boolean)
+      const lines = block
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
       if (lines.length === 0) return ''
 
       const firstLine = lines[0]
@@ -158,7 +174,7 @@ const loadSkills = async () => {
 const showSkillDetail = async (skill) => {
   currentSkill.value = skill
   detailDialogVisible.value = true
-  
+
   try {
     const response = await getSkillDetail(skill.name)
     if (response.data.success) {
@@ -216,7 +232,7 @@ onMounted(() => {
     width: 32px;
     height: 32px;
     border: 3px solid var(--border-color);
-    border-top-color: #90138B;
+    border-top-color: #90138b;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -372,7 +388,7 @@ onMounted(() => {
       width: 5px;
       height: 16px;
       border-radius: 999px;
-      background: #90138B;
+      background: #90138b;
       flex-shrink: 0;
     }
   }
@@ -453,13 +469,15 @@ onMounted(() => {
     border-radius: 4px;
     font-family: 'SFMono-Regular', 'Consolas', monospace;
     font-size: 12px;
-    color: #90138B;
+    color: #90138b;
   }
 }
 
 // ==================== 动画 ====================
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 // ==================== 响应式 ====================

@@ -20,7 +20,7 @@
 defineProps({
   size: {
     type: [Number, String],
-    default: 20
-  }
+    default: 20,
+  },
 })
 </script>

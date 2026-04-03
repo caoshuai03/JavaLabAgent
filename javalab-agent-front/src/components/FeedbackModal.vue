@@ -6,7 +6,17 @@
       <div class="modal-header">
         <h3>提交反馈</h3>
         <button class="close-btn" @click="handleClose">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
@@ -77,11 +87,7 @@
       <!-- 弹窗底部 -->
       <div class="modal-footer">
         <button class="btn btn-cancel" @click="handleClose">取消</button>
-        <button
-          class="btn btn-submit"
-          :disabled="!canSubmit || submitting"
-          @click="handleSubmit"
-        >
+        <button class="btn btn-submit" :disabled="!canSubmit || submitting" @click="handleSubmit">
           {{ submitting ? '提交中...' : '提交反馈' }}
         </button>
       </div>
@@ -98,13 +104,13 @@ const props = defineProps({
   // 关联的消息内容（用于对话反馈场景）
   messageContent: {
     type: String,
-    default: ''
+    default: '',
   },
   // 关联的会话ID
   sessionId: {
     type: String,
-    default: null
-  }
+    default: null,
+  },
 })
 
 // Emits
@@ -115,7 +121,7 @@ const feedbackTypes = [
   { value: 1, label: 'BUG' },
   { value: 2, label: '建议' },
   { value: 3, label: '投诉' },
-  { value: 0, label: '其它' }
+  { value: 0, label: '其它' },
 ]
 
 // 表单数据
@@ -123,7 +129,7 @@ const form = ref({
   type: 2, // 默认选择"建议"
   title: '',
   content: '',
-  contactEmail: ''
+  contactEmail: '',
 })
 
 // 提交状态
@@ -275,14 +281,14 @@ const handleSubmit = async () => {
     transition: all 0.2s ease;
 
     &:hover {
-      border-color: #90138B;
-      color: #90138B;
+      border-color: #90138b;
+      color: #90138b;
       background-color: var(--bg-hover);
     }
 
     &.active {
-      background-color: #90138B;
-      border-color: #90138B;
+      background-color: #90138b;
+      border-color: #90138b;
       color: #fff;
     }
   }
@@ -301,7 +307,7 @@ const handleSubmit = async () => {
 
   &:focus {
     outline: none;
-    border-color: #90138B;
+    border-color: #90138b;
     box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
   }
 
@@ -327,7 +333,7 @@ const handleSubmit = async () => {
 
   &:focus {
     outline: none;
-    border-color: #90138B;
+    border-color: #90138b;
     box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
   }
 
@@ -397,11 +403,11 @@ const handleSubmit = async () => {
   }
 
   &.btn-submit {
-    background-color: #90138B;
+    background-color: #90138b;
     color: #fff;
 
     &:hover:not(:disabled) {
-      background-color: #A01BA0;
+      background-color: #a01ba0;
       box-shadow: 0 2px 8px rgba(144, 19, 139, 0.2);
     }
 
