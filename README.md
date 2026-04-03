@@ -111,12 +111,12 @@ docker compose down -v
 
 ```bash
 # 构建并推送后端镜像
-docker build -t mailacs/javalabagent-backend:2026022601 -f javalab-agent-back/Dockerfile javalab-agent-back
-docker push mailacs/javalabagent-backend:2026022601
-
+docker build -t mailacs/javalabagent-backend:latest -f javalab-agent-back/Dockerfile javalab-agent-back
+docker push mailacs/javalabagent-backend:latest
+ 
 # 构建并推送前端镜像
-docker build -t mailacs/javalabagent-frontend:2026022601 -f javalab-agent-front/Dockerfile javalab-agent-front
-docker push mailacs/javalabagent-frontend:2026022601
+docker build -t mailacs/javalabagent-frontend:latest -f javalab-agent-front/Dockerfile javalab-agent-front
+docker push mailacs/javalabagent-frontend:latest
 ```
 
 ## 📚 文档
