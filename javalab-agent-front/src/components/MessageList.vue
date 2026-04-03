@@ -41,13 +41,13 @@ import MessageItem from './MessageItem.vue'
 const chatStore = useChatStore()
 const messageListRef = ref(null)
 
-const userScrolled = ref(false)
-const isAtBottom = ref(true)
+// 用户是否主动向上滚动过（离开底部区域）
+const userHasScrolledUp = ref(false)
 const showScrollToBottomButton = ref(false)
-const autoScrollEnabled = ref(true)
 
 const BOTTOM_THRESHOLD = 100
 
+// 检查当前是否在底部区域
 const checkIsAtBottom = () => {
   if (!messageListRef.value) return false
 
@@ -58,74 +58,77 @@ const checkIsAtBottom = () => {
 }
 
 let scrollTimer = null
-let isUserScrolling = false
-let scrollTimeout = null
+let isProgrammaticScroll = false
 
 const handleScroll = () => {
-  isUserScrolling = true
-
-  if (scrollTimeout) {
-    clearTimeout(scrollTimeout)
+  // 程序主动设置 scrollTop 时会触发 scroll 事件，这里跳过，避免误判为用户手动滚动
+  if (isProgrammaticScroll) {
+    return
   }
 
-  // 设置一个较短的超时，检测滚动是否停止
-  scrollTimeout = setTimeout(() => {
-    isUserScrolling = false
-  }, 150)
-
+  // 清除之前的定时器
   if (scrollTimer) {
     clearTimeout(scrollTimer)
   }
 
+  // 延迟检查，避免频繁触发
   scrollTimer = setTimeout(() => {
     if (!messageListRef.value) return
 
-    const wasAtBottom = isAtBottom.value
-    isAtBottom.value = checkIsAtBottom()
+    const isAtBottom = checkIsAtBottom()
 
-    if (!wasAtBottom && isAtBottom.value) {
-      userScrolled.value = false
-      autoScrollEnabled.value = true
+    if (isAtBottom) {
+      // 用户滚动到底部了，恢复自动跟随
+      userHasScrolledUp.value = false
       showScrollToBottomButton.value = false
-    } else if (!isAtBottom.value) {
-      userScrolled.value = true
-      autoScrollEnabled.value = false
+    } else {
+      // 用户不在底部，标记为已上滑
+      userHasScrolledUp.value = true
       showScrollToBottomButton.value = true
     }
   }, 100)
 }
 
+// 滚动到底部
 const scrollToBottom = (force = false) => {
   if (!messageListRef.value) return
 
-  if (autoScrollEnabled.value || force) {
+  // 只有在强制滚动或用户未主动上滑时才自动滚动
+  if (force || !userHasScrolledUp.value) {
+    // 使用 nextTick 确保 DOM 已更新，再加一个 setTimeout 确保渲染完成
     nextTick(() => {
-      if (messageListRef.value) {
-        messageListRef.value.scrollTop = messageListRef.value.scrollHeight
-        isAtBottom.value = true
-        userScrolled.value = false
-        showScrollToBottomButton.value = false
-      }
+      setTimeout(() => {
+        if (messageListRef.value) {
+          // 标记为程序滚动，防止被 handleScroll 误判
+          isProgrammaticScroll = true
+          messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+          showScrollToBottomButton.value = false
+
+          // 下一帧恢复，保证后续真实用户滚动仍然能被识别
+          requestAnimationFrame(() => {
+            isProgrammaticScroll = false
+          })
+        }
+      }, 0)
     })
   }
 }
 
 // 点击"到底部"按钮
 const handleScrollToBottom = () => {
+  userHasScrolledUp.value = false // 清除上滑标记，恢复自动跟随
   scrollToBottom(true)
-  autoScrollEnabled.value = true
-  userScrolled.value = false
 }
 
+// 监听消息列表长度变化（新消息添加时）
 watch(
   () => chatStore.messages.length,
   () => {
-    if (autoScrollEnabled.value && !isUserScrolling) {
-      scrollToBottom()
-    }
+    scrollToBottom()
   },
 )
 
+// 监听最后一条消息的内容变化（流式输出文本时）
 watch(
   () => {
     const messages = chatStore.messages
@@ -134,18 +137,30 @@ watch(
     return lastMessage ? lastMessage.content : ''
   },
   () => {
-    if (chatStore.isStreaming && autoScrollEnabled.value && !isUserScrolling) {
-      scrollToBottom()
-    }
+    scrollToBottom()
   },
 )
 
+// 监听最后一条消息中的工具事件变化，确保工具列表流式渲染时也能自动跟随到底部
 watch(
-  () => chatStore.isStreaming,
-  (isStreaming) => {
-    if (isStreaming && autoScrollEnabled.value && !isUserScrolling) {
-      scrollToBottom()
-    }
+  () => {
+    const messages = chatStore.messages
+    if (messages.length === 0) return 0
+    const lastMessage = messages[messages.length - 1]
+    return lastMessage?.toolEvents?.length || 0
+  },
+  () => {
+    scrollToBottom()
+  },
+)
+
+// 切换历史会话时重置滚动跟随状态，确保回到流式中的会话时能直接看到最新内容
+watch(
+  () => chatStore.activeConversationKey,
+  () => {
+    userHasScrolledUp.value = false
+    showScrollToBottomButton.value = false
+    scrollToBottom(true)
   },
 )
 
@@ -153,9 +168,10 @@ watch(
 onMounted(() => {
   nextTick(() => {
     if (messageListRef.value) {
-      isAtBottom.value = checkIsAtBottom()
-      if (!isAtBottom.value) {
+      const isAtBottom = checkIsAtBottom()
+      if (!isAtBottom) {
         showScrollToBottomButton.value = true
+        userHasScrolledUp.value = true
       }
     }
   })

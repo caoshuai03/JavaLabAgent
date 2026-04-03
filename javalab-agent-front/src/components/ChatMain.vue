@@ -166,6 +166,15 @@ onUnmounted(() => {
       padding-left: 60px;
     }
   }
+  overflow: hidden;
+
+  // 侧边栏折叠时给悬浮按钮留出空间
+  .sidebar.collapsed + &,
+  .sidebar.collapsed ~ & {
+    .top-bar {
+      padding-left: 60px;
+    }
+  }
 
   &.is-empty {
     justify-content: center;

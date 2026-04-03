@@ -3,21 +3,18 @@ import { ref, computed } from 'vue'
 import { getUserSessions, getSessionHistory, deleteSession, deleteSessions } from '../api/chat'
 import { useUserStore } from './user'
 
+const CURRENT_CONVERSATION_STORAGE_KEY = 'chat_current_conversation_id'
+const DRAFT_CONVERSATION_PREFIX = '__draft_conversation__'
+
 export const useChatStore = defineStore('chat', () => {
   // 会话列表
   const conversations = ref([])
 
-  // 当前会话ID（对应后端的 sessionId）
-  const currentConversationId = ref(null)
+  // 当前选中的会话 key：历史会话直接使用 sessionId，新会话使用前端草稿 key
+  const activeConversationKey = ref(null)
 
-  // 当前会话的消息列表
-  const messages = ref([])
-
-  // 加载状态
-  const isLoading = ref(false)
-
-  // 流式响应状态
-  const isStreaming = ref(false)
+  // 每个会话单独维护自己的消息、加载和流式状态，避免历史会话切换时串流
+  const conversationStates = ref({})
 
   // 侧边栏折叠状态
   const sidebarCollapsed = ref(false)
@@ -25,74 +22,182 @@ export const useChatStore = defineStore('chat', () => {
   // 是否需要聚焦输入框
   const shouldFocusInput = ref(false)
 
-  // 是否是新对话（尚未发送消息）
-  const isNewConversation = ref(false)
-
   // 当前选中的大模型
   const selectedModel = ref('qwen3:8b')
 
   const chatMode = ref('ask')
 
-  const currentConversation = computed(() => {
-    return conversations.value.find((conv) => conv.id === currentConversationId.value)
+  const createConversationState = () => ({
+    messages: [],
+    isLoading: false,
+    isStreaming: false,
+    hasLoadedMessages: false,
   })
 
-  const generateConversationId = () => {
-    return `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  const generateDraftConversationKey = () => {
+    return `${DRAFT_CONVERSATION_PREFIX}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }
 
   const generateMessageId = () => {
     return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }
 
+  const isDraftConversationKey = (conversationKey) => {
+    return typeof conversationKey === 'string' && conversationKey.startsWith(DRAFT_CONVERSATION_PREFIX)
+  }
+
+  const ensureConversationState = (conversationKey) => {
+    if (!conversationKey) return null
+
+    if (!conversationStates.value[conversationKey]) {
+      conversationStates.value[conversationKey] = createConversationState()
+    }
+
+    return conversationStates.value[conversationKey]
+  }
+
+  const getConversationState = (conversationKey = activeConversationKey.value, createIfMissing = false) => {
+    if (!conversationKey) return null
+
+    if (createIfMissing) {
+      return ensureConversationState(conversationKey)
+    }
+
+    return conversationStates.value[conversationKey] || null
+  }
+
+  const selectConversationKey = (conversationKey) => {
+    activeConversationKey.value = conversationKey
+
+    if (!conversationKey || isDraftConversationKey(conversationKey)) {
+      localStorage.removeItem(CURRENT_CONVERSATION_STORAGE_KEY)
+      return
+    }
+
+    localStorage.setItem(CURRENT_CONVERSATION_STORAGE_KEY, conversationKey)
+  }
+
+  const createDraftConversation = ({ focus = true } = {}) => {
+    const draftConversationKey = generateDraftConversationKey()
+    const state = ensureConversationState(draftConversationKey)
+
+    // 新建草稿会话时重置该草稿自己的显示状态，不影响其他会话中的流式任务
+    state.messages = []
+    state.isLoading = false
+    state.isStreaming = false
+    state.hasLoadedMessages = false
+
+    selectConversationKey(draftConversationKey)
+
+    if (focus) {
+      focusInput()
+    }
+
+    return draftConversationKey
+  }
+
+  const currentConversationId = computed(() => {
+    return isDraftConversationKey(activeConversationKey.value) ? null : activeConversationKey.value
+  })
+
+  const messages = computed(() => {
+    return getConversationState(activeConversationKey.value)?.messages || []
+  })
+
+  const isLoading = computed(() => {
+    return getConversationState(activeConversationKey.value)?.isLoading || false
+  })
+
+  const isStreaming = computed(() => {
+    return getConversationState(activeConversationKey.value)?.isStreaming || false
+  })
+
+  const isNewConversation = computed(() => {
+    return isDraftConversationKey(activeConversationKey.value)
+  })
+
+  const currentConversation = computed(() => {
+    return conversations.value.find((conv) => conv.id === currentConversationId.value)
+  })
+
   /**
    * 创建新对话
    * 注意：新对话的 ID 由后端在第一次发送消息时生成
    */
   const createConversation = () => {
-    // 标记为新对话，不设置 ID（等待后端返回）
-    currentConversationId.value = null
-    messages.value = []
-    isNewConversation.value = true
-
-    // 清除 localStorage 中的当前会话ID
-    localStorage.removeItem('chat_current_conversation_id')
-
-    focusInput()
-
-    return null
+    return createDraftConversation()
   }
 
   /**
    * 设置当前会话ID（由后端返回的 sessionId）
    * @param {string} sessionId - 后端返回的会话ID
+   * @param {string} [sourceConversationKey] - 流式开始时所属的会话 key
    */
-  const setCurrentSessionId = (sessionId) => {
-    currentConversationId.value = sessionId
-    isNewConversation.value = false
-    localStorage.setItem('chat_current_conversation_id', sessionId)
+  const setCurrentSessionId = (sessionId, sourceConversationKey = activeConversationKey.value) => {
+    if (!sessionId) return
+
+    const sourceState = getConversationState(sourceConversationKey, false)
+
+    if (sourceConversationKey && sourceConversationKey !== sessionId && sourceState) {
+      conversationStates.value[sessionId] = sourceState
+      delete conversationStates.value[sourceConversationKey]
+    } else {
+      ensureConversationState(sessionId)
+    }
+
+    // 只有当前正在看的就是这条流时，才切换当前选中项，避免后台流式输出打断当前页面
+    if (activeConversationKey.value === sourceConversationKey || !activeConversationKey.value) {
+      selectConversationKey(sessionId)
+    }
+  }
+
+  const setConversationLoading = (conversationKey, loading) => {
+    const state = ensureConversationState(conversationKey)
+    if (state) {
+      state.isLoading = loading
+    }
+  }
+
+  const setConversationStreaming = (conversationKey, streaming) => {
+    const state = ensureConversationState(conversationKey)
+    if (state) {
+      state.isStreaming = streaming
+    }
+  }
+
+  const getConversationMessages = (conversationKey = activeConversationKey.value) => {
+    return getConversationState(conversationKey)?.messages || []
+  }
+
+  const getLastMessage = (conversationKey = activeConversationKey.value) => {
+    const conversationMessages = getConversationMessages(conversationKey)
+    return conversationMessages.length > 0 ? conversationMessages[conversationMessages.length - 1] : null
   }
 
   /**
-   * 切换到指定会话，从数据库加载历史消息
+   * 切换到指定会话，优先展示内存缓存；仅在首次进入且本地没有缓存时才从数据库加载
    * @param {string} conversationId - 会话ID
    */
   const switchConversation = async (conversationId) => {
-    currentConversationId.value = conversationId
-    isNewConversation.value = false
-    localStorage.setItem('chat_current_conversation_id', conversationId)
+    selectConversationKey(conversationId)
 
     const conversation = conversations.value.find((conv) => conv.id === conversationId)
+    const state = getConversationState(conversationId, false)
 
-    if (conversation) {
-      // 从数据库加载历史消息
+    if (conversation && !(state?.isStreaming || state?.hasLoadedMessages || state?.messages.length > 0)) {
       await loadConversationMessagesFromDB(conversationId)
     } else {
-      messages.value = []
+      ensureConversationState(conversationId)
     }
 
     // 触发输入框聚焦
     focusInput()
+  }
+
+  const removeConversationState = (conversationKey) => {
+    if (conversationKey && conversationStates.value[conversationKey]) {
+      delete conversationStates.value[conversationKey]
+    }
   }
 
   /**
@@ -115,14 +220,14 @@ export const useChatStore = defineStore('chat', () => {
           conversations.value.splice(index, 1)
         }
 
+        removeConversationState(conversationId)
+
         // 如果删除的是当前会话，切换到其他会话
         if (conversationId === currentConversationId.value) {
           if (conversations.value.length > 0) {
             await switchConversation(conversations.value[0].id)
           } else {
-            currentConversationId.value = null
-            messages.value = []
-            isNewConversation.value = true
+            createDraftConversation({ focus: false })
           }
         }
 
@@ -160,14 +265,16 @@ export const useChatStore = defineStore('chat', () => {
           (conv) => !conversationIds.includes(conv.id),
         )
 
+        conversationIds.forEach((conversationId) => {
+          removeConversationState(conversationId)
+        })
+
         // 如果当前会话被删除了，切换到其他会话
         if (conversationIds.includes(currentConversationId.value)) {
           if (conversations.value.length > 0) {
             await switchConversation(conversations.value[0].id)
           } else {
-            currentConversationId.value = null
-            messages.value = []
-            isNewConversation.value = true
+            createDraftConversation({ focus: false })
           }
         }
 
@@ -210,12 +317,16 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
-   * 添加消息到当前会话
+   * 添加消息到指定会话
    * @param {string} sender - 发送者类型（'user' 或 'assistant'）
    * @param {string} content - 消息内容
-   * @returns {object} 消息对象
+   * @param {string} [conversationKey] - 会话 key
+   * @returns {object|null} 消息对象
    */
-  const addMessage = (sender, content) => {
+  const addMessage = (sender, content, conversationKey = activeConversationKey.value) => {
+    const state = ensureConversationState(conversationKey)
+    if (!state) return null
+
     const message = {
       id: generateMessageId(),
       sender: sender,
@@ -224,7 +335,7 @@ export const useChatStore = defineStore('chat', () => {
       toolEvents: [],
     }
 
-    messages.value.push(message)
+    state.messages.push(message)
 
     return message
   }
@@ -236,6 +347,13 @@ export const useChatStore = defineStore('chat', () => {
    * @param {string} title - 会话标题（通常是第一条消息）
    */
   const addNewConversationToList = (sessionId, title) => {
+    const existingConversation = conversations.value.find((conversation) => conversation.id === sessionId)
+
+    if (existingConversation) {
+      existingConversation.title = title.length > 30 ? title.substring(0, 30) + '...' : title
+      return
+    }
+
     const newConversation = {
       id: sessionId,
       title: title.length > 30 ? title.substring(0, 30) + '...' : title,
@@ -248,43 +366,50 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
-   * 更新最后一条消息内容（用于流式响应）
+   * 更新指定会话最后一条消息内容（用于流式响应）
+   * @param {string} content - 最新消息内容
+   * @param {string} [conversationKey] - 会话 key
    */
-  const updateLastMessage = (content) => {
-    if (messages.value.length > 0) {
-      const lastMessage = messages.value[messages.value.length - 1]
-      if (lastMessage.sender === 'assistant') {
-        lastMessage.content = content
-      }
+  const updateLastMessage = (content, conversationKey = activeConversationKey.value) => {
+    const lastMessage = getLastMessage(conversationKey)
+    if (lastMessage && lastMessage.sender === 'assistant') {
+      lastMessage.content = content
     }
   }
 
-  const addToolEventToLastMessage = (toolEvent) => {
-    if (messages.value.length > 0) {
-      const lastMessage = messages.value[messages.value.length - 1]
-      if (lastMessage.sender === 'assistant') {
-        if (!Array.isArray(lastMessage.toolEvents)) {
-          lastMessage.toolEvents = []
-        }
-        lastMessage.toolEvents.push(toolEvent)
+  const addToolEventToLastMessage = (toolEvent, conversationKey = activeConversationKey.value) => {
+    const lastMessage = getLastMessage(conversationKey)
+    if (lastMessage && lastMessage.sender === 'assistant') {
+      if (!Array.isArray(lastMessage.toolEvents)) {
+        lastMessage.toolEvents = []
       }
+      lastMessage.toolEvents.push(toolEvent)
     }
   }
 
   /**
    * 从数据库加载会话的历史消息
    * @param {string} sessionId - 会话ID
+   * @param {boolean} [force=false] - 是否强制刷新
    */
-  const loadConversationMessagesFromDB = async (sessionId) => {
+  const loadConversationMessagesFromDB = async (sessionId, force = false) => {
+    const state = ensureConversationState(sessionId)
+
+    if (!force && (state.isStreaming || state.hasLoadedMessages || state.messages.length > 0)) {
+      return state.messages
+    }
+
     try {
       const userStore = useUserStore()
       const userId = userStore.userInfo?.id || 1
+
+      state.isLoading = true
 
       const response = await getSessionHistory(sessionId, userId)
       const dbMessages = response.data || []
 
       // 转换后端消息格式为前端格式
-      messages.value = dbMessages.map((msg) => {
+      state.messages = dbMessages.map((msg) => {
         let content = msg.content || ''
         let toolEvents = []
 
@@ -321,9 +446,16 @@ export const useChatStore = defineStore('chat', () => {
           toolEvents: toolEvents,
         }
       })
+      state.hasLoadedMessages = true
+
+      return state.messages
     } catch (error) {
       console.error('加载会话历史失败:', error)
-      messages.value = []
+      state.messages = []
+      state.hasLoadedMessages = false
+      return []
+    } finally {
+      state.isLoading = false
     }
   }
 
@@ -355,8 +487,12 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 清空当前会话的消息
    */
-  const clearMessages = () => {
-    messages.value = []
+  const clearMessages = (conversationKey = activeConversationKey.value) => {
+    const state = ensureConversationState(conversationKey)
+    if (state) {
+      state.messages = []
+      state.hasLoadedMessages = false
+    }
   }
 
   const toggleSidebar = () => {
@@ -374,26 +510,27 @@ export const useChatStore = defineStore('chat', () => {
     await loadConversationsFromDB()
 
     // 如果当前已经是新对话状态（比如从其他页面点击“新对话”跳转过来时），则不自动加载历史会话
-    if (isNewConversation.value && currentConversationId.value === null) {
+    if (isDraftConversationKey(activeConversationKey.value)) {
       return
     }
 
     // 如果有保存的当前会话ID，尝试切换到该会话
-    const currentId = localStorage.getItem('chat_current_conversation_id')
+    const currentId = localStorage.getItem(CURRENT_CONVERSATION_STORAGE_KEY)
     if (currentId && conversations.value.find((conv) => conv.id === currentId)) {
       await switchConversation(currentId)
     } else if (conversations.value.length > 0) {
       // 否则选择第一个会话
       await switchConversation(conversations.value[0].id)
     } else {
-      // 没有会话，准备新建
-      isNewConversation.value = true
+      // 没有会话，准备新建一个前端草稿会话
+      createDraftConversation({ focus: false })
     }
   }
 
   return {
     conversations,
     currentConversationId,
+    activeConversationKey,
     messages,
     isLoading,
     isStreaming,
@@ -405,6 +542,10 @@ export const useChatStore = defineStore('chat', () => {
     currentConversation,
     createConversation,
     setCurrentSessionId,
+    setConversationLoading,
+    setConversationStreaming,
+    getConversationMessages,
+    getLastMessage,
     addNewConversationToList,
     switchConversation,
     deleteConversation,
@@ -419,5 +560,7 @@ export const useChatStore = defineStore('chat', () => {
     focusInput,
     initialize,
     loadConversationsFromDB,
+    loadConversationMessagesFromDB,
+    isDraftConversationKey,
   }
 })
