@@ -15,12 +15,12 @@ public interface PromptService {
     String getReactAgentFinalPrompt();
     
     /**
-     * 构建带 Skills 增强的 ReAct Agent 提示词
-     * 
-     * @param matchedSkills 匹配到的 Skills 列表
-     * @return 增强后的提示词
+     * 构建规划阶段使用的用户提示词。
+     * 将工具列表、结构化观察结果和技能参考放到 UserMessage，避免污染 SystemMessage。
      */
-    String buildReactAgentPromptWithSkills(List<SkillInfo> matchedSkills);
-
-    String buildReactUserPrompt(String toolList, String userMessage, String observations);
+    String buildReactUserPrompt(String toolList,
+                                String userMessage,
+                                String observations,
+                                List<SkillInfo> matchedSkills,
+                                int round);
 }

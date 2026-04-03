@@ -50,8 +50,6 @@
 ```env
 # Ollama 服务地址
 OLlama_BASE_URL=http://xxx:11434
-# 镜像tag 镜像地址：mailacs/javalabagent-backend
-IMAGE_TAG=2026012201
 
 # =================【存储配置（二选一）】=================
 # 存储类型：minio（默认）或 alioss（阿里云）

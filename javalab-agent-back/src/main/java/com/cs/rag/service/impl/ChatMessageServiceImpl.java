@@ -123,19 +123,25 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
         }
 
         List<Message> aiMessages = new ArrayList<>();
+        int sanitizedCount = 0;
         for (ChatMessage msg : messages) {
             Message aiMessage = null;
+            SanitizedContent sanitized = sanitizeForContext(msg.getContent());
+            String sanitizedContent = sanitized.content();
+            if (sanitized.modified()) {
+                sanitizedCount++;
+            }
             // 根据角色类型创建对应的Spring AI Message对象
             switch (msg.getRole()) {
                 case ChatMessage.ROLE_USER:
-                    aiMessage = new UserMessage(msg.getContent());
+                    aiMessage = new UserMessage(sanitizedContent);
                     break;
                 case ChatMessage.ROLE_ASSISTANT:
-                    aiMessage = new AssistantMessage(msg.getContent());
+                    aiMessage = new AssistantMessage(sanitizedContent);
                     break;
                 case ChatMessage.ROLE_SYSTEM:
                     // 如果系统中有存储system消息，也应该支持转换
-                    // aiMessage = new SystemMessage(msg.getContent());
+                    // aiMessage = new SystemMessage(sanitizedContent);
                     break;
                 default:
                     log.warn("未知的消息角色: {}", msg.getRole());
@@ -146,8 +152,22 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
                 aiMessages.add(aiMessage);
             }
         }
+        if (sanitizedCount > 0) {
+            log.info("上下文消息清洗完成: totalMessages={}, sanitizedMessages={}", messages.size(), sanitizedCount);
+        }
         
         return aiMessages;
+    }
+
+    private SanitizedContent sanitizeForContext(String content) {
+        if (content == null || content.isEmpty()) {
+            return new SanitizedContent(content, false);
+        }
+        String sanitized = content.replaceAll("(?s)<!-- thinking_process_start -->.*?<!-- thinking_process_end -->\\s*", "");
+        return new SanitizedContent(sanitized, !content.equals(sanitized));
+    }
+
+    private record SanitizedContent(String content, boolean modified) {
     }
     
     /**

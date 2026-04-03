@@ -55,5 +55,5 @@ public class RagConstant {
     /**
      * 最大轮次
      */
-    public static final int MAX_ROUNDS = 5;
+    public static final int MAX_ROUNDS = 10;
 }
