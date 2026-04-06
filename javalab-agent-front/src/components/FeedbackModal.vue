@@ -1,8 +1,6 @@
 <template>
-  <!-- 反馈弹窗 -->
   <div class="modal-overlay">
     <div class="modal-container">
-      <!-- 弹窗头部 -->
       <div class="modal-header">
         <h3>提交反馈</h3>
         <button class="close-btn" @click="handleClose">
@@ -23,9 +21,7 @@
         </button>
       </div>
 
-      <!-- 弹窗内容 -->
       <div class="modal-body">
-        <!-- 反馈类型选择 -->
         <div class="form-group">
           <label>反馈类型</label>
           <div class="type-selector">
@@ -40,51 +36,46 @@
           </div>
         </div>
 
-        <!-- 反馈标题（可选） -->
         <div class="form-group">
           <label>标题 <span class="optional">(可选)</span></label>
           <input
             v-model="form.title"
             type="text"
             class="form-input"
-            placeholder="简要说明反馈主题"
+            placeholder="简要说明问题"
             maxlength="100"
           />
         </div>
 
-        <!-- 联系邮箱（可选） -->
         <div class="form-group">
           <label>联系邮箱 <span class="optional">(可选)</span></label>
           <input
             v-model="form.contactEmail"
             type="email"
             class="form-input"
-            placeholder="留下您的邮箱，方便我们回复"
+            placeholder="留下邮箱，方便我们回复"
             maxlength="100"
           />
         </div>
 
-        <!-- 反馈内容 -->
         <div class="form-group">
           <label>反馈内容 <span class="required">*</span></label>
           <textarea
             v-model="form.content"
             class="form-textarea"
-            placeholder="请描述您的问题或改进建议..."
+            placeholder="请描述你不满意的地方或希望改进的内容..."
             rows="5"
             maxlength="2000"
           ></textarea>
           <div class="char-count">{{ form.content.length }}/2000</div>
         </div>
 
-        <!-- 关联消息提示（如果有） -->
         <div v-if="messageContent" class="related-message">
-          <label>关联的AI回复</label>
+          <label>关联的 AI 回复</label>
           <div class="message-preview">{{ messageContent }}</div>
         </div>
       </div>
 
-      <!-- 弹窗底部 -->
       <div class="modal-footer">
         <button class="btn btn-cancel" @click="handleClose">取消</button>
         <button class="btn btn-submit" :disabled="!canSubmit || submitting" @click="handleSubmit">
@@ -96,56 +87,48 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { feedbackApi } from '../api/feedback'
 
-// Props
 const props = defineProps({
-  // 关联的消息内容（用于对话反馈场景）
   messageContent: {
     type: String,
     default: '',
   },
-  // 关联的会话ID
   sessionId: {
     type: String,
     default: null,
   },
+  initialType: {
+    type: Number,
+    default: 2,
+  },
 })
 
-// Emits
 const emit = defineEmits(['close', 'success'])
 
-// 反馈类型选项
 const feedbackTypes = [
   { value: 1, label: 'BUG' },
   { value: 2, label: '建议' },
   { value: 3, label: '投诉' },
-  { value: 0, label: '其它' },
+  { value: 0, label: '其他' },
 ]
 
-// 表单数据
 const form = ref({
-  type: 2, // 默认选择"建议"
+  type: props.initialType,
   title: '',
   content: '',
   contactEmail: '',
 })
 
-// 提交状态
 const submitting = ref(false)
 
-// 是否可以提交
-const canSubmit = computed(() => {
-  return form.value.content.trim().length > 0
-})
+const canSubmit = computed(() => form.value.content.trim().length > 0)
 
-// 关闭弹窗
 const handleClose = () => {
   emit('close')
 }
 
-// 提交反馈
 const handleSubmit = async () => {
   if (!canSubmit.value || submitting.value) return
 
@@ -156,17 +139,16 @@ const handleSubmit = async () => {
       title: form.value.title.trim() || null,
       content: form.value.content.trim(),
       contactEmail: form.value.contactEmail.trim() || null,
-      priority: 1, // 默认中优先级
+      priority: 1,
+      sessionId: props.sessionId || null,
     }
 
     const response = await feedbackApi.submit(data)
 
     if (response.data && response.data.code === 0) {
-      // 提交成功
       emit('success')
       emit('close')
-      // 可以在这里添加成功提示
-      alert('反馈提交成功，感谢您的反馈！')
+      alert('反馈提交成功，感谢你的反馈。')
     } else {
       alert(response.data?.message || '提交失败，请稍后重试')
     }
@@ -182,26 +164,23 @@ const handleSubmit = async () => {
 <style lang="scss" scoped>
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
 .modal-container {
-  background: var(--bg-primary);
-  border-radius: 12px;
   width: 90%;
   max-width: 500px;
   max-height: 90vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: var(--bg-primary);
+  border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
@@ -214,34 +193,34 @@ const handleSubmit = async () => {
 
   h3 {
     margin: 0;
-    font-size: 14px; // 同步侧边栏文字大小
-    font-weight: 500; // 同步侧边栏字体权重
+    font-size: 14px;
+    font-weight: 500;
     color: var(--text-primary);
   }
+}
 
-  .close-btn {
-    background: transparent;
-    border: none;
-    padding: 4px;
-    cursor: pointer;
-    color: var(--text-secondary);
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
+.close-btn {
+  padding: 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
 
-    &:hover {
-      background-color: var(--bg-hover);
-      color: var(--text-primary);
-    }
+  &:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
   }
 }
 
 .modal-body {
-  padding: 20px;
-  overflow-y: auto;
   flex: 1;
+  overflow-y: auto;
+  padding: 20px;
 }
 
 .form-group {
@@ -250,128 +229,111 @@ const handleSubmit = async () => {
   label {
     display: block;
     margin-bottom: 8px;
-    font-size: 13px; // 稍微调小一点，使其更显精致
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
-
-    .required {
-      color: #dc3545;
-    }
-
-    .optional {
-      color: var(--text-secondary);
-      font-weight: 400;
-    }
   }
+}
+
+.required {
+  color: #dc3545;
+}
+
+.optional {
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 .type-selector {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
 
-  .type-btn {
-    padding: 6px 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px; // 从圆角改为更统一的微圆角
-    background: transparent;
+.type-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: #90138b;
+    color: #90138b;
+    background-color: var(--bg-hover);
+  }
+
+  &.active {
+    background-color: #90138b;
+    border-color: #90138b;
+    color: #fff;
+  }
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+  &:focus {
+    outline: none;
+    border-color: #90138b;
+    box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
+  }
+
+  &::placeholder {
     color: var(--text-secondary);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-
-    &:hover {
-      border-color: #90138b;
-      color: #90138b;
-      background-color: var(--bg-hover);
-    }
-
-    &.active {
-      background-color: #90138b;
-      border-color: #90138b;
-      color: #fff;
-    }
+    opacity: 0.6;
   }
 }
 
 .form-input {
-  width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 14px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  transition: border-color 0.2s ease;
-  box-sizing: border-box;
-
-  &:focus {
-    outline: none;
-    border-color: #90138b;
-    box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
-  }
-
-  &::placeholder {
-    color: var(--text-secondary);
-    opacity: 0.6;
-  }
 }
 
 .form-textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 14px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  resize: vertical;
   min-height: 100px;
+  padding: 10px 12px;
+  resize: vertical;
   font-family: inherit;
-  transition: border-color 0.2s ease;
-  box-sizing: border-box;
-
-  &:focus {
-    outline: none;
-    border-color: #90138b;
-    box-shadow: 0 0 0 2px rgba(144, 19, 139, 0.1);
-  }
-
-  &::placeholder {
-    color: var(--text-secondary);
-    opacity: 0.6;
-  }
 }
 
 .char-count {
+  margin-top: 4px;
   text-align: right;
   font-size: 12px;
   color: var(--text-secondary);
-  margin-top: 4px;
 }
 
 .related-message {
-  background-color: var(--bg-secondary);
-  border-radius: 6px;
   padding: 12px;
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
 
   label {
+    margin-bottom: 6px;
     font-size: 12px;
     color: var(--text-secondary);
-    margin-bottom: 6px;
   }
+}
 
-  .message-preview {
-    font-size: 13px;
-    line-height: 1.6;
-    color: var(--text-primary);
-    max-height: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-  }
+.message-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
 }
 
 .modal-footer {
@@ -384,37 +346,37 @@ const handleSubmit = async () => {
 
 .btn {
   padding: 8px 16px;
+  border: none;
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  border: none;
+}
 
-  &.btn-cancel {
-    background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
+.btn-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 
-    &:hover {
-      background-color: var(--bg-hover);
-      color: var(--text-primary);
-    }
+  &:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+}
+
+.btn-submit {
+  background-color: #90138b;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background-color: #a01ba0;
+    box-shadow: 0 2px 8px rgba(144, 19, 139, 0.2);
   }
 
-  &.btn-submit {
-    background-color: #90138b;
-    color: #fff;
-
-    &:hover:not(:disabled) {
-      background-color: #a01ba0;
-      box-shadow: 0 2px 8px rgba(144, 19, 139, 0.2);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 </style>

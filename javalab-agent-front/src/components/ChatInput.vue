@@ -305,6 +305,7 @@ const handleStop = async () => {
   if (chatStore.isStreaming) {
     chatStore.isStreaming = false
     chatStore.isLoading = false
+    chatStore.markLastAssistantMessageComplete()
     await chatStore.loadConversationsFromDB()
   }
 }

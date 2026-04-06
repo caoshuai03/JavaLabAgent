@@ -222,6 +222,8 @@ export const useChatStore = defineStore('chat', () => {
       content: content,
       timestamp: new Date().toISOString(),
       toolEvents: [],
+      isComplete: sender !== 'assistant',
+      feedbackState: null,
     }
 
     messages.value.push(message)
@@ -256,6 +258,22 @@ export const useChatStore = defineStore('chat', () => {
       if (lastMessage.sender === 'assistant') {
         lastMessage.content = content
       }
+    }
+  }
+
+  const markLastAssistantMessageComplete = () => {
+    if (messages.value.length > 0) {
+      const lastMessage = messages.value[messages.value.length - 1]
+      if (lastMessage.sender === 'assistant') {
+        lastMessage.isComplete = true
+      }
+    }
+  }
+
+  const setMessageFeedbackState = (messageId, feedbackState) => {
+    const targetMessage = messages.value.find((message) => message.id === messageId)
+    if (targetMessage) {
+      targetMessage.feedbackState = feedbackState
     }
   }
 
@@ -319,6 +337,8 @@ export const useChatStore = defineStore('chat', () => {
           content: content,
           timestamp: msg.createdAt || new Date().toISOString(),
           toolEvents: toolEvents,
+          isComplete: true,
+          feedbackState: null,
         }
       })
     } catch (error) {
@@ -413,6 +433,8 @@ export const useChatStore = defineStore('chat', () => {
     updateConversationTitle,
     addMessage,
     updateLastMessage,
+    markLastAssistantMessageComplete,
+    setMessageFeedbackState,
     addToolEventToLastMessage,
     clearMessages,
     toggleSidebar,
