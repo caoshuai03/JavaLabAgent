@@ -90,6 +90,11 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose up -d --build
 ```
 
+#### 更新容器
+```bash
+docker compose up -d --build --no-deps frontend
+```
+
 访问地址：
 
 - **前端地址**: <http://localhost>

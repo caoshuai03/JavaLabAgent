@@ -333,6 +333,8 @@ export const useChatStore = defineStore('chat', () => {
       content: content,
       timestamp: new Date().toISOString(),
       toolEvents: [],
+      isComplete: sender !== 'assistant',
+      feedbackState: null,
     }
 
     state.messages.push(message)
@@ -374,6 +376,27 @@ export const useChatStore = defineStore('chat', () => {
     const lastMessage = getLastMessage(conversationKey)
     if (lastMessage && lastMessage.sender === 'assistant') {
       lastMessage.content = content
+    }
+  }
+
+  const markLastAssistantMessageComplete = (conversationKey = activeConversationKey.value) => {
+    const lastMessage = getLastMessage(conversationKey)
+    if (lastMessage && lastMessage.sender === 'assistant') {
+      lastMessage.isComplete = true
+    }
+  }
+
+  const setMessageFeedbackState = (
+    messageId,
+    feedbackState,
+    conversationKey = activeConversationKey.value,
+  ) => {
+    const state = getConversationState(conversationKey)
+    if (!state) return
+
+    const targetMessage = state.messages.find((message) => message.id === messageId)
+    if (targetMessage) {
+      targetMessage.feedbackState = feedbackState
     }
   }
 
@@ -444,6 +467,8 @@ export const useChatStore = defineStore('chat', () => {
           content: content,
           timestamp: msg.createdAt || new Date().toISOString(),
           toolEvents: toolEvents,
+          isComplete: true,
+          feedbackState: null,
         }
       })
       state.hasLoadedMessages = true
@@ -554,6 +579,8 @@ export const useChatStore = defineStore('chat', () => {
     updateConversationTitle,
     addMessage,
     updateLastMessage,
+    markLastAssistantMessageComplete,
+    setMessageFeedbackState,
     addToolEventToLastMessage,
     clearMessages,
     toggleSidebar,

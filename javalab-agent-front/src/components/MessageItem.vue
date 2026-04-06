@@ -2,12 +2,10 @@
   <div :class="['message-item', `message-${message.sender}`]">
     <div class="message-container">
       <div class="message-content">
-        <!-- 思考过程与工具调用面板 -->
         <div v-if="message.sender === 'assistant' && toolCalls.length > 0" class="tool-calls-panel">
           <div class="tool-calls-list">
             <div v-for="(item, idx) in toolCalls" :key="`tool-${idx}`" class="tool-call-item">
-              <!-- 左侧连接线 -->
-              <div class="tool-call-line" v-if="idx !== toolCalls.length - 1"></div>
+              <div v-if="idx !== toolCalls.length - 1" class="tool-call-line"></div>
 
               <div class="tool-call-content">
                 <div class="tool-icon-wrapper">
@@ -23,48 +21,95 @@
                   ></span>
                 </div>
                 <div class="tool-text">
-                  <!-- 根据工具类型显示不同的文字格式 -->
                   <span class="tool-name">
                     <template v-if="item.type === 'skill'">
                       调用 Skill：{{ item.call.payload.skillName }}
                     </template>
-                    <template v-else-if="item.type === 'tool' && item.call.payload.toolName && item.call.payload.toolName.includes('mcp:')">
+                    <template
+                      v-else-if="
+                        item.type === 'tool' &&
+                        item.call.payload.toolName &&
+                        item.call.payload.toolName.includes('mcp:')
+                      "
+                    >
                       调用 MCP：{{ getToolDisplayName(item.call.payload.toolName) }}
                     </template>
                     <template v-else>
                       调用 Tool：{{ getToolDisplayName(item.call.payload.toolName) }}
                     </template>
                   </span>
-                  <span class="tool-divider" v-if="getToolSummary(item)">|</span>
+                  <span v-if="getToolSummary(item)" class="tool-divider">|</span>
                   <span
-                    class="tool-summary"
                     v-if="getToolSummary(item)"
+                    class="tool-summary"
                     v-tooltip="getToolSummary(item)"
-                    >{{ truncateText(getToolSummary(item)) }}</span
                   >
+                    {{ truncateText(getToolSummary(item)) }}
+                  </span>
                 </div>
-                <!-- 移除右侧的状态图标 -->
               </div>
             </div>
           </div>
         </div>
+
         <div
+          ref="messageTextRef"
           class="message-text"
           v-html="formatContent(message.content)"
-          ref="messageTextRef"
           @click="handleCodeBlockClick"
         ></div>
 
-        <!-- 消息底部区域：操作按钮 + 时间 -->
         <div class="message-footer">
-          <!-- 助手消息显示复制按钮和反馈按钮 -->
-          <div v-if="message.sender === 'assistant'" class="message-actions">
+          <div v-if="showMessageActions" class="message-actions">
+            <button
+              @click="toggleFeedback('up')"
+              :class="['action-button', { active: feedbackState === 'up' }]"
+              v-tooltip="feedbackState === 'up' ? '取消点赞' : '点赞'"
+            >
+              <svg
+                class="thumb-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M7.75 10.25h2.1v8.5h-2.1a1.15 1.15 0 0 1-1.15-1.15V11.4c0-.64.51-1.15 1.15-1.15Z"></path>
+                <path d="M9.85 10.6 12.1 4.75c.22-.58.88-.88 1.45-.63.89.38 1.4 1.38 1.22 2.33l-.55 2.8h3.54c1.16 0 1.97 1.11 1.63 2.21l-1.41 4.55a1.8 1.8 0 0 1-1.71 1.24H9.85"></path>
+              </svg>
+            </button>
+
+            <button
+              @click="toggleFeedback('down')"
+              :class="['action-button', { active: feedbackState === 'down' }]"
+              v-tooltip="feedbackState === 'down' ? '取消点踩' : '点踩并反馈'"
+            >
+              <svg
+                class="thumb-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M16.25 13.75h-2.1v-8.5h2.1c.64 0 1.15.51 1.15 1.15v6.2c0 .64-.51 1.15-1.15 1.15Z"></path>
+                <path d="M14.15 13.4 11.9 19.25c-.22.58-.88.88-1.45.63-.89-.38-1.4-1.38-1.22-2.33l.55-2.8H6.24c-1.16 0-1.97-1.11-1.63-2.21l1.41-4.55a1.8 1.8 0 0 1 1.71-1.24h6.42"></path>
+              </svg>
+            </button>
+
             <button
               @click="handleCopy"
               :class="['action-button', { copied: copied }]"
               v-tooltip="copied ? '已复制' : '复制'"
             >
-              <!-- 复制成功显示勾选图标，否则显示复制图标 -->
               <svg
                 v-if="copied"
                 xmlns="http://www.w3.org/2000/svg"
@@ -95,30 +140,15 @@
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
-            <!-- 反馈按钮 -->
-            <button @click="openFeedbackModal" class="action-button" v-tooltip="'反馈'">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-              </svg>
-            </button>
           </div>
 
-          <!-- 反馈弹窗 -->
           <FeedbackModal
             v-if="showFeedbackModal"
             :message-content="message.content"
             :session-id="chatStore.currentConversationId"
+            :initial-type="3"
             @close="closeFeedbackModal"
+            @success="handleFeedbackSuccess"
           />
         </div>
       </div>
@@ -127,9 +157,9 @@
 </template>
 
 <script setup>
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { renderMarkdown } from '../utils/markdown'
-import { ref, onMounted, nextTick, watch, computed } from 'vue'
 import FeedbackModal from './FeedbackModal.vue'
 
 const props = defineProps({
@@ -141,20 +171,15 @@ const props = defineProps({
 
 const chatStore = useChatStore()
 const messageTextRef = ref(null)
-const copied = ref(false) // 复制成功状态
-const showFeedbackModal = ref(false) // 反馈弹窗状态
+const copied = ref(false)
+const showFeedbackModal = ref(false)
 
-// 打开反馈弹窗
-const openFeedbackModal = () => {
-  showFeedbackModal.value = true
-}
+const showMessageActions = computed(() => {
+  return props.message.sender === 'assistant' && props.message.isComplete
+})
 
-// 关闭反馈弹窗
-const closeFeedbackModal = () => {
-  showFeedbackModal.value = false
-}
+const feedbackState = computed(() => props.message.feedbackState || null)
 
-/** 截断文本为原来的一半长度 */
 const truncateText = (text, maxLen = 20) => {
   if (!text) return ''
   if (text.length <= maxLen) return text
@@ -164,39 +189,22 @@ const truncateText = (text, maxLen = 20) => {
 const formatContent = (content) => {
   if (!content) return ''
 
-  // 只有助手消息使用 Markdown 渲染，用户消息保持原样
   if (props.message.sender === 'assistant') {
     return renderMarkdown(content)
   }
 
-  // 用户消息：简单的文本格式化，将换行转换为 <br>
   return content.replace(/\n/g, '<br>').replace(/ {2}/g, '&nbsp;&nbsp;')
-}
-
-const prettyJson = (obj) => {
-  try {
-    if (typeof obj === 'string') {
-      // 尝试解析字符串
-      const parsed = JSON.parse(obj)
-      return JSON.stringify(parsed, null, 2)
-    }
-    return JSON.stringify(obj, null, 2)
-  } catch (e) {
-    return String(obj)
-  }
 }
 
 const toolCalls = computed(() => {
   if (!props.message.toolEvents || !props.message.toolEvents.length) return []
 
   const list = []
-  // 使用 map 暂存正在进行的调用，以 round 为 key
   const activeCalls = new Map()
 
-  props.message.toolEvents.forEach((e) => {
-    // 处理 Skill 激活事件
-    if (e.eventType === 'skill_loaded') {
-      const skills = e.payload?.skills || []
+  props.message.toolEvents.forEach((event) => {
+    if (event.eventType === 'skill_loaded') {
+      const skills = event.payload?.skills || []
       skills.forEach((skill) => {
         list.push({
           type: 'skill',
@@ -207,26 +215,32 @@ const toolCalls = computed(() => {
               description: skill.description,
               triggerKeywords: skill.triggerKeywords,
             },
-            ts: e.ts,
+            ts: event.ts,
           },
-          result: { success: true }, // Skills 加载完成即为成功
+          result: { success: true },
         })
       })
-    } else if (e.eventType === 'tool_call') {
-      const round = e.payload?.round
+      return
+    }
+
+    if (event.eventType === 'tool_call') {
+      const round = event.payload?.round
       const callItem = {
         type: 'tool',
-        call: e,
+        call: event,
         result: null,
-        round: round,
+        round,
       }
       activeCalls.set(round, callItem)
       list.push(callItem)
-    } else if (e.eventType === 'tool_result') {
-      const round = e.payload?.round
+      return
+    }
+
+    if (event.eventType === 'tool_result') {
+      const round = event.payload?.round
       const callItem = activeCalls.get(round)
       if (callItem) {
-        callItem.result = e
+        callItem.result = event
         activeCalls.delete(round)
       }
     }
@@ -236,7 +250,6 @@ const toolCalls = computed(() => {
 })
 
 const getToolIconSvg = (toolName) => {
-  // Skills 使用书本图标
   if (toolName && toolName.startsWith('skill:')) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`
   }
@@ -253,38 +266,33 @@ const getToolIconSvg = (toolName) => {
 }
 
 const getToolDisplayName = (toolName) => {
-  // Skills 特殊处理
   if (toolName && toolName.startsWith('skill:')) {
-    return toolName.substring(6) // 移除 'skill:' 前缀
+    return toolName.substring(6)
   }
-  // 内置工具名称映射
+
   const builtinNames = {
     knowledge_search: '知识检索',
     web_search: '搜索网页',
-    read_file: '阅读',
+    read_file: '读取',
     write_file: '写入',
     run_command: '运行命令',
     session_recall: '会话回顾',
     current_time: '获取时间',
     calculator: '计算器',
   }
-  if (builtinNames[toolName]) return builtinNames[toolName]
-  // MCP外部工具：直接显示工具名
-  return toolName || '调用工具'
+
+  return builtinNames[toolName] || toolName || '调用工具'
 }
 
 const getToolSummary = (item) => {
   try {
-    // Skills 显示描述
     if (item.type === 'skill') {
       return item.call.payload.description || ''
     }
-    // 优先使用后端返回的工具描述
     if (item.call.payload.description) {
       return item.call.payload.description
     }
-    // 内置工具描述兜底映射
-    const toolName = item.call.payload.toolName
+
     const builtinDescriptions = {
       knowledge_search: '查询知识库',
       web_search: '搜索网页',
@@ -295,33 +303,58 @@ const getToolSummary = (item) => {
       current_time: '获取当前时间',
       calculator: '计算数学表达式',
     }
-    return builtinDescriptions[toolName] || ''
-  } catch (e) {
-    // ignore
+
+    return builtinDescriptions[item.call.payload.toolName] || ''
+  } catch {
+    return ''
   }
-  return ''
 }
 
-// 处理复制按钮点击 - 复制整条消息内容
+const openFeedbackModal = () => {
+  showFeedbackModal.value = true
+}
+
+const closeFeedbackModal = () => {
+  showFeedbackModal.value = false
+}
+
+const handleFeedbackSuccess = () => {
+  chatStore.setMessageFeedbackState(props.message.id, 'down')
+}
+
+const toggleFeedback = (type) => {
+  const currentState = feedbackState.value
+
+  if (currentState === type) {
+    chatStore.setMessageFeedbackState(props.message.id, null)
+    closeFeedbackModal()
+    return
+  }
+
+  chatStore.setMessageFeedbackState(props.message.id, type)
+
+  if (type === 'down') {
+    openFeedbackModal()
+  } else {
+    closeFeedbackModal()
+  }
+}
+
 const handleCopy = async () => {
   try {
     await navigator.clipboard.writeText(props.message.content)
-    // 显示复制成功状态
     copied.value = true
-    // 2秒后恢复原状态
     setTimeout(() => {
       copied.value = false
     }, 2000)
-  } catch (err) {
-    console.error('复制失败:', err)
-    // 降级方案：使用旧的 execCommand
+  } catch (error) {
+    console.error('复制失败:', error)
     const textArea = document.createElement('textarea')
     textArea.value = props.message.content
     document.body.appendChild(textArea)
     textArea.select()
     document.execCommand('copy')
     document.body.removeChild(textArea)
-    // 显示复制成功状态
     copied.value = true
     setTimeout(() => {
       copied.value = false
@@ -329,48 +362,41 @@ const handleCopy = async () => {
   }
 }
 
-// 处理代码块点击事件（复制代码）
 const handleCodeBlockClick = async (event) => {
   const copyButton = event.target.closest('.code-block-copy')
-  if (copyButton) {
-    const codeBlock = copyButton.closest('.code-block-wrapper')
-    if (codeBlock) {
-      const codeElement = codeBlock.querySelector('code')
-      if (codeElement) {
-        const codeText = codeElement.textContent || codeElement.innerText
-        try {
-          await navigator.clipboard.writeText(codeText)
-          // 显示复制成功提示
-          copyButton.classList.add('copied')
-          copyButton.setAttribute('data-tooltip', '已复制')
-          
-          // Re-render tooltip if it's currently showing
-          if (copyButton._tooltipEl) {
-            copyButton._tooltipEl.textContent = '已复制'
-          }
-          
-          setTimeout(() => {
-            copyButton.classList.remove('copied')
-            copyButton.setAttribute('data-tooltip', '复制代码')
-            if (copyButton._tooltipEl) {
-              copyButton._tooltipEl.textContent = '复制代码'
-            }
-          }, 2000)
-        } catch (err) {
-          console.error('复制代码失败:', err)
-        }
-      }
+  if (!copyButton) return
+
+  const codeBlock = copyButton.closest('.code-block-wrapper')
+  const codeElement = codeBlock?.querySelector('code')
+  if (!codeElement) return
+
+  const codeText = codeElement.textContent || codeElement.innerText
+  try {
+    await navigator.clipboard.writeText(codeText)
+    copyButton.classList.add('copied')
+    copyButton.setAttribute('data-tooltip', '已复制')
+
+    if (copyButton._tooltipEl) {
+      copyButton._tooltipEl.textContent = '已复制'
     }
+
+    setTimeout(() => {
+      copyButton.classList.remove('copied')
+      copyButton.setAttribute('data-tooltip', '复制代码')
+      if (copyButton._tooltipEl) {
+        copyButton._tooltipEl.textContent = '复制代码'
+      }
+    }, 2000)
+  } catch (error) {
+    console.error('复制代码失败:', error)
   }
 }
 
-// 为代码块添加复制按钮
 const addCopyButtons = () => {
   if (!messageTextRef.value) return
 
   const codeBlocks = messageTextRef.value.querySelectorAll('.code-block-wrapper')
   codeBlocks.forEach((block) => {
-    // 如果已经有复制按钮，跳过
     if (block.querySelector('.code-block-copy')) return
 
     const copyButton = document.createElement('button')
@@ -381,16 +407,13 @@ const addCopyButtons = () => {
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
       </svg>
     `
-    // Add tooltip via data attribute instead of v-tooltip directive since it's dynamically created DOM
     copyButton.setAttribute('data-tooltip', '复制代码')
 
-    // Add event listeners for custom tooltip behavior
     copyButton.addEventListener('mouseenter', () => {
       const tooltipText = copyButton.getAttribute('data-tooltip')
       if (!tooltipText) return
 
-      // We simulate v-tooltip logic for dynamically created elements
-      let tooltipTimer = setTimeout(() => {
+      const tooltipTimer = setTimeout(() => {
         const tooltipEl = document.createElement('div')
         tooltipEl.className = 'global-tooltip'
         tooltipEl.textContent = tooltipText
@@ -405,8 +428,7 @@ const addCopyButtons = () => {
         x = Math.max(padding + estimatedHalfWidth, x)
         x = Math.min(window.innerWidth - padding - estimatedHalfWidth, x)
 
-        let y = rect.top - 8
-        tooltipEl.style.top = `${y}px`
+        tooltipEl.style.top = `${rect.top - 8}px`
         tooltipEl.style.left = `${x}px`
 
         requestAnimationFrame(() => {
@@ -437,14 +459,12 @@ const addCopyButtons = () => {
   })
 }
 
-// 监听消息内容变化，添加复制按钮
 onMounted(() => {
   nextTick(() => {
     addCopyButtons()
   })
 })
 
-// 监听消息内容变化（流式更新时）
 watch(
   () => props.message.content,
   () => {
@@ -471,29 +491,16 @@ watch(
       display: flex;
       gap: 12px;
       justify-content: flex-end;
-
-      .avatar {
-        order: 2;
-      }
-
-      .message-content {
-        order: 1;
-        align-items: flex-end;
-
-        .message-text {
-          background-color: var(--user-message-bg);
-          color: var(--user-message-text);
-          white-space: pre-wrap;
-        }
-      }
     }
 
-    @media (max-width: 768px) {
-      padding: 16px 0;
+    .message-content {
+      align-items: flex-end;
+    }
 
-      .message-container {
-        padding: 0 16px;
-      }
+    .message-text {
+      background-color: var(--user-message-bg);
+      color: var(--user-message-text);
+      white-space: pre-wrap;
     }
   }
 
@@ -507,23 +514,23 @@ watch(
       padding: 0 24px;
       display: flex;
       gap: 12px;
-
-      .message-content {
-        align-items: flex-start;
-
-        .message-text {
-          background-color: var(--assistant-message-bg);
-          color: var(--assistant-message-text);
-        }
-      }
     }
 
-    @media (max-width: 768px) {
-      padding: 16px 0;
+    .message-content {
+      align-items: flex-start;
+    }
 
-      .message-container {
-        padding: 0 16px;
-      }
+    .message-text {
+      background-color: var(--assistant-message-bg);
+      color: var(--assistant-message-text);
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 16px 0;
+
+    .message-container {
+      padding: 0 16px !important;
     }
   }
 }
@@ -534,15 +541,13 @@ watch(
 
 .message-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0px; // 减小间距，让复制按钮更靠近文本
-  min-width: 0;
 }
 
 .message-text {
-  padding: 10px 16px;
-  padding-bottom: 8px; // 减小底部内边距，让复制按钮更靠近文本
+  padding: 10px 16px 8px;
   border-radius: 12px;
   line-height: 1.6;
   font-size: 15px;
@@ -550,18 +555,15 @@ watch(
   white-space: normal;
 
   @media (max-width: 768px) {
-    padding: 8px 12px;
-    padding-bottom: 6px;
+    padding: 8px 12px 6px;
     font-size: 14px;
     border-radius: 10px;
   }
 
-  // 移除最后一个子元素的底部 margin
   :deep(> *:last-child) {
     margin-bottom: 0 !important;
   }
 
-  // Markdown 样式
   :deep(p) {
     margin: 0.25em 0;
 
@@ -587,7 +589,6 @@ watch(
   :deep(blockquote) {
     margin: 1em 0;
     padding: 0.5em 1em;
-    padding-left: 1em;
     border-left: 4px solid #90138b;
     background-color: rgba(144, 19, 139, 0.05);
     border-radius: 4px;
@@ -595,7 +596,6 @@ watch(
     font-style: italic;
   }
 
-  // 行内代码样式 - ChatGPT 风格
   :deep(code:not(pre code)) {
     padding: 2px 6px;
     border-radius: 4px;
@@ -606,7 +606,6 @@ watch(
     color: #d73a49;
   }
 
-  // 代码块样式 - ChatGPT 风格（浅色主题）
   :deep(.code-block-wrapper) {
     margin: 1em 0;
     border-radius: 8px;
@@ -644,7 +643,7 @@ watch(
         justify-content: center;
         transition: all 0.2s;
         border-radius: 6px;
-        
+
         svg {
           width: 16px;
           height: 16px;
@@ -682,7 +681,6 @@ watch(
     }
   }
 
-  // 兼容旧的 pre 标签（没有包装器的情况）
   :deep(pre:not(.code-block-wrapper pre)) {
     margin: 1em 0;
     padding: 16px;
@@ -758,25 +756,6 @@ watch(
     }
   }
 
-  :deep(h1) {
-    font-size: 1.5em;
-  }
-  :deep(h2) {
-    font-size: 1.3em;
-  }
-  :deep(h3) {
-    font-size: 1.1em;
-  }
-  :deep(h4) {
-    font-size: 1em;
-  }
-  :deep(h5) {
-    font-size: 0.9em;
-  }
-  :deep(h6) {
-    font-size: 0.8em;
-  }
-
   :deep(hr) {
     margin: 1em 0;
     border: none;
@@ -799,7 +778,7 @@ watch(
 }
 
 .tool-calls-list {
-  padding: 12px 16px 12px 11px; // 左侧内边距改为 11px，使 24px 宽的图标中心对齐 16px 的文本
+  padding: 12px 16px 12px 11px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -811,7 +790,7 @@ watch(
 
 .tool-call-line {
   position: absolute;
-  left: 11.5px; // 修改连接线位置，使其在 24px 宽的图标中心
+  left: 11.5px;
   top: 24px;
   bottom: -20px;
   width: 1px;
@@ -835,7 +814,7 @@ watch(
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-right: 8px; // 减少与文字的距离
+  margin-right: 8px;
 }
 
 .tool-icon {
@@ -859,8 +838,7 @@ watch(
   color: var(--text-primary, #374151);
   font-weight: 500;
   flex-shrink: 0;
-  font-family: inherit; // 继承字体，保持中英文和谐
-  line-height: 1.4; // 调整行高
+  line-height: 1.4;
 }
 
 .tool-divider {
@@ -883,52 +861,64 @@ watch(
   }
 }
 
-// 工具描述 Tooltip（聊天消息内）
-// 移除原有的 tool-desc-tooltip 样式
-
-// 消息底部区域：复制按钮 + 时间
 .message-footer {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
-  margin-top: 12px; // 增加与文字的间距
-  padding-left: 11px; // 左侧内边距改为 11px，使 28px 宽的按钮图标中心对齐 16px 的文本
+  margin-top: 12px;
+  padding-left: 16px;
+
+  @media (max-width: 768px) {
+    padding-left: 12px;
+  }
 }
 
-// 操作按钮区域 - ChatGPT 风格
 .message-actions {
   display: flex;
+  align-items: center;
+  justify-content: flex-start;
   gap: 4px;
+}
 
-  // ChatGPT 风格的操作按钮
-  .action-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s ease;
+.action-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.18s ease;
 
-    svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    &:hover {
-      background-color: var(--bg-hover);
-      color: var(--text-primary);
-    }
-
-    // 复制成功时的状态
-    &.copied {
-      color: #90138b;
-    }
+  svg {
+    width: 18px;
+    height: 18px;
   }
+
+  &:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-hover);
+  }
+
+  &.copied,
+  &.active {
+    color: #90138b;
+    background: rgba(144, 19, 139, 0.08);
+  }
+}
+
+.thumb-icon {
+  width: 21px !important;
+  height: 21px !important;
+  transform: scale(1.08);
+  transform-origin: center;
 }
 </style>

@@ -190,6 +190,7 @@ const finalizeStreamTask = async (conversationKey, { abort = false, refreshConve
     streamTask.abortController.abort()
   }
 
+  chatStore.markLastAssistantMessageComplete(conversationKey)
   chatStore.setConversationStreaming(conversationKey, false)
   chatStore.setConversationLoading(conversationKey, false)
   streamTasks.delete(conversationKey)
