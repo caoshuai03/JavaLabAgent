@@ -45,6 +45,12 @@ public class McpClientManager {
     private final McpConfigSupport mcpConfigSupport;
     private final McpProtocolSupport mcpProtocolSupport;
 
+    /** 懒初始化锁，避免并发场景下同一服务重复初始化 */
+    private final Object initLock = new Object();
+
+    /** 正在初始化中的服务集合，避免懒初始化过程中递归重入 */
+    private final Set<String> initializingServers = ConcurrentHashMap.newKeySet();
+
     /** MCP配置文件路径 (classpath下) */
     private static final String CONFIG_FILE = "mcp-tools.json";
 
@@ -89,24 +95,16 @@ public class McpClientManager {
     // ==================== 生命周期管理 ====================
 
     /**
-     * 应用启动时加载MCP配置并初始化所有已启用的服务器连接
+     * 应用启动时仅加载MCP配置
+     * 懒初始化模式下，不在启动阶段连接任何MCP服务
      */
     @PostConstruct
     public void init() {
         try {
             loadConfig();
             if (currentConfig != null && currentConfig.getMcpServers() != null) {
-                // 逐个初始化已启用的MCP服务器
-                currentConfig.getMcpServers().forEach((name, config) -> {
-                    if (config.isEnabled()) {
-                        try {
-                            initServer(name, config);
-                        } catch (Exception e) {
-                            log.error("初始化MCP服务器失败: name={}, error={}", name, e.getMessage());
-                        }
-                    }
-                });
-                log.info("MCP客户端管理器初始化完成, 已加载{}个服务器配置", currentConfig.getMcpServers().size());
+                log.info("MCP客户端管理器初始化完成（懒初始化模式）, 已加载{}个服务器配置",
+                        currentConfig.getMcpServers().size());
             } else {
                 log.info("MCP客户端管理器: 无MCP服务器配置或配置为空");
             }
@@ -129,12 +127,10 @@ public class McpClientManager {
                 // 再关闭读取器
                 BufferedReader reader = stdioReaders.remove(name);
                 if (reader != null) reader.close();
-                // 最后销毁进程
                 process.destroyForcibly();
                 process.waitFor(5, TimeUnit.SECONDS);
-                log.info("已关闭MCP服务器进程: {}", name);
             } catch (Exception e) {
-                log.warn("关闭MCP服务器进程异常: name={}, error={}", name, e.getMessage());
+                log.warn("关闭MCP服务器进程异常: {}", e.getMessage());
             }
         });
         stdioProcesses.clear();
@@ -253,6 +249,9 @@ public class McpClientManager {
      * 初始化单个MCP服务器连接
      */
     private void initServer(String name, McpServerConfig config) {
+        if (config == null || !config.isEnabled()) {
+            return;
+        }
         // 这里只做协议分发，具体实现放到各自方法。
         if ("stdio".equalsIgnoreCase(config.getType())) {
             initStdioServer(name, config);
@@ -260,11 +259,93 @@ public class McpClientManager {
             // SSE模式：先握手获取JSON-RPC POST端点，再获取工具列表
             initSseServer(name, config);
         } else if ("http".equalsIgnoreCase(config.getType())) {
-            // HTTP模式不需要预初始化，按需请求即可
+            // HTTP模式不需要建立长连接，首次使用时仅刷新工具缓存
             log.info("MCP服务器[{}]使用HTTP模式, url={}", name, config.getUrl());
-            // 立即尝试获取工具列表
             refreshToolsForServer(name);
         }
+    }
+
+    /**
+     * 确保指定服务器已完成按需初始化
+     * stdio/sse 会建立连接并获取工具列表，http 会在首次访问时拉取工具列表
+     */
+    private void ensureServerReady(String serverName) {
+        McpServerConfig config = getServerConfig(serverName);
+        if (config == null) {
+            return;
+        }
+        if (!config.isEnabled()) {
+            log.info("MCP服务器[{}]未启用，跳过懒初始化", serverName);
+            return;
+        }
+
+        synchronized (initLock) {
+            if (isServerReady(serverName, config) || initializingServers.contains(serverName)) {
+                return;
+            }
+            initializingServers.add(serverName);
+            try {
+                log.info("MCP服务器[{}]首次使用，开始懒初始化", serverName);
+                initServer(serverName, config);
+            } finally {
+                initializingServers.remove(serverName);
+            }
+        }
+    }
+
+    /**
+     * 判断服务是否已经具备可用状态
+     */
+    private boolean isServerReady(String serverName, McpServerConfig config) {
+        if (config == null || !config.isEnabled()) {
+            return false;
+        }
+        if ("stdio".equalsIgnoreCase(config.getType())) {
+            return stdioProcesses.containsKey(serverName)
+                    && stdioWriters.containsKey(serverName)
+                    && stdioReaders.containsKey(serverName)
+                    && toolsCache.containsKey(serverName);
+        }
+        if ("sse".equalsIgnoreCase(config.getType())) {
+            return sseEndpoints.containsKey(serverName) && toolsCache.containsKey(serverName);
+        }
+        if ("http".equalsIgnoreCase(config.getType())) {
+            return toolsCache.containsKey(serverName);
+        }
+        return false;
+    }
+
+    /**
+     * 获取服务器配置
+     */
+    private McpServerConfig getServerConfig(String serverName) {
+        if (currentConfig == null || currentConfig.getMcpServers() == null) {
+            return null;
+        }
+        return currentConfig.getMcpServers().get(serverName);
+    }
+
+    /**
+     * 按需加载全部已启用服务的工具缓存
+     */
+    private void ensureAllEnabledServersToolsLoaded() {
+        if (currentConfig == null || currentConfig.getMcpServers() == null) {
+            return;
+        }
+        currentConfig.getMcpServers().forEach((name, config) -> {
+            if (config != null && config.isEnabled() && !toolsCache.containsKey(name)) {
+                ensureServerReady(name);
+            }
+        });
+    }
+
+    /**
+     * 获取当前缓存中的全部工具快照
+     */
+    private List<McpToolInfo> getCachedToolsSnapshot() {
+        List<McpToolInfo> allTools = new ArrayList<>();
+        toolsCache.values().forEach(allTools::addAll);
+        return allTools;
     }
 
     /**
@@ -336,7 +417,6 @@ public class McpClientManager {
             log.info("MCP服务器[{}]开始SSE握手: url={}", name, config.getUrl());
             String sseUrl = config.getUrl();
 
-            // GET SSE端点，使用 InputStream 流式读取（SSE是长连接，不能用ofString否则会永久阻塞）
             HttpRequest sseRequest = HttpRequest.newBuilder()
                     .uri(URI.create(sseUrl))
                     .header("Accept", "text/event-stream")
@@ -350,8 +430,7 @@ public class McpClientManager {
                 return;
             }
 
-            // 从SSE事件流中逐行读取，找到 event:endpoint 后立即提取data并关闭流
-            String endpointUrl = null;
+            String endpointUrl;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(sseResponse.body(), StandardCharsets.UTF_8))) {
                 endpointUrl = readEndpointFromSseStream(reader, sseUrl);
             }
@@ -364,12 +443,8 @@ public class McpClientManager {
             sseEndpoints.put(name, endpointUrl);
             log.info("MCP服务器[{}] SSE握手成功, JSON-RPC endpoint={}", name, endpointUrl);
 
-            // 发送 initialize 请求（通过SSE endpoint POST）
             sendInitialize(name);
-
-            // 获取工具列表
             refreshToolsForServer(name);
-
         } catch (Exception e) {
             log.error("MCP服务器[{}] SSE初始化失败: {}", name, e.getMessage(), e);
         }
@@ -377,16 +452,6 @@ public class McpClientManager {
 
     /**
      * 从SSE事件流中逐行读取，提取 event:endpoint 对应的 data URL
-     * SSE格式示例:
-     *   event: endpoint\n
-     *   data: /mcp/message?sessionId=xxx\n
-     *   \n
-     *
-     * 注意：SSE是长连接流，找到endpoint后必须立即返回，由调用方关闭流。
-     *
-     * @param reader  SSE流的BufferedReader
-     * @param baseUrl 原始SSE URL，用于将相对路径拼接为完整URL
-     * @return 完整的JSON-RPC POST endpoint URL，未找到则返回null
      */
     private String readEndpointFromSseStream(BufferedReader reader, String baseUrl) throws IOException {
         if (useSupportDelegates()) {
@@ -398,20 +463,16 @@ public class McpClientManager {
             String trimmed = line.trim();
             log.debug("SSE握手流读取行: {}", trimmed);
 
-            // 检测 event: endpoint
             if (trimmed.equals("event: endpoint") || trimmed.equals("event:endpoint")) {
                 isEndpointEvent = true;
                 continue;
             }
 
-            // 在endpoint事件内，读取 data: 字段
             if (isEndpointEvent && trimmed.startsWith("data:")) {
                 String data = trimmed.substring(5).trim();
-                // data可能是完整URL或相对路径
                 if (data.startsWith("http://") || data.startsWith("https://")) {
                     return data;
                 }
-                // 相对路径：从baseUrl提取 scheme + authority 拼接
                 try {
                     URI base = URI.create(baseUrl);
                     String authority = base.getScheme() + "://" + base.getAuthority();
@@ -422,7 +483,6 @@ public class McpClientManager {
                 }
             }
 
-            // 空行或其他event类型，重置标志
             if (isEndpointEvent && (trimmed.isEmpty() || trimmed.startsWith("event:"))) {
                 isEndpointEvent = false;
             }
@@ -460,6 +520,14 @@ public class McpClientManager {
      */
     public void refreshToolsForServer(String serverName) {
         try {
+            McpServerConfig config = getServerConfig(serverName);
+            if (config == null) {
+                log.warn("刷新MCP服务器[{}]工具列表失败: 配置不存在", serverName);
+                return;
+            }
+            if (!"http".equalsIgnoreCase(config.getType()) && !initializingServers.contains(serverName)) {
+                ensureServerReady(serverName);
+            }
             JsonNode response = sendJsonRpc(serverName, "tools/list", Map.of());
             if (response != null && response.has("tools")) {
                 List<McpToolInfo> tools = new ArrayList<>();
@@ -478,7 +546,7 @@ public class McpClientManager {
                 log.info("MCP服务器[{}]工具列表已刷新, 共{}个工具: {}",
                         serverName, tools.size(),
                         tools.stream().map(McpToolInfo::getName).toList());
-                log.info("当前已加载的全部MCP工具: {}", formatAllMcpToolsForLog());
+                log.info("当前已缓存的全部MCP工具: {}", formatAllMcpToolsForLog());
             } else {
                 log.warn("MCP服务器[{}]未返回tools列表，response={}", serverName, response);
             }
@@ -493,16 +561,15 @@ public class McpClientManager {
      * 获取所有已启用MCP服务器的工具列表（合并）
      */
     public List<McpToolInfo> getAllTools() {
-        List<McpToolInfo> allTools = new ArrayList<>();
-        toolsCache.values().forEach(allTools::addAll);
-        return allTools;
+        ensureAllEnabledServersToolsLoaded();
+        return getCachedToolsSnapshot();
     }
 
     /**
      * 生成全部MCP工具的日志展示文本
      */
     public String formatAllMcpToolsForLog() {
-        List<McpToolInfo> allTools = getAllTools();
+        List<McpToolInfo> allTools = getCachedToolsSnapshot();
         if (allTools.isEmpty()) {
             return "[]";
         }
@@ -568,8 +635,30 @@ public class McpClientManager {
      * 查找工具定义
      */
     public McpToolInfo findTool(String toolName) {
+        if (toolName == null || toolName.isBlank()) {
+            return null;
+        }
         for (List<McpToolInfo> tools : toolsCache.values()) {
             for (McpToolInfo tool : tools) {
+                if (tool.getName().equals(toolName)) {
+                    return tool;
+                }
+            }
+        }
+
+        if (currentConfig == null || currentConfig.getMcpServers() == null) {
+            return null;
+        }
+
+        for (Map.Entry<String, McpServerConfig> entry : currentConfig.getMcpServers().entrySet()) {
+            String serverName = entry.getKey();
+            McpServerConfig config = entry.getValue();
+            if (config == null || !config.isEnabled() || toolsCache.containsKey(serverName)) {
+                continue;
+            }
+            ensureServerReady(serverName);
+            List<McpToolInfo> serverTools = toolsCache.getOrDefault(serverName, Collections.emptyList());
+            for (McpToolInfo tool : serverTools) {
                 if (tool.getName().equals(toolName)) {
                     return tool;
                 }
@@ -584,11 +673,17 @@ public class McpClientManager {
      * 发送JSON-RPC请求并等待响应
      */
     private synchronized JsonNode sendJsonRpc(String serverName, String method, Map<String, Object> params) {
-        // 所有 JSON-RPC 请求都从这里进入，再路由到具体协议。
-        McpServerConfig config = currentConfig.getMcpServers().get(serverName);
+        McpServerConfig config = getServerConfig(serverName);
         if (config == null) {
             log.warn("MCP服务器[{}]未找到配置", serverName);
             return null;
+        }
+
+        if (!"tools/list".equals(method)
+                && !isServerReady(serverName, config)
+                && !initializingServers.contains(serverName)) {
+            ensureServerReady(serverName);
+            config = getServerConfig(serverName);
         }
 
         if ("sse".equalsIgnoreCase(config.getType())) {
@@ -605,7 +700,6 @@ public class McpClientManager {
      * 通过stdio发送JSON-RPC请求
      */
     private JsonNode sendJsonRpcStdio(String serverName, String method, Map<String, Object> params) {
-        // stdio 模式适合本地子进程型 MCP 服务。
         BufferedWriter writer = stdioWriters.get(serverName);
         BufferedReader reader = stdioReaders.get(serverName);
 
@@ -616,8 +710,6 @@ public class McpClientManager {
 
         try {
             int id = requestIdCounter.getAndIncrement();
-
-            // 构建JSON-RPC 2.0请求
             Map<String, Object> request = new LinkedHashMap<>();
             request.put("jsonrpc", "2.0");
             request.put("id", id);
@@ -629,12 +721,10 @@ public class McpClientManager {
             String requestJson = objectMapper.writeValueAsString(request);
             log.debug("MCP[{}] -> {}", serverName, requestJson);
 
-            // 写入stdin
             writer.write(requestJson);
             writer.newLine();
             writer.flush();
 
-            // 从stdout读取响应
             String responseLine = reader.readLine();
             if (responseLine == null) {
                 log.warn("MCP服务器[{}]返回null（进程可能已退出）", serverName);
@@ -642,19 +732,14 @@ public class McpClientManager {
             }
 
             log.debug("MCP[{}] <- {}", serverName, responseLine);
-
             JsonNode responseNode = objectMapper.readTree(responseLine);
-
-            // 检查错误
             if (responseNode.has("error")) {
                 JsonNode error = responseNode.get("error");
                 log.warn("MCP服务器[{}]返回错误: code={}, message={}",
                         serverName, error.path("code").asInt(), error.path("message").asText());
                 return null;
             }
-
             return responseNode.path("result");
-
         } catch (Exception e) {
             log.error("MCP stdio通信异常[{}]: {}", serverName, e.getMessage());
             return null;
@@ -665,12 +750,16 @@ public class McpClientManager {
      * 发送JSON-RPC通知（无需响应）
      */
     private void sendJsonRpcNotification(String serverName, String method, Map<String, Object> params) {
-        McpServerConfig config = currentConfig.getMcpServers().get(serverName);
-        if (config == null) return;
+        McpServerConfig config = getServerConfig(serverName);
+        if (config == null) {
+            return;
+        }
 
         if ("stdio".equalsIgnoreCase(config.getType())) {
             BufferedWriter writer = stdioWriters.get(serverName);
-            if (writer == null) return;
+            if (writer == null) {
+                return;
+            }
             try {
                 Map<String, Object> notification = new LinkedHashMap<>();
                 notification.put("jsonrpc", "2.0");
@@ -686,10 +775,12 @@ public class McpClientManager {
                 log.warn("发送MCP通知失败[{}]: {}", serverName, e.getMessage());
             }
         }
-        // SSE模式：POST通知到endpoint（无需响应）
+
         if ("sse".equalsIgnoreCase(config.getType())) {
             String endpointUrl = sseEndpoints.get(serverName);
-            if (endpointUrl == null) return;
+            if (endpointUrl == null) {
+                return;
+            }
             try {
                 Map<String, Object> notification = new LinkedHashMap<>();
                 notification.put("jsonrpc", "2.0");
@@ -709,17 +800,14 @@ public class McpClientManager {
                 log.warn("发送MCP SSE通知失败[{}]: {}", serverName, e.getMessage());
             }
         }
-        // HTTP模式通知暂不实现
     }
 
     /**
      * 通过HTTP发送JSON-RPC请求
      */
     private JsonNode sendJsonRpcHttp(String serverName, McpServerConfig config, String method, Map<String, Object> params) {
-        // http 模式直接发送标准 JSON-RPC 请求。
         try {
             int id = requestIdCounter.getAndIncrement();
-
             Map<String, Object> request = new LinkedHashMap<>();
             request.put("jsonrpc", "2.0");
             request.put("id", id);
@@ -739,7 +827,6 @@ public class McpClientManager {
                     .build();
 
             HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-
             log.debug("MCP HTTP[{}] <- status={}, body={}", serverName, httpResponse.statusCode(), httpResponse.body());
 
             if (httpResponse.statusCode() != 200) {
@@ -748,7 +835,6 @@ public class McpClientManager {
             }
 
             JsonNode responseNode = objectMapper.readTree(httpResponse.body());
-
             if (responseNode.has("error")) {
                 JsonNode error = responseNode.get("error");
                 log.warn("MCP HTTP[{}]返回错误: code={}, message={}",
@@ -757,7 +843,6 @@ public class McpClientManager {
             }
 
             return responseNode.path("result");
-
         } catch (Exception e) {
             log.error("MCP HTTP通信异常[{}]: {}", serverName, e.getMessage());
             return null;
@@ -766,11 +851,8 @@ public class McpClientManager {
 
     /**
      * 通过SSE endpoint发送JSON-RPC请求
-     * SSE模式下，POST请求发送到握手阶段获取的endpoint URL，
-     * 响应可能是标准JSON-RPC响应，也可能通过SSE事件流返回
      */
     private JsonNode sendJsonRpcSse(String serverName, String method, Map<String, Object> params) {
-        // SSE 模式下，请求和响应不一定在同一个通道返回。
         String endpointUrl = sseEndpoints.get(serverName);
         if (endpointUrl == null || endpointUrl.isBlank()) {
             log.warn("MCP服务器[{}]的SSE endpoint未就绪，无法发送请求", serverName);
@@ -779,8 +861,6 @@ public class McpClientManager {
 
         try {
             int id = requestIdCounter.getAndIncrement();
-
-            // 构建JSON-RPC 2.0请求
             Map<String, Object> request = new LinkedHashMap<>();
             request.put("jsonrpc", "2.0");
             request.put("id", id);
@@ -792,7 +872,6 @@ public class McpClientManager {
             String requestJson = objectMapper.writeValueAsString(request);
             log.debug("MCP SSE[{}] -> {}", serverName, requestJson);
 
-            // POST到SSE握手获得的endpoint地址
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(endpointUrl))
                     .header("Content-Type", "application/json")
@@ -802,38 +881,30 @@ public class McpClientManager {
                     .build();
 
             HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-
             log.debug("MCP SSE[{}] <- status={}, body({}chars)", serverName, httpResponse.statusCode(),
                     httpResponse.body() != null ? httpResponse.body().length() : 0);
 
             if (httpResponse.statusCode() != 200 && httpResponse.statusCode() != 202) {
-                log.warn("MCP SSE[{}]返回非成功状态: {}, body={}", serverName, httpResponse.statusCode(),
-                        httpResponse.body() != null && httpResponse.body().length() > 500
-                                ? httpResponse.body().substring(0, 500) : httpResponse.body());
+                log.warn("MCP SSE[{}]返回非预期状态: {}", serverName, httpResponse.statusCode());
                 return null;
             }
 
             String body = httpResponse.body();
             if (body == null || body.isBlank()) {
-                // 202 Accepted 表示请求已被接收，响应通过SSE事件流异步返回（通知类请求）
                 if (httpResponse.statusCode() == 202) {
                     log.debug("MCP SSE[{}] 收到202 Accepted（通知/异步）", serverName);
                     return null;
                 }
-                log.warn("MCP SSE[{}]返回空响应体", serverName);
+                log.warn("MCP SSE[{}]响应体为空", serverName);
                 return null;
             }
 
-            // 尝试解析响应：可能是标准JSON-RPC响应，也可能是SSE事件流
             String jsonContent = body.trim();
             if (jsonContent.startsWith("{")) {
-                // 标准JSON-RPC响应
                 return parseJsonRpcResponse(serverName, jsonContent);
             }
 
-            // SSE事件流格式：从 event:message 的 data 字段提取JSON-RPC响应
             return parseSseMessageResponse(serverName, body, id);
-
         } catch (Exception e) {
             log.error("MCP SSE通信异常[{}]: {}", serverName, e.getMessage(), e);
             return null;
@@ -841,7 +912,7 @@ public class McpClientManager {
     }
 
     /**
-     * 解析标准JSON-RPC响应
+     * 解析标准 JSON-RPC 响应体
      */
     private JsonNode parseJsonRpcResponse(String serverName, String jsonContent) {
         if (useSupportDelegates()) {
@@ -851,20 +922,19 @@ public class McpClientManager {
             JsonNode responseNode = objectMapper.readTree(jsonContent);
             if (responseNode.has("error")) {
                 JsonNode error = responseNode.get("error");
-                log.warn("MCP[{}]返回错误: code={}, message={}",
+                log.warn("MCP[{}] response error: code={}, message={}",
                         serverName, error.path("code").asInt(), error.path("message").asText());
                 return null;
             }
             return responseNode.path("result");
         } catch (Exception e) {
-            log.warn("MCP[{}]解析JSON-RPC响应失败: {}", serverName, e.getMessage());
+            log.warn("解析JSON-RPC响应失败[{}]: {}", serverName, e.getMessage());
             return null;
         }
     }
 
     /**
      * 从SSE事件流中提取JSON-RPC响应
-     * 查找匹配请求ID的 event:message 事件
      */
     private JsonNode parseSseMessageResponse(String serverName, String sseBody, int requestId) {
         if (useSupportDelegates()) {
@@ -882,18 +952,17 @@ public class McpClientManager {
                 String data = trimmed.substring(5).trim();
                 try {
                     JsonNode node = objectMapper.readTree(data);
-                    // 匹配请求ID或直接使用第一个message事件
                     if (!node.has("id") || node.path("id").asInt() == requestId) {
                         if (node.has("error")) {
                             JsonNode error = node.get("error");
-                            log.warn("MCP SSE[{}]事件流返回错误: code={}, message={}",
+                            log.warn("MCP SSE[{}] response error: code={}, message={}",
                                     serverName, error.path("code").asInt(), error.path("message").asText());
                             return null;
                         }
                         return node.path("result");
                     }
                 } catch (Exception e) {
-                    log.debug("MCP SSE[{}]解析message事件失败: {}", serverName, e.getMessage());
+                    log.debug("解析SSE message失败[{}]: {}", serverName, e.getMessage());
                 }
                 nextIsMessage = false;
             }
@@ -909,38 +978,25 @@ public class McpClientManager {
 
     /**
      * 添加一个新的MCP服务器配置
-     *
-     * @param name   服务器名称
-     * @param config 服务器配置
      */
     public void addServer(String name, McpServerConfig config) {
+        if (currentConfig == null) {
+            currentConfig = new McpToolsConfig();
+        }
         if (currentConfig.getMcpServers() == null) {
             currentConfig.setMcpServers(new LinkedHashMap<>());
         }
         currentConfig.getMcpServers().put(name, config);
         saveConfig();
-
-        // 如果启用了，立即初始化
-        if (config.isEnabled()) {
-            try {
-                initServer(name, config);
-            } catch (Exception e) {
-                log.error("初始化新增MCP服务器失败: name={}, error={}", name, e.getMessage());
-            }
-        }
         log.info("已添加MCP服务器: {}", name);
     }
 
     /**
      * 移除一个MCP服务器
-     *
-     * @param name 服务器名称
      */
     public void removeServer(String name) {
-        // 先停止进程
         stopServer(name);
-        // 从配置中移除
-        if (currentConfig.getMcpServers() != null) {
+        if (currentConfig != null && currentConfig.getMcpServers() != null) {
             currentConfig.getMcpServers().remove(name);
         }
         toolsCache.remove(name);
@@ -957,9 +1013,13 @@ public class McpClientManager {
         if (process != null) {
             try {
                 BufferedWriter writer = stdioWriters.remove(name);
-                if (writer != null) writer.close();
+                if (writer != null) {
+                    writer.close();
+                }
                 BufferedReader reader = stdioReaders.remove(name);
-                if (reader != null) reader.close();
+                if (reader != null) {
+                    reader.close();
+                }
                 process.destroyForcibly();
                 process.waitFor(5, TimeUnit.SECONDS);
             } catch (Exception e) {
@@ -974,25 +1034,23 @@ public class McpClientManager {
     public void restartServer(String name) {
         stopServer(name);
         toolsCache.remove(name);
-        McpServerConfig config = currentConfig.getMcpServers().get(name);
+        sseEndpoints.remove(name);
+        McpServerConfig config = getServerConfig(name);
         if (config != null && config.isEnabled()) {
-            initServer(name, config);
+            log.info("MCP服务器[{}]已重置，下次访问时将重新懒初始化", name);
         }
     }
 
     /**
      * 测试MCP服务器连接（ping）
-     *
-     * @param name 服务器名称
-     * @return 测试结果描述
      */
     public String testServer(String name) {
         try {
+            ensureServerReady(name);
             JsonNode response = sendJsonRpc(name, "ping", Map.of());
             if (response != null) {
                 return "连接成功";
             }
-            // ping可能不被支持，尝试tools/list
             refreshToolsForServer(name);
             List<McpToolInfo> tools = toolsCache.get(name);
             if (tools != null && !tools.isEmpty()) {
@@ -1009,6 +1067,13 @@ public class McpClientManager {
      */
     public List<McpToolInfo> getServerTools(String serverName) {
         return toolsCache.getOrDefault(serverName, Collections.emptyList());
+    }
+
+    /**
+     * 获取当前缓存中的工具总数
+     */
+    public int getCachedToolCount() {
+        return getCachedToolsSnapshot().size();
     }
 
     /**

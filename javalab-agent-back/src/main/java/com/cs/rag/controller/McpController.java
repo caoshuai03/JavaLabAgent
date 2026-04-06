@@ -72,7 +72,7 @@ public class McpController {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("servers", serverList);
-        result.put("totalTools", mcpClientManager.getAllTools().size());
+        result.put("totalTools", mcpClientManager.getCachedToolCount());
         return result;
     }
 

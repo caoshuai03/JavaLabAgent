@@ -1,6 +1,6 @@
 <template>
   <div class="chat-input-container">
-    <div class="input-wrapper">
+    <div class="input-wrapper" :class="{ expanded: isExpanded }">
       <textarea
         ref="inputRef"
         v-model="inputText"
@@ -121,9 +121,15 @@ const userStore = useUserStore()
 const inputText = ref('')
 const inputRef = ref(null)
 const showScrollbar = ref(false)
+const isExpanded = ref(false)
 
 const MIN_HEIGHT = 24
-const MAX_HEIGHT = 200
+const MAX_HEIGHT = 320
+const EXPAND_TRIGGER_HEIGHT = 84
+const COLLAPSE_TRIGGER_HEIGHT = 56
+
+// 将同一帧内的多次高度刷新合并，避免输入过程中出现抖动
+let inputVisualSyncFrameId = 0
 
 const canSend = computed(() => {
   return inputText.value.trim().length > 0 && !chatStore.isStreaming
@@ -199,14 +205,62 @@ const setChatMode = (mode) => {
   }
 }
 
-const handleInput = () => {
+// 长文本输入时切换到更高的编辑态，并通过滞后阈值避免临界高度反复抖动
+const updateExpandedState = (contentHeight) => {
+  if (isExpanded.value) {
+    isExpanded.value = contentHeight > COLLAPSE_TRIGGER_HEIGHT
+    return
+  }
+
+  isExpanded.value = contentHeight > EXPAND_TRIGGER_HEIGHT
+}
+
+// 统一重置输入框的视觉状态，避免发送后仍保持长文本编辑态
+const resetInputVisualState = () => {
   if (!inputRef.value) return
+
+  if (inputVisualSyncFrameId) {
+    cancelAnimationFrame(inputVisualSyncFrameId)
+    inputVisualSyncFrameId = 0
+  }
+
+  inputRef.value.style.height = `${MIN_HEIGHT}px`
+  inputRef.value.scrollTop = 0
+  showScrollbar.value = false
+  isExpanded.value = false
+}
+
+// 统一使用动画帧同步高度，避免输入事件和侦听器重复更新造成动画不连贯
+const scheduleInputVisualSync = () => {
+  if (inputVisualSyncFrameId) {
+    cancelAnimationFrame(inputVisualSyncFrameId)
+  }
+
+  inputVisualSyncFrameId = requestAnimationFrame(() => {
+    inputVisualSyncFrameId = 0
+    syncInputVisualState()
+  })
+}
+
+// 在 DOM 完成更新后同步输入框高度与容器状态，避免删减内容后外层仍停留在高态
+const syncInputVisualState = () => {
+  if (!inputRef.value) return
+
+  if (!inputText.value) {
+    resetInputVisualState()
+    return
+  }
 
   inputRef.value.style.height = 'auto'
   const scrollHeight = inputRef.value.scrollHeight
   const newHeight = Math.max(MIN_HEIGHT, Math.min(scrollHeight, MAX_HEIGHT))
   inputRef.value.style.height = `${newHeight}px`
   showScrollbar.value = scrollHeight > MAX_HEIGHT
+  updateExpandedState(newHeight)
+}
+
+const handleInput = () => {
+  scheduleInputVisualSync()
 }
 
 const handleKeyDown = (event) => {
@@ -236,10 +290,7 @@ const handleSend = async () => {
   chatStore.addMessage('user', message, conversationKey)
 
   inputText.value = ''
-  if (inputRef.value) {
-    inputRef.value.style.height = `${MIN_HEIGHT}px`
-    showScrollbar.value = false
-  }
+  resetInputVisualState()
 
   chatStore.addMessage('assistant', '', conversationKey)
   chatStore.setConversationStreaming(conversationKey, true)
@@ -375,13 +426,23 @@ watch(
   },
 )
 
+watch(inputText, () => {
+  // 无论是新增还是删减内容，都在下一轮渲染后重新同步一次视觉高度
+  nextTick(() => {
+    scheduleInputVisualSync()
+  })
+})
+
 onMounted(() => {
-  if (inputRef.value) {
-    inputRef.value.style.height = `${MIN_HEIGHT}px`
-  }
+  resetInputVisualState()
 })
 
 onUnmounted(() => {
+  if (inputVisualSyncFrameId) {
+    cancelAnimationFrame(inputVisualSyncFrameId)
+    inputVisualSyncFrameId = 0
+  }
+
   // 组件卸载时统一清理仍在进行中的流任务，避免留下悬挂状态
   streamTasks.forEach((streamTask, conversationKey) => {
     streamTask.abortController?.abort()
@@ -405,7 +466,7 @@ onUnmounted(() => {
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
     align-items: stretch;
     position: relative;
     overflow: hidden;
@@ -415,28 +476,43 @@ onUnmounted(() => {
       rgba(250, 250, 252, 0.95) 100%
     );
     border: 1px solid rgba(229, 231, 235, 1);
-    border-radius: 42px;
-    min-height: 144px;
-    padding: 20px 20px 16px 20px;
+    border-radius: 32px;
+    min-height: 96px;
+    padding: 16px 18px 12px 18px;
     box-shadow:
       0 8px 22px rgba(17, 24, 39, 0.05),
       0 1px 0 rgba(255, 255, 255, 0.88) inset;
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
+    /* 放慢容器展开与收起的动画，减少突兀感 */
     transition:
-      border-color 0.2s ease,
-      box-shadow 0.2s ease,
-      transform 0.2s ease;
+      border-color 0.36s ease,
+      box-shadow 0.36s ease,
+      transform 0.36s ease,
+      min-height 0.42s cubic-bezier(0.2, 0.85, 0.28, 1),
+      border-radius 0.42s cubic-bezier(0.2, 0.85, 0.28, 1),
+      padding 0.42s cubic-bezier(0.2, 0.85, 0.28, 1),
+      gap 0.42s cubic-bezier(0.2, 0.85, 0.28, 1);
+
+    &.expanded {
+      min-height: 144px;
+      border-radius: 28px;
+    }
   }
 
   @media (max-width: 768px) {
     padding: 0 16px 0 16px;
 
     .input-wrapper {
-      gap: 10px;
-      min-height: 128px;
-      padding: 16px 14px 12px 14px;
-      border-radius: 34px;
+      gap: 8px;
+      min-height: 88px;
+      padding: 14px 14px 10px 14px;
+      border-radius: 28px;
+
+      &.expanded {
+        min-height: 132px;
+        border-radius: 24px;
+      }
     }
   }
 }
@@ -446,7 +522,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: auto;
+  margin-top: 0;
 
   .action-button {
     display: flex;
@@ -596,7 +672,7 @@ onUnmounted(() => {
 }
 
 .chat-input {
-  flex: 1;
+  flex: none;
   padding: 0;
   background-color: transparent;
   border: none;
@@ -606,10 +682,13 @@ onUnmounted(() => {
   line-height: 1.5;
   resize: none;
   min-height: 24px;
-  max-height: 200px;
+  max-height: 320px;
   overflow-y: hidden;
   outline: none;
   margin-bottom: 2px;
+  /* 放慢输入区高度变化，让长文本展开更接近大厂产品的手感 */
+  transition: height 0.42s cubic-bezier(0.2, 0.85, 0.28, 1);
+  will-change: height;
 
   &.has-scrollbar {
     overflow-y: auto;
