@@ -16,7 +16,7 @@
             <div class="header-actions">
               <button
                 class="action-button upload"
-                @click="triggerFileInput"
+                @click="handleUploadClick"
                 :disabled="!isAdmin || uploading"
                 @mouseenter="showAdminTip = !isAdmin"
                 @mouseleave="showAdminTip = false"
@@ -224,50 +224,13 @@
             </tbody>
           </table>
         </div>
-
-        <!-- 分页组件 -->
-        <div v-if="!loading && fileList.length > 0" class="pagination">
-          <div class="pagination-info">
-            共 {{ total }} 条，第 {{ currentPage }} / {{ totalPages }} 页
-          </div>
-          <div class="pagination-controls">
-            <button
-              @click="goToPage(currentPage - 1)"
-              :disabled="currentPage === 1"
-              class="page-button"
-            >
-              上一页
-            </button>
-            <input
-              v-model.number="pageInput"
-              type="number"
-              min="1"
-              :max="totalPages"
-              @keyup.enter="goToPage(pageInput)"
-              class="page-input"
-            />
-            <span>/ {{ totalPages }}</span>
-            <button
-              @click="goToPage(currentPage + 1)"
-              :disabled="currentPage === totalPages"
-              class="page-button"
-            >
-              下一页
-            </button>
-            <select v-model="pageSize" @change="handlePageSizeChange" class="page-size-select">
-              <option :value="10">10条/页</option>
-              <option :value="20">20条/页</option>
-              <option :value="50">50条/页</option>
-            </select>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { knowledgeApi } from '../api/knowledge'
 import { useChatStore } from '../stores/chat'
 import { useUserStore } from '../stores/user'
@@ -275,7 +238,6 @@ import Sidebar from '../components/Sidebar.vue'
 import UploadIcon from '../components/icons/UploadIcon.vue'
 import DownloadIcon from '../components/icons/DownloadIcon.vue'
 import TrashIcon from '../components/icons/TrashIcon.vue'
-import FolderIcon from '../components/icons/FolderIcon.vue'
 import SearchIcon from '../components/icons/SearchIcon.vue'
 
 // 初始化 chatStore 和 userStore
@@ -291,9 +253,6 @@ let tipTimer = null
 
 // 状态
 const fileList = ref([])
-const currentPage = ref(1)
-const pageSize = ref(10)
-const total = ref(0)
 const searchKeyword = ref('')
 const selectedIds = ref([])
 const loading = ref(false)
@@ -301,9 +260,7 @@ const uploading = ref(false)
 const deleting = ref(false)
 const downloading = ref(false)
 const fileInput = ref(null)
-const pageInput = ref(1)
 
-const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 const isAllSelected = computed(() => {
   return fileList.value.length > 0 && selectedIds.value.length === fileList.value.length
 })
@@ -315,33 +272,27 @@ const handleSearch = () => {
     clearTimeout(searchTimer)
   }
   searchTimer = setTimeout(() => {
-    currentPage.value = 1
     fetchFileList()
   }, 300)
 }
 
 const clearSearch = () => {
   searchKeyword.value = ''
-  currentPage.value = 1
   fetchFileList()
 }
 
 const fetchFileList = async () => {
   loading.value = true
   try {
-    const params = {
-      page: currentPage.value,
-      pageSize: pageSize.value,
-    }
+    const params = {}
     if (searchKeyword.value) {
       params.fileName = searchKeyword.value
     }
     const response = await knowledgeApi.getFileList(params)
     if (response.data.code === 0) {
       const data = response.data.data
-      fileList.value = data.records || data.list || []
-      total.value = data.total || 0
-      pageInput.value = currentPage.value
+      // 兼容后端全量返回 records/list，以及历史可能直接返回数组的结构
+      fileList.value = Array.isArray(data) ? data : data.records || data.list || []
     } else {
       console.error('获取文件列表失败:', response.data.message)
       alert('获取文件列表失败: ' + (response.data.message || '未知错误'))
@@ -380,15 +331,6 @@ const handleUploadClick = () => {
       showAdminTip.value = false
     }, 3000)
   }
-}
-
-const handleUpload = () => {
-  fileInput.value?.click()
-}
-
-// 统一提示方法：当前页面使用 alert，后续如果引入 UI 组件库可在此处替换
-const showMessage = (message) => {
-  alert(message)
 }
 
 const handleFileSelect = async (event) => {
@@ -576,23 +518,6 @@ const downloadFiles = async (ids) => {
     downloading.value = false
   }
 }
-
-const goToPage = (page) => {
-  if (page < 1 || page > totalPages.value) return
-  currentPage.value = page
-  fetchFileList()
-}
-
-const handlePageSizeChange = () => {
-  currentPage.value = 1
-  fetchFileList()
-}
-
-watch(pageInput, (newVal) => {
-  if (newVal >= 1 && newVal <= totalPages.value) {
-    currentPage.value = newVal
-  }
-})
 
 onMounted(() => {
   chatStore.initialize()
@@ -1097,81 +1022,6 @@ onMounted(() => {
   }
 }
 
-// ==================== 分页组件 ====================
-.pagination {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 16px;
-  padding: 12px 16px;
-  background-color: var(--bg-secondary);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-
-  .pagination-info {
-    color: var(--text-secondary);
-    font-size: 13px;
-  }
-
-  .pagination-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    .page-button {
-      padding: 6px 14px;
-      background-color: transparent;
-      color: var(--text-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      transition: all 0.2s ease;
-
-      &:hover:not(:disabled) {
-        background-color: var(--bg-hover);
-        border-color: rgba(144, 19, 139, 0.3);
-      }
-
-      &:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-    }
-
-    .page-input {
-      width: 60px;
-      padding: 6px 8px;
-      background-color: var(--bg-secondary);
-      color: var(--text-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      text-align: center;
-      font-size: 13px;
-
-      &:focus {
-        outline: none;
-        border-color: #90138b;
-      }
-    }
-
-    .page-size-select {
-      padding: 6px 8px;
-      background-color: var(--bg-secondary);
-      color: var(--text-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-
-      &:focus {
-        outline: none;
-        border-color: #90138b;
-      }
-    }
-  }
-}
-
 // ==================== 动画 ====================
 @keyframes spin {
   to {
@@ -1220,16 +1070,6 @@ onMounted(() => {
 
     .action-col {
       width: 100px;
-    }
-  }
-
-  .pagination {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-
-    .pagination-controls {
-      justify-content: center;
     }
   }
 }

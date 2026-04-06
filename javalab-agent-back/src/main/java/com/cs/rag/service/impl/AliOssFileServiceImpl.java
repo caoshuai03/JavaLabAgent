@@ -18,9 +18,12 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
 * @author  caoshuai
@@ -49,10 +52,22 @@ public class AliOssFileServiceImpl extends ServiceImpl<AliOssFileMapper, AliOssF
      */
     @Override
     public BaseResponse queryPage(QueryFileDTO request) {
-        // 参数校验
-        if (request.getPage() == null || request.getPageSize() == null) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, "分页参数不能为空");
+        // 未传分页参数时，直接返回全部文件列表，兼容当前知识库页面的全量展示需求
+        if (request == null || request.getPage() == null || request.getPageSize() == null) {
+            String fileName = request == null ? null : request.getFileName();
+            List<AliOssFile> fileList = lambdaQuery()
+                    .like(StringUtils.hasText(fileName), AliOssFile::getFileName, fileName)
+                    .orderByDesc(AliOssFile::getCreateTime, AliOssFile::getId)
+                    .list();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("records", fileList);
+            result.put("total", fileList.size());
+            result.put("current", 1);
+            result.put("size", fileList.size());
+            return ResultUtils.success(result);
         }
+
         Page<AliOssFile> page = new Page<>(request.getPage(), request.getPageSize());
         IPage<AliOssFile> fileList = aliOssFileMapper.findByFileNameContaining(page, request.getFileName());
         return ResultUtils.success(fileList);

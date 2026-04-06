@@ -1,15 +1,18 @@
 <template>
   <div
-    :class="['conversation-item', { active: isActive }]"
+    :class="[
+      'conversation-item',
+      {
+        active: isActive && !isSelectionMode,
+        'selection-mode': isSelectionMode,
+        selected: isSelectionMode && isSelected,
+      },
+    ]"
     @click="handleClick"
     @mouseenter="showActions = true"
     @mouseleave="handleMouseLeave"
   >
-    <!-- 批量选择复选框 -->
-    <div v-if="isSelectionMode" class="checkbox-wrapper" @click.stop="handleToggleSelect">
-      <input type="checkbox" :checked="isSelected" class="custom-checkbox" />
-    </div>
-
+    <!-- 批量删除模式下通过点击整行切换选中状态，交互与知识库文件列表保持一致 -->
     <div class="content" @dblclick="handleDoubleClick">
       <div class="title">{{ conversation.title }}</div>
     </div>
@@ -32,8 +35,8 @@
       <!-- 下拉菜单 -->
       <div v-if="isMenuOpen" class="dropdown-menu" :style="menuStyle" ref="dropdownMenuRef">
         <div class="menu-item" @click="handleEnterBatchMode">
-          <EditIcon :size="14" />
-          <span>批量管理</span>
+          <TrashIcon :size="14" />
+          <span>批量删除</span>
         </div>
         <div class="menu-item delete" @click="handleDelete">
           <TrashIcon :size="14" />
@@ -59,7 +62,6 @@
 import { ref, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import TrashIcon from './icons/TrashIcon.vue'
 import MoreIcon from './icons/MoreIcon.vue'
-import EditIcon from './icons/EditIcon.vue'
 
 const props = defineProps({
   conversation: {
@@ -110,21 +112,8 @@ const handleClick = () => {
   }
 }
 
-const handleToggleSelect = () => {
-  emit('toggleSelect', props.conversation.id)
-}
-
 const handleDoubleClick = () => {
   if (props.isSelectionMode) return
-  isRenaming.value = true
-  editTitle.value = props.conversation.title
-  nextTick(() => {
-    editInputRef.value?.focus()
-    editInputRef.value?.select()
-  })
-}
-
-const handleRename = () => {
   isRenaming.value = true
   editTitle.value = props.conversation.title
   nextTick(() => {
@@ -151,7 +140,7 @@ const handleDelete = () => {
   emit('delete', props.conversation.id)
 }
 
-// 进入批量管理模式
+// 进入批量删除模式
 const handleEnterBatchMode = () => {
   emit('toggleMenu', { conversationId: props.conversation.id, nextOpen: false })
   emit('enterBatchMode')
@@ -245,29 +234,29 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 10px 12px;
   cursor: pointer;
+  border: 1px solid transparent;
   border-radius: 12px;
   margin-bottom: 0;
   position: relative;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
   height: 44px;
 
   &:hover {
-    background-color: var(--bg-hover);
+    background-color: rgba(144, 19, 139, 0.03);
   }
 
   &.active {
     background-color: var(--bg-active);
   }
 
-  .checkbox-wrapper {
-    display: flex;
-    align-items: center;
-    margin-right: 8px;
+  &.selected {
+    background-color: rgba(144, 19, 139, 0.08);
+    border-color: rgba(144, 19, 139, 0.2);
+  }
 
-    .custom-checkbox {
-      width: 16px;
-      height: 16px;
-      cursor: pointer;
+  &.selection-mode {
+    .content {
+      margin-right: 0;
     }
   }
 

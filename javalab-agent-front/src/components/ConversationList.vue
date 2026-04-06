@@ -80,12 +80,9 @@ const handleToggleSelect = (conversationId) => {
   emit('update:selectedIds', newSelectedIds)
 }
 
-// 进入批量管理模式
+// 进入批量删除模式
 const handleEnterBatchMode = () => {
   openedMenuConversationId.value = null
-  // 从会话项菜单进入批量模式，同时选中当前会话
-  const newSelectedIds = [...props.selectedIds]
-  // 不需要自动选中，让用户自己选择
   emit('enterBatchMode')
 }
 </script>

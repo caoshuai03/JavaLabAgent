@@ -18,10 +18,8 @@ export const knowledgeApi = {
   },
 
   /**
-   * 分页查询文件列表
+   * 查询文件列表（默认全量返回）
    * @param {Object} params - 查询参数
-   * @param {number} params.page - 页码
-   * @param {number} params.pageSize - 每页数量
    * @param {string} [params.fileName] - 文件名（可选，用于搜索）
    * @returns {Promise} 文件列表数据
    */
