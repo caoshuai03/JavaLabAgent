@@ -122,13 +122,22 @@ docker compose -f docker-compose.prod.yml up -d
 
 ### 5.3 提示词策略
 
-提示词文件：`javalab-agent-back/src/main/resources/prompts/chat-default.md`
+提示词文件：
+
+- `javalab-agent-back/src/main/resources/prompts/rag/rag-answer-system.md`
+- `javalab-agent-back/src/main/resources/prompts/summary/summary-system.md`
+- `javalab-agent-back/src/main/resources/prompts/react/react-plan-system.md`
+- `javalab-agent-back/src/main/resources/prompts/react/react-plan-user.md`
+- `javalab-agent-back/src/main/resources/prompts/react/react-answer-system.md`
+- `javalab-agent-back/src/main/resources/prompts/react/react-skills-fragment.md`
 
 关键点：
 
-1. 优先级规则：强制遵循 “知识库优先” 原则，优先基于检索到的知识库内容生成回答；
-2. 输出规范：命中知识库内容时，回答前缀需标注「【根据知识库】：」；无匹配内容时标注「【根据通用知识】：」；
-3. 领域限制：限定回答范围为 Java 技术 / 实验相关问题，过滤无关领域提问。
+1. 普通 RAG 对话已调整为通用助手定位，优先级为“工具结果 > 知识库内容 > 通用知识”；
+2. 命中知识库内容时，回答前缀需标注「【根据知识库】：」；主要依赖通用知识时标注「【根据通用知识】：」；
+3. ReAct 规划与最终回答拆分为两套 prompt：规划阶段只输出 JSON 决策，最终回答阶段负责自然语言整合；
+4. ReAct 的动态上下文通过独立 user template 注入，系统规则尽量收敛到 system prompt；
+5. 所有运行时 prompt 通过 `PromptRegistry` 启动时预加载并缓存，避免重复读文件。
 
 ---
 

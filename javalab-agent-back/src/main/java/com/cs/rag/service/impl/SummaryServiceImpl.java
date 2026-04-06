@@ -82,7 +82,7 @@ public class SummaryServiceImpl implements SummaryService {
     }
 
     private String callLlmForSummary(String inputContent) {
-        String systemPrompt = promptService.getChatSummaryPrompt();
+        String systemPrompt = promptService.getSummarySystemPrompt();
         ChatModel chatModel = llmProviderRegistry.getChatModel(RagConstant.DEFAULT_EXTERNAL_LLM);
         ChatClient chatClient = ChatClient.builder(chatModel).build();
 

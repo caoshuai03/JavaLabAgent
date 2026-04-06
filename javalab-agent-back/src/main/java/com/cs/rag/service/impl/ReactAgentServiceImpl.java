@@ -334,10 +334,10 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         
         // 构建当前轮次的决策提示：ReAct SystemMessage → 历史上下文 → 工具调用记录 → 决策 UserMessage
         List<Message> decisionMessages = new ArrayList<>();
-        decisionMessages.add(new SystemMessage(promptService.getReactAgentPrompt()));
+        decisionMessages.add(new SystemMessage(promptService.getReactPlanSystemPrompt()));
         decisionMessages.addAll(chatContext.allMessages());
 
-        String structuredPrompt = promptService.buildReactUserPrompt(
+        String structuredPrompt = promptService.buildReactPlanUserPrompt(
                 toolList,
                 chatContext.originalMessage(),
                 formatObservationsForPrompt(observations),
@@ -506,7 +506,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     private List<Message> buildFinalMessages(List<Message> allMessages) {
         // 构建最终回答上下文：Final SystemMessage → 历史上下文 → 工具调用记录
         List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage(promptService.getReactAgentFinalPrompt()));
+        messages.add(new SystemMessage(promptService.getReactAnswerSystemPrompt()));
         messages.addAll(allMessages);
         return messages;
     }

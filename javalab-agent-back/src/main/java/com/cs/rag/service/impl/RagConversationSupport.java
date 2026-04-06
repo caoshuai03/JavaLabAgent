@@ -7,6 +7,7 @@ import com.cs.rag.pojo.entity.ChatSession;
 import com.cs.rag.mapper.ChatSessionMapper;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;
+import com.cs.rag.service.PromptService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -16,8 +17,15 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static com.cs.rag.constant.RagConstant.DEFAULT_EXTERNAL_LLM;
 import static com.cs.rag.constant.RagConstant.MEMORY_SIZE;
@@ -29,19 +37,24 @@ import static com.cs.rag.constant.RagConstant.TOP_K;
 @Service
 public class RagConversationSupport {
 
+    private static final Pattern CORE_TERM_PATTERN = Pattern.compile("\\b[A-Za-z][A-Za-z0-9_]*\\b");
+
     private final VectorStore vectorStore;
     private final ChatSessionService chatSessionService;
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageService chatMessageService;
+    private final PromptService promptService;
 
     public RagConversationSupport(VectorStore vectorStore,
                                   ChatSessionService chatSessionService,
                                   ChatSessionMapper chatSessionMapper,
-                                  ChatMessageService chatMessageService) {
+                                  ChatMessageService chatMessageService,
+                                  PromptService promptService) {
         this.vectorStore = vectorStore;
         this.chatSessionService = chatSessionService;
         this.chatSessionMapper = chatSessionMapper;
         this.chatMessageService = chatMessageService;
+        this.promptService = promptService;
     }
 
     public String prepareSession(String message, String sessionId, Long userId) {
@@ -85,6 +98,7 @@ public class RagConversationSupport {
                 .build();
         log.info("RAG检索开始: 相似度阈值={}, 检索数量={}", SIMILARITY_THRESHOLD, TOP_K);
         List<Document> ragDocuments = vectorStore.similaritySearch(ragSearchRequest);
+        ragDocuments = filterByTermConsistency(message, ragDocuments);
         long endTime = System.currentTimeMillis();
         log.info("RAG检索完成: 命中{}条文档, 耗时{}ms",
                 ragDocuments != null ? ragDocuments.size() : 0,
@@ -99,14 +113,79 @@ public class RagConversationSupport {
                 String title = doc.getText().split("\n")[0];
                 log.info("{}、文档标题: {}, 相似度: {}", (i + 1), title, doc.getScore());
             }
-            StringBuilder knowledgeContent = new StringBuilder(RagConstant.KNOWLEDGE_SOURCE_LABEL);
-            for (Document doc : ragDocuments) {
-                knowledgeContent.append(doc.getText()).append("\n\n");
-            }
-            return message + knowledgeContent;
+            return promptService.buildRagUserMessage(message, buildKnowledgeBlock(ragDocuments));
         }
         log.info("未检索到相关文档");
-        return message + RagConstant.NO_KNOWLEDGE_FOUND_LABEL;
+        return promptService.buildRagUserMessage(message, "");
+    }
+
+    private String buildKnowledgeBlock(List<Document> ragDocuments) {
+        StringBuilder knowledgeContent = new StringBuilder();
+        for (Document doc : ragDocuments) {
+            knowledgeContent.append(doc.getText()).append("\n\n");
+        }
+        return knowledgeContent.toString();
+    }
+
+    private List<Document> filterByTermConsistency(String userMessage, List<Document> ragDocuments) {
+        if (ragDocuments == null || ragDocuments.isEmpty()) {
+            return ragDocuments;
+        }
+
+        Set<String> userTerms = extractCoreTerms(userMessage);
+        if (userTerms.isEmpty()) {
+            return ragDocuments;
+        }
+
+        List<Document> filtered = ragDocuments.stream()
+                .filter(doc -> hasConsistentTerms(userTerms, doc))
+                .collect(Collectors.toList());
+
+        if (filtered.size() != ragDocuments.size()) {
+            log.info("术语一致性过滤完成: 原始命中{}条, 过滤后{}条", ragDocuments.size(), filtered.size());
+        }
+        return filtered;
+    }
+
+    private boolean hasConsistentTerms(Set<String> userTerms, Document doc) {
+        String text = doc.getText();
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+
+        String firstLine = text.lines().findFirst().orElse(text);
+        Set<String> docTerms = extractCoreTerms(firstLine);
+        if (docTerms.isEmpty()) {
+            return true;
+        }
+
+        Set<String> intersection = new HashSet<>(userTerms);
+        intersection.retainAll(docTerms);
+        return !intersection.isEmpty();
+    }
+
+    private Set<String> extractCoreTerms(String text) {
+        Set<String> terms = new HashSet<>();
+        if (text == null || text.isBlank()) {
+            return terms;
+        }
+
+        Matcher matcher = CORE_TERM_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String term = matcher.group().toLowerCase(Locale.ROOT);
+            if (term.length() > 1) {
+                terms.add(term);
+            }
+        }
+
+        Arrays.stream(text.split("[^\\p{IsHan}A-Za-z0-9_]+"))
+                .map(String::trim)
+                .filter(token -> token.length() > 1)
+                .filter(token -> token.chars().anyMatch(Character::isLetter))
+                .map(token -> token.toLowerCase(Locale.ROOT))
+                .forEach(terms::add);
+
+        return terms;
     }
 
     public List<ChatMessage> getRecentMessages(String sessionId, Long userId, int limit) {

@@ -178,7 +178,7 @@ public class RagServiceImpl implements RagService {
         ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
-                .system(promptService.getChatDefaultPrompt())
+                .system(promptService.getRagAnswerSystemPrompt())
                 .messages(allMessages)
                 .options(ChatOptions.builder().model(model).build());
 
