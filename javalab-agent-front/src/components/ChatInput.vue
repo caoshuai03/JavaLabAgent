@@ -251,12 +251,26 @@ const syncInputVisualState = () => {
     return
   }
 
+  // 先记录当前像素高度，再过渡到目标高度，确保大段粘贴时也能看到展开动画
+  const currentHeight = Math.max(
+    MIN_HEIGHT,
+    parseFloat(window.getComputedStyle(inputRef.value).height) || MIN_HEIGHT,
+  )
+
   inputRef.value.style.height = 'auto'
   const scrollHeight = inputRef.value.scrollHeight
   const newHeight = Math.max(MIN_HEIGHT, Math.min(scrollHeight, MAX_HEIGHT))
-  inputRef.value.style.height = `${newHeight}px`
   showScrollbar.value = scrollHeight > MAX_HEIGHT
   updateExpandedState(newHeight)
+
+  if (Math.abs(newHeight - currentHeight) < 1) {
+    inputRef.value.style.height = `${newHeight}px`
+    return
+  }
+
+  inputRef.value.style.height = `${currentHeight}px`
+  void inputRef.value.offsetHeight
+  inputRef.value.style.height = `${newHeight}px`
 }
 
 const handleInput = () => {
@@ -486,13 +500,13 @@ onUnmounted(() => {
     -webkit-backdrop-filter: blur(14px);
     /* 放慢容器展开与收起的动画，减少突兀感 */
     transition:
-      border-color 0.36s ease,
-      box-shadow 0.36s ease,
-      transform 0.36s ease,
-      min-height 0.42s cubic-bezier(0.2, 0.85, 0.28, 1),
-      border-radius 0.42s cubic-bezier(0.2, 0.85, 0.28, 1),
-      padding 0.42s cubic-bezier(0.2, 0.85, 0.28, 1),
-      gap 0.42s cubic-bezier(0.2, 0.85, 0.28, 1);
+      border-color 0.44s ease,
+      box-shadow 0.44s ease,
+      transform 0.44s ease,
+      min-height 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+      border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+      padding 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+      gap 0.52s cubic-bezier(0.22, 1, 0.36, 1);
 
     &.expanded {
       min-height: 144px;
@@ -687,7 +701,7 @@ onUnmounted(() => {
   outline: none;
   margin-bottom: 2px;
   /* 放慢输入区高度变化，让长文本展开更接近大厂产品的手感 */
-  transition: height 0.42s cubic-bezier(0.2, 0.85, 0.28, 1);
+  transition: height 0.52s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: height;
 
   &.has-scrollbar {
