@@ -80,10 +80,8 @@ public class SkillScanner {
         try {
             // 扫描 classpath 中的 SKILL.md 文件
             String pattern = "classpath*:" + skillsDirectory + "/**/SKILL.md";
-            log.info("Scanning skills from classpath: {}", pattern);
-            
+
             Resource[] resources = resourceResolver.getResources(pattern);
-            log.info("Found {} SKILL.md files in classpath", resources.length);
             
             for (Resource resource : resources) {
                 try {
@@ -91,7 +89,6 @@ public class SkillScanner {
                     if (skillInfo != null) {
                         skills.add(skillInfo);
                         skillCache.put(skillInfo.getMetadata().getName(), skillInfo);
-                        log.info("Loaded skill from classpath: {}", skillInfo.getMetadata().getName());
                     }
                 } catch (Exception e) {
                     log.error("Failed to parse skill from resource: {}", resource.getDescription(), e);

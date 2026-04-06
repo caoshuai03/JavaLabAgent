@@ -2,14 +2,10 @@ package com.cs.rag.service.impl;
 
 import com.cs.rag.constant.RagConstant;
 import com.cs.rag.llm.LLMProviderRegistry;
-import com.cs.rag.mapper.ChatSessionMapper;
-import com.cs.rag.pojo.entity.ChatMessage;
-import com.cs.rag.pojo.entity.ChatSession;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.PromptService;
 import com.cs.rag.service.ReactAgentService;
 import com.cs.rag.service.ReactAgentToolService;
-import com.cs.rag.service.SummaryService;
 import com.cs.rag.skill.SkillInfo;
 import com.cs.rag.skill.SkillMatchService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -40,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -53,10 +48,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     private final LLMProviderRegistry llmProviderRegistry;
     private final PromptService promptService;
     private final ChatMessageService chatMessageService;
-    private final ChatSessionMapper chatSessionMapper;
     private final ReactAgentToolService reactAgentToolService;
     private final SkillMatchService skillMatchService;
-    private final SummaryService summaryService;
     private final ToolOutputSummarizer toolOutputSummarizer;
     private final ObjectMapper objectMapper;
 
@@ -64,27 +57,22 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                                  LLMProviderRegistry llmProviderRegistry,
                                  PromptService promptService,
                                  ChatMessageService chatMessageService,
-                                 ChatSessionMapper chatSessionMapper,
                                  ReactAgentToolService reactAgentToolService,
                                  SkillMatchService skillMatchService,
-                                 SummaryService summaryService,
                                  ToolOutputSummarizer toolOutputSummarizer,
                                  ObjectMapper objectMapper) {
         this.ragConversationSupport = ragConversationSupport;
         this.llmProviderRegistry = llmProviderRegistry;
         this.promptService = promptService;
         this.chatMessageService = chatMessageService;
-        this.chatSessionMapper = chatSessionMapper;
         this.reactAgentToolService = reactAgentToolService;
         this.skillMatchService = skillMatchService;
-        this.summaryService = summaryService;
         this.toolOutputSummarizer = toolOutputSummarizer;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public Flux<String> chat(String message, String sessionId, Long userId, String model) {
-        // 把本轮请求需要的上下文先整理好，后续链路统一围绕这一份上下文工作。
         ReactAgentChatContext chatContext = prepareChatContext(message, sessionId, userId, model);
         String traceId = UUID.randomUUID().toString().replace("-", "");
         long start = System.currentTimeMillis();
@@ -98,38 +86,26 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     }
 
     private ReactAgentChatContext prepareChatContext(String message, String sessionId, Long userId, String model) {
-        // 1. 准备会话并拉取历史消息（包含SystemMessage历史摘要和最近对话Message）
         String finalSessionId = ragConversationSupport.prepareSession(message, sessionId, userId);
         List<Message> contextMessages = ragConversationSupport.buildContext(finalSessionId, userId);
-        
-        // 2. 当前用户消息先落库，保证链路中断时也能追溯输入
+
         chatMessageService.saveUserMessage(finalSessionId, userId, message);
-        
-        // 3. 先做知识检索，再决定增强后的用户消息和最终模型
+
         List<Document> ragDocuments = ragConversationSupport.performSearch(message);
         String enhancedMessage = ragConversationSupport.formatMessageWithDocs(message, ragDocuments);
         String effectiveModel = ragConversationSupport.selectModel(model, ragDocuments);
 
-        // 4. 构建完整Message列表：历史摘要Message → 最近历史对话 → 当前UserMessage
-        // 注意：不在此处加入 SystemMessage，规划和回答阶段会分别使用不同的 SystemMessage
         List<Message> allMessages = new ArrayList<>();
         allMessages.addAll(contextMessages);
         allMessages.add(new UserMessage(enhancedMessage));
-        
-        log.debug("ReAct上下文已构建: 共{}条消息 (历史 + User)", allMessages.size());
+
+        log.debug("ReAct context prepared: totalMessages={}", allMessages.size());
         return new ReactAgentChatContext(finalSessionId, userId, message, effectiveModel, allMessages);
     }
 
     private void handleChat(ReactAgentChatContext chatContext, String traceId, long start, FluxSink<String> sink) {
         try {
-            // 规划阶段负责决定“直接回答”还是“先调用工具再回答”。
             ReactAgentPlanOutcome planOutcome = runPlanningLoop(chatContext, traceId, sink);
-            
-            // 无论规划阶段是否输出了 finalAnswer，都使用 Final prompt 重新生成最终回答
-            // 这样可以确保：
-            // 1. 规划阶段使用 ReAct prompt（要求 JSON 输出）
-            // 2. 回答阶段使用 Final prompt（要求自然语言，综合上下文）
-            // 3. 避免 SystemMessage 冲突，提升回答质量
             streamFinalAnswer(chatContext, traceId, start, sink, planOutcome);
         } catch (Exception e) {
             log.error("ReactAgent failed: sessionId={}, traceId={}", chatContext.sessionId(), traceId, e);
@@ -144,10 +120,9 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                                    long start,
                                    FluxSink<String> sink,
                                    ReactAgentPlanOutcome planOutcome) {
-        // 基于完整上下文Message列表生成最终回答（已包含所有工具调用的ToolMessage）
         List<Message> finalMessages = buildFinalMessages(chatContext.allMessages());
-        log.info("[最终回答] 上下文共{}条消息", finalMessages.size());
-        
+        log.info("[Final Answer] totalMessages={}", finalMessages.size());
+
         ChatModel targetChatModel = llmProviderRegistry.getChatModel(chatContext.effectiveModel());
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
@@ -165,8 +140,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                     String aiResponse = fullResponse.toString();
                     if (!aiResponse.isEmpty()) {
                         saveMessageWithThinkingProcess(chatContext.sessionId(), chatContext.userId(), aiResponse, planOutcome.events());
-                        checkAndUpdateSummaryAsync(chatContext.sessionId(), chatContext.userId());
-                        log.info("[流程完成] 回答长度={}, 总耗时={}ms", aiResponse.length(), System.currentTimeMillis() - start);
+                        ragConversationSupport.refreshSummaryAsync(chatContext.sessionId(), chatContext.userId(), "ReactAgent");
+                        log.info("[Flow Completed] answerLength={}, cost={}ms", aiResponse.length(), System.currentTimeMillis() - start);
                     }
                     sink.next(eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)));
                     sink.complete();
@@ -179,12 +154,9 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     }
 
     private ReactAgentPlanOutcome runPlanningLoop(ReactAgentChatContext chatContext, String traceId, FluxSink<String> sink) {
-        // events 用于前端展示 thinking_process，observations 用于后续规划和最终回答。
         List<String> events = new ArrayList<>();
         List<String> observations = new ArrayList<>();
-        // 避免模型反复调用相同工具造成死循环。
         Set<String> toolSignatureHistory = new LinkedHashSet<>();
-        // 记录已经返回空结果的知识库查询，避免重复空检索。
         Set<String> emptyKnowledgeQueries = new LinkedHashSet<>();
 
         java.util.function.Consumer<String> emit = event -> {
@@ -193,8 +165,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         };
 
         emit.accept(eventJson("session", chatContext.sessionId(), traceId, Map.of("sessionId", chatContext.sessionId())));
-        
-        // 匹配 Skills 并发送事件通知前端
+
         List<SkillInfo> matchedSkills = skillMatchService.matchSkills(chatContext.originalMessage());
         if (!matchedSkills.isEmpty()) {
             List<Map<String, Object>> skillEvents = new ArrayList<>();
@@ -205,23 +176,21 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 skillEvent.put("triggerKeywords", skill.getMetadata().getTriggerKeywords());
                 skillEvents.add(skillEvent);
             }
-            emit.accept(eventJson("skill_loaded", chatContext.sessionId(), traceId, 
-                Map.of("skills", skillEvents, "count", matchedSkills.size())));
+            emit.accept(eventJson("skill_loaded", chatContext.sessionId(), traceId,
+                    Map.of("skills", skillEvents, "count", matchedSkills.size())));
             log.info("ReactAgent loaded {} skills for session: {}", matchedSkills.size(), chatContext.sessionId());
         }
-        
+
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "thinking")));
-        log.info("[规划开始] sessionId={}, question={}", chatContext.sessionId(), chatContext.originalMessage());
+        log.info("[Planning Started] sessionId={}, question={}", chatContext.sessionId(), chatContext.originalMessage());
 
         for (int i = 1; i <= RagConstant.MAX_ROUNDS; i++) {
-            // 每一轮都让规划模型根据“问题 + 已有观察结果”决定下一步动作。
             ReactAgentDecision decision = decideNextAction(chatContext, matchedSkills, observations, i);
             log.info("[Round {}] action={}, tool={}", i, decision.getAction(), decision.getToolName());
 
             if ("final".equals(decision.getAction())) {
-                String answer = decision.getFinalAnswer();
                 emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "ready_to_answer", "round", i)));
-                return new ReactAgentPlanOutcome(events, observations, answer);
+                return new ReactAgentPlanOutcome(events, observations, decision.getFinalAnswer());
             }
 
             if (!"tool".equals(decision.getAction())) {
@@ -250,7 +219,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             }
 
             toolSignatureHistory.add(toolSignature);
-            executeToolRound(chatContext, traceId, emit, observations, emptyKnowledgeQueries, i, toolName, toolInput, decision);
+            executeToolRound(chatContext, traceId, emit, observations, emptyKnowledgeQueries, i, toolName, toolInput);
         }
 
         emit.accept(eventJson("status", chatContext.sessionId(), traceId,
@@ -265,8 +234,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                                   Set<String> emptyKnowledgeQueries,
                                   int round,
                                   String toolName,
-                                  Map<String, Object> toolInput,
-                                  ReactAgentDecision decision) {
+                                  Map<String, Object> toolInput) {
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_running", "round", round, "toolName", toolName)));
 
         Map<String, Object> toolCallPayload = new HashMap<>();
@@ -279,10 +247,9 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         }
         emit.accept(eventJson("tool_call", chatContext.sessionId(), traceId, toolCallPayload));
 
-        // 记录工具决策轨迹，但不要作为 SystemMessage 注入，避免抬高其指令优先级。
-        String decisionRecord = String.format("Agent决策：调用工具 %s，输入参数：%s", toolName, toJsonQuietly(toolInput));
+        String decisionRecord = String.format("Agent decision: call tool %s with input %s", toolName, toJsonQuietly(toolInput));
         chatContext.allMessages().add(new AssistantMessage(decisionRecord));
-        log.debug("[工具调用前] 已记录决策: {}", decisionRecord);
+        log.debug("[Before Tool Call] {}", decisionRecord);
 
         long toolStart = System.currentTimeMillis();
         ReactAgentToolService.ToolExecutionResult result = reactAgentToolService.execute(toolName, toolInput, chatContext.sessionId(), chatContext.userId());
@@ -309,18 +276,17 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 toolResponse = "Tool " + result.getToolName() + " returned summary: " + summarizedOutput;
             }
             observations.add(toolResponse);
-            log.info("[工具执行成功] tool={}, cost={}ms", toolName, costMs);
+            log.info("[Tool Success] tool={}, cost={}ms", toolName, costMs);
         } else {
             resultPayload.put("error", result.getErrorMessage());
             toolResponse = "Tool " + result.getToolName() + " failed: " + result.getErrorMessage();
             observations.add(toolResponse);
-            log.warn("[工具执行失败] tool={}, error={}", toolName, result.getErrorMessage());
+            log.warn("[Tool Failed] tool={}, error={}", toolName, result.getErrorMessage());
         }
 
-        // 工具调用后：使用UserMessage记录工具输出结果（避免OpenAI API的tool角色格式限制）
-        String toolResultMsg = String.format("工具 %s 执行结果：%s", toolName, toolResponse);
+        String toolResultMsg = String.format("Tool %s execution result: %s", toolName, toolResponse);
         chatContext.allMessages().add(new UserMessage(toolResultMsg));
-        log.debug("[工具调用后] 已记录执行结果, 当前上下文共{}条消息", chatContext.allMessages().size());
+        log.debug("[After Tool Call] totalMessages={}", chatContext.allMessages().size());
 
         emit.accept(eventJson("tool_result", chatContext.sessionId(), traceId, resultPayload));
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_done", "round", round)));
@@ -331,8 +297,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                                                 List<String> observations,
                                                 int round) {
         String toolList = toJsonQuietly(reactAgentToolService.toolSchemas());
-        
-        // 构建当前轮次的决策提示：ReAct SystemMessage → 历史上下文 → 工具调用记录 → 决策 UserMessage
+
         List<Message> decisionMessages = new ArrayList<>();
         decisionMessages.add(new SystemMessage(promptService.getReactPlanSystemPrompt()));
         decisionMessages.addAll(chatContext.allMessages());
@@ -345,9 +310,9 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 round
         );
         decisionMessages.add(new UserMessage(structuredPrompt));
-        
+
         logRecentDecisionMessages(round, decisionMessages);
-        
+
         try {
             ChatModel targetChatModel = llmProviderRegistry.getChatModel(chatContext.effectiveModel());
             ChatClient chatClient = ChatClient.builder(targetChatModel).build();
@@ -356,10 +321,10 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                     .options(ChatOptions.builder().model(chatContext.effectiveModel()).temperature(0.1).build())
                     .call()
                     .content();
-            log.info("[LLM决策响应] 长度={}, 完整内容={}", content.length(), content);
+            log.info("[LLM Decision Response] length={}, content={}", content.length(), content);
             return parseDecision(content);
         } catch (Exception e) {
-            log.error("[决策失败] {}", e.getMessage());
+            log.error("[Decision Failed] {}", e.getMessage());
             ReactAgentDecision decision = new ReactAgentDecision();
             decision.setAction("final");
             decision.setFinalAnswer(DEFAULT_PLAN_ERROR_ANSWER);
@@ -371,7 +336,6 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         ReactAgentDecision decision = new ReactAgentDecision();
         decision.setRawResponse(content);
         try {
-            // 兼容 markdown 代码块、自然语言包裹 JSON 等输出形式，只抽取真正的 JSON 指令部分。
             String json = extractJson(content);
             JsonNode node = objectMapper.readTree(json);
             decision.setAction(node.path("action").asText("final"));
@@ -383,7 +347,6 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             }
             decision.setFinalAnswer(node.path("finalAnswer").asText(null));
         } catch (Exception e) {
-            // 解析失败时兜底为最终回答，避免因为格式波动导致整轮对话中断。
             decision.setAction("final");
             decision.setFinalAnswer(content);
         }
@@ -396,25 +359,24 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         }
         String trimmed = text.trim();
         if (trimmed.startsWith("```")) {
-            // 去掉 ```json 包裹，保留代码块里的实际 JSON 内容
             int first = trimmed.indexOf('\n');
             int last = trimmed.lastIndexOf("```");
             if (first > -1 && last > first) {
                 trimmed = trimmed.substring(first + 1, last).trim();
             }
         }
-        
-        // 防御性检查：如果模型输出了数组格式（违反规则），只取第一个元素
+
         if (trimmed.startsWith("[")) {
-            log.warn("[格式违规] 模型输出了数组格式，只取第一个元素。原始输出：{}", trimmed.length() > 200 ? trimmed.substring(0, 200) + "..." : trimmed);
+            log.warn("[Format Violation] model returned array, extracting first object. raw={}",
+                    trimmed.length() > 200 ? trimmed.substring(0, 200) + "..." : trimmed);
             int firstObjStart = trimmed.indexOf('{');
             if (firstObjStart > 0) {
-                // 找到第一个对象的结束位置（简单计数花括号）
                 int depth = 0;
                 for (int i = firstObjStart; i < trimmed.length(); i++) {
                     char c = trimmed.charAt(i);
-                    if (c == '{') depth++;
-                    else if (c == '}') {
+                    if (c == '{') {
+                        depth++;
+                    } else if (c == '}') {
                         depth--;
                         if (depth == 0) {
                             return trimmed.substring(firstObjStart, i + 1);
@@ -423,8 +385,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 }
             }
         }
-        
-        // 只截取最外层 JSON 对象，忽略前后解释性文本
+
         int left = trimmed.indexOf('{');
         int right = trimmed.lastIndexOf('}');
         if (left >= 0 && right > left) {
@@ -434,7 +395,6 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     }
 
     private void streamTextDirectly(FluxSink<String> sink, String text, String sessionId, String traceId) {
-        // 最终回答统一拆成小块输出，保持前端与工具阶段一致的流式体验。
         sink.next(eventJson("status", sessionId, traceId, Map.of("stage", "finalizing")));
         int chunkSize = 25;
         for (int i = 0; i < text.length(); i += chunkSize) {
@@ -446,65 +406,18 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     private void saveMessageWithThinkingProcess(String sessionId, Long userId, String content, List<String> events) {
         String fullContent = content;
         if (events != null && !events.isEmpty()) {
-            // 通过注释标记包裹 thinking_process，既不影响原消息存储结构，也方便后续回放。
             String eventsJson = "[" + String.join(",", events) + "]";
             fullContent = "<!-- thinking_process_start -->" + eventsJson + "<!-- thinking_process_end -->\n" + content;
-            log.info("保存 ReactAgent assistant 消息: sessionId={}, withThinkingProcess=true, eventCount={}, contentLength={}",
+            log.info("Save ReactAgent assistant message: sessionId={}, withThinkingProcess=true, eventCount={}, contentLength={}",
                     sessionId, events.size(), content != null ? content.length() : 0);
         } else {
-            log.info("保存 ReactAgent assistant 消息: sessionId={}, withThinkingProcess=false, contentLength={}",
+            log.info("Save ReactAgent assistant message: sessionId={}, withThinkingProcess=false, contentLength={}",
                     sessionId, content != null ? content.length() : 0);
         }
         chatMessageService.saveAssistantMessage(sessionId, userId, fullContent);
     }
 
-    private void checkAndUpdateSummaryAsync(String sessionId, Long userId) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                ChatSession session = chatSessionMapper.selectByIdAndUserId(sessionId, userId);
-                if (session == null) {
-                    log.warn("跳过 ReactAgent 摘要刷新: sessionId={}, userId={}, reason=session_not_found", sessionId, userId);
-                    return;
-                }
-
-                long totalMessages = ragConversationSupport.countMessagesBySession(sessionId);
-                if (!shouldRefreshSummary(totalMessages)) {
-                    log.info("跳过 ReactAgent 摘要刷新: sessionId={}, totalMessages={}, reason=refresh_condition_not_met",
-                            sessionId, totalMessages);
-                    return;
-                }
-
-                log.info("Trigger ReactAgent rolling summary update: sessionId={}, totalMessages={}", sessionId, totalMessages);
-                int limit = calculateSummaryRefreshLimit(totalMessages);
-                List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, limit);
-                Collections.reverse(recentMessages);
-                log.info("ReactAgent 摘要刷新准备完成: sessionId={}, limit={}, recentMessages={}, oldSummaryLength={}",
-                        sessionId,
-                        limit,
-                        recentMessages.size(),
-                        session.getSummary() != null ? session.getSummary().length() : 0);
-
-                String newSummary = summaryService.refreshSummary(session.getSummary(), recentMessages);
-                chatSessionMapper.updateSummary(sessionId, newSummary);
-                log.info("ReactAgent rolling summary update completed: sessionId={}, newSummaryLength={}",
-                        sessionId,
-                        newSummary != null ? newSummary.length() : 0);
-            } catch (Exception e) {
-                log.error("ReactAgent rolling summary update failed: sessionId={}", sessionId, e);
-            }
-        });
-    }
-
-    private boolean shouldRefreshSummary(long totalMessages) {
-        return totalMessages > 0 && totalMessages % RagConstant.MEMORY_SIZE <= 1;
-    }
-
-    private int calculateSummaryRefreshLimit(long totalMessages) {
-        return RagConstant.MEMORY_SIZE + (int) (totalMessages % RagConstant.MEMORY_SIZE);
-    }
-
     private List<Message> buildFinalMessages(List<Message> allMessages) {
-        // 构建最终回答上下文：Final SystemMessage → 历史上下文 → 工具调用记录
         List<Message> messages = new ArrayList<>();
         messages.add(new SystemMessage(promptService.getReactAnswerSystemPrompt()));
         messages.addAll(allMessages);
@@ -525,7 +438,6 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         try {
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e) {
-            // 事件序列化失败时返回最小错误事件，避免把异常继续抛到流式链路里。
             return "{\"eventType\":\"error\",\"payload\":{\"message\":\"json serialization failed\"}}";
         }
     }
@@ -605,9 +517,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     }
 
     private String buildRepeatedToolObservation(String toolName, Map<String, Object> toolInput) {
-        return "工具 " + toolName + " 已用相同或等价参数执行过，参数="
-                + canonicalizeJson(toolInput)
-                + "。不要重复调用该工具；请直接利用已有结果回答，或改用其他工具处理未解决的子问题。";
+        return "Tool " + toolName + " already ran with equivalent input " + canonicalizeJson(toolInput)
+                + ". Do not call it again; answer with existing result or choose another tool.";
     }
 
     private String normalizeText(Object value) {
@@ -622,13 +533,11 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     private String formatObservationsForPrompt(List<String> observations) {
         if (observations == null || observations.isEmpty()) {
-            return "无";
+            return "none";
         }
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < observations.size(); i++) {
-            builder.append(i + 1)
-                    .append(". ")
-                    .append(observations.get(i));
+            builder.append(i + 1).append(". ").append(observations.get(i));
             if (i < observations.size() - 1) {
                 builder.append("\n");
             }
@@ -639,11 +548,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     private void logRecentDecisionMessages(int round, List<Message> decisionMessages) {
         List<String> recentSystemMessages = collectRecentMessages(decisionMessages, SystemMessage.class, 2);
         List<String> recentUserMessages = collectRecentMessages(decisionMessages, UserMessage.class, 2);
-        log.info("[Round {}] 决策上下文摘要: totalMessages={}, recentSystemMessages={}, recentUserMessages={}",
-                round,
-                decisionMessages.size(),
-                recentSystemMessages.size(),
-                recentUserMessages.size());
+        log.info("[Round {}] decisionContext: totalMessages={}, recentSystemMessages={}, recentUserMessages={}",
+                round, decisionMessages.size(), recentSystemMessages.size(), recentUserMessages.size());
         for (int i = 0; i < recentSystemMessages.size(); i++) {
             log.info("[Round {}][System {}] {}", round, i + 1, recentSystemMessages.get(i));
         }
@@ -675,24 +581,12 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return normalized.substring(0, maxLength) + "...";
     }
 
-    /**
-     * ReactAgent 对话上下文。
-     * 把一次请求里会反复用到的关键信息打包起来，避免主流程方法参数越来越多。
-     */
     private record ReactAgentChatContext(String sessionId, Long userId, String originalMessage, String effectiveModel, List<Message> allMessages) {
     }
 
-    /**
-     * 单轮规划执行结果。
-     * events 用于前端回放，observations 用于最终回答，finalAnswer 表示模型已经决定结束本轮流程。
-     */
     private record ReactAgentPlanOutcome(List<String> events, List<String> observations, String finalAnswer) {
     }
 
-    /**
-     * LLM 规划阶段输出的决策对象。
-     * 用来承接“继续调用工具”或“直接给最终答案”两类结果。
-     */
     private static class ReactAgentDecision {
         private String action;
         private String toolName;

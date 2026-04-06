@@ -31,7 +31,6 @@ public class SkillManager {
      */
     @PostConstruct
     public void initialize() {
-        log.info("Initializing Skills from directory: {}", skillsDirectory);
         refreshSkills();
     }
 

@@ -103,7 +103,7 @@ public class McpClientManager {
         try {
             loadConfig();
             if (currentConfig != null && currentConfig.getMcpServers() != null) {
-                log.info("MCP客户端管理器初始化完成（懒初始化模式）, 已加载{}个服务器配置",
+                log.info("MCP客户端管理器初始化完成（Lazy Loading）, 已加载{}个服务器配置",
                         currentConfig.getMcpServers().size());
             } else {
                 log.info("MCP客户端管理器: 无MCP服务器配置或配置为空");

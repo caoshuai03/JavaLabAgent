@@ -83,6 +83,9 @@ public class SummaryServiceImpl implements SummaryService {
 
     private String callLlmForSummary(String inputContent) {
         String systemPrompt = promptService.getSummarySystemPrompt();
+        if (systemPrompt == null || systemPrompt.isBlank()) {
+            throw new IllegalStateException("Summary system prompt is empty: " + com.cs.rag.service.impl.PromptRegistry.SUMMARY_SYSTEM);
+        }
         ChatModel chatModel = llmProviderRegistry.getChatModel(RagConstant.DEFAULT_EXTERNAL_LLM);
         ChatClient chatClient = ChatClient.builder(chatModel).build();
 

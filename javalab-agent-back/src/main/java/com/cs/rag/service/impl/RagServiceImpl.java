@@ -1,212 +1,132 @@
 package com.cs.rag.service.impl;
 
+import com.cs.rag.llm.LLMProviderRegistry;
 import com.cs.rag.pojo.entity.ChatMessage;
 import com.cs.rag.pojo.entity.ChatSession;
-import com.cs.rag.llm.LLMProviderRegistry;
-import com.cs.rag.mapper.ChatSessionMapper;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;
 import com.cs.rag.service.PromptService;
 import com.cs.rag.service.RagService;
-import com.cs.rag.service.SummaryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
-import static com.cs.rag.constant.RagConstant.MEMORY_SIZE;
+import java.util.UUID;
 
 @Slf4j
 @Service
 public class RagServiceImpl implements RagService {
 
-    private final VectorStore vectorStore;
     private final LLMProviderRegistry llmProviderRegistry;
     private final PromptService promptService;
     private final ChatSessionService chatSessionService;
-    private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageService chatMessageService;
     private final ObjectMapper objectMapper;
-    private final SummaryService summaryService;
     private final RagConversationSupport ragConversationSupport;
 
-    public RagServiceImpl(VectorStore vectorStore,
-                          LLMProviderRegistry llmProviderRegistry,
+    public RagServiceImpl(LLMProviderRegistry llmProviderRegistry,
                           PromptService promptService,
                           ChatSessionService chatSessionService,
-                          ChatSessionMapper chatSessionMapper,
                           ChatMessageService chatMessageService,
                           ObjectMapper objectMapper,
-                          SummaryService summaryService,
                           RagConversationSupport ragConversationSupport) {
-        this.vectorStore = vectorStore;
         this.llmProviderRegistry = llmProviderRegistry;
         this.promptService = promptService;
         this.chatSessionService = chatSessionService;
-        this.chatSessionMapper = chatSessionMapper;
         this.chatMessageService = chatMessageService;
         this.objectMapper = objectMapper;
-        this.summaryService = summaryService;
         this.ragConversationSupport = ragConversationSupport;
     }
 
     @Override
     public Flux<String> chat(String message, String sessionId, Long userId, String model) {
-        // 1. 准备会话并读取历史上下文，保证本轮对话有完整背景。
-        String finalSessionId = prepareSession(message, sessionId, userId);
-        List<Message> contextMessages = buildContext(finalSessionId, userId);
+        RagChatContext chatContext = prepareChatContext(message, sessionId, userId, model);
+        String traceId = UUID.randomUUID().toString().replace("-", "");
+        long start = System.currentTimeMillis();
 
-        // 2. 用户消息先落库，便于问题追踪和异常恢复。
+        log.info("RAG chat started: sessionId={}, traceId={}, model={}, originalMessageLength={}, enhancedMessageLength={}, ragDocCount={}",
+                chatContext.sessionId(),
+                traceId,
+                chatContext.effectiveModel(),
+                chatContext.originalMessage().length(),
+                chatContext.enhancedMessage().length(),
+                chatContext.ragDocuments().size());
+        logContextMessages("RAG context", chatContext.allMessages());
+
+        return streamResponse(chatContext, traceId, start);
+    }
+
+    private RagChatContext prepareChatContext(String message, String sessionId, Long userId, String model) {
+        String finalSessionId = ragConversationSupport.prepareSession(message, sessionId, userId);
+        List<Message> contextMessages = ragConversationSupport.buildContext(finalSessionId, userId);
+
         chatMessageService.saveUserMessage(finalSessionId, userId, message);
-        log.info("User message saved: sessionId={}, userId={}", finalSessionId, userId);
+        log.info("RAG user message saved: sessionId={}, userId={}", finalSessionId, userId);
 
-        // 3. 做知识检索，并拼出最终发给模型的用户消息。
-        List<Document> ragDocuments = performSearch(message);
-        String enhancedMessage = formatMessageWithDocs(message, ragDocuments);
+        List<Document> ragDocuments = ragConversationSupport.performSearch(message);
+        String enhancedMessage = ragConversationSupport.formatMessageWithDocs(message, ragDocuments);
+        String effectiveModel = ragConversationSupport.selectModel(model, ragDocuments);
 
-        // 4. 检索结果出来后，再确定真正使用的模型。
-        String effectiveModel = selectModel(model, ragDocuments);
-
-        // 5. 组装完整消息列表并开始流式输出。
         List<Message> allMessages = new ArrayList<>(contextMessages);
         allMessages.add(new UserMessage(enhancedMessage));
 
-        logChatHistory(allMessages);
-
-        return streamResponse(allMessages, effectiveModel, finalSessionId, userId)
-                .doOnComplete(() -> checkAndUpdateSummaryAsync(finalSessionId, userId));
+        return new RagChatContext(finalSessionId, userId, message, enhancedMessage, effectiveModel, ragDocuments, allMessages);
     }
 
-    // 摘要更新放到异步线程，避免阻塞主对话链路。
-    private void checkAndUpdateSummaryAsync(String sessionId, Long userId) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                ChatSession session = chatSessionMapper.selectByIdAndUserId(sessionId, userId);
-                if (session == null) {
-                    return;
-                }
-
-                long totalMessages = ragConversationSupport.countMessagesBySession(sessionId);
-                if (!shouldRefreshSummary(totalMessages)) {
-                    return;
-                }
-
-                log.info("Trigger rolling summary update: sessionId={}, totalMessages={}", sessionId, totalMessages);
-                int limit = calculateSummaryRefreshLimit(totalMessages);
-                List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, limit);
-                Collections.reverse(recentMessages);
-
-                String newSummary = summaryService.refreshSummary(session.getSummary(), recentMessages);
-                chatSessionMapper.updateSummary(sessionId, newSummary);
-                log.info("Rolling summary update completed: sessionId={}", sessionId);
-            } catch (Exception e) {
-                log.error("Rolling summary update failed: sessionId={}", sessionId, e);
-            }
-        });
-    }
-
-    // 保持原有触发规则不变，只是把意图表达得更清楚。
-    private boolean shouldRefreshSummary(long totalMessages) {
-        return totalMessages > 0 && totalMessages % MEMORY_SIZE <= 1;
-    }
-
-    // 保持原有容错策略，兼容消息总数奇偶偏移。
-    private int calculateSummaryRefreshLimit(long totalMessages) {
-        return MEMORY_SIZE + (int) (totalMessages % MEMORY_SIZE);
-    }
-
-    private String prepareSession(String message, String sessionId, Long userId) {
-        return ragConversationSupport.prepareSession(message, sessionId, userId);
-    }
-
-    /**
-     * 构建上下文：结合摘要和最近历史
-     */
-    private List<Message> buildContext(String sessionId, Long userId) {
-        return ragConversationSupport.buildContext(sessionId, userId);
-    }
-
-    /**
-     * 选择模型
-     */
-    private String selectModel(String model, List<Document> ragDocuments) {
-        return ragConversationSupport.selectModel(model, ragDocuments);
-    }
-
-    // 这里保留完整上下文日志，方便线上排查具体输入链路。
-    private void logChatHistory(List<Message> allMessages) {
-        StringBuilder messagesLog = new StringBuilder();
-        messagesLog.append("\n==================== Conversation Context START ====================\n");
-        for (int i = 0; i < allMessages.size(); i++) {
-            Message msg = allMessages.get(i);
-            String content = msg.getContent();
-            String role = msg.getMessageType().getValue();
-
-            messagesLog.append(String.format("[%d] Role: %s\n", i, role));
-            if (i == allMessages.size() - 1) {
-                messagesLog.append("Content (User Input): ").append(content).append("\n");
-            } else {
-                String displayContent = content.length() > 100
-                        ? content.substring(0, 100) + "...(length: " + content.length() + ")"
-                        : content;
-                messagesLog.append("Content: ").append(displayContent).append("\n");
-            }
-            messagesLog.append("--------------------------------------------------\n");
-        }
-        messagesLog.append("==================== Conversation Context END ====================\n");
-        log.info(messagesLog.toString());
-    }
-
-    // 统一处理模型流式输出，并在结束后落库 assistant 消息。
-    private Flux<String> streamResponse(List<Message> allMessages, String model, String sessionId, Long userId) {
-        long llmStartTime = System.currentTimeMillis();
-
-        ChatModel targetChatModel = llmProviderRegistry.getChatModel(model);
+    private Flux<String> streamResponse(RagChatContext chatContext, String traceId, long start) {
+        ChatModel targetChatModel = llmProviderRegistry.getChatModel(chatContext.effectiveModel());
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
-                .system(promptService.getRagAnswerSystemPrompt())
-                .messages(allMessages)
-                .options(ChatOptions.builder().model(model).build());
+                .messages(buildFinalMessages(chatContext.allMessages()))
+                .options(ChatOptions.builder().model(chatContext.effectiveModel()).build());
 
         StringBuilder fullResponse = new StringBuilder();
 
         return Flux.concat(
-                Flux.just("{\"sessionId\":\"" + sessionId + "\"}"),
+                Flux.just(eventJson("session", chatContext.sessionId(), traceId, Map.of("sessionId", chatContext.sessionId()))),
+                Flux.just(eventJson("status", chatContext.sessionId(), traceId, Map.of(
+                        "stage", "retrieval_completed",
+                        "ragDocCount", chatContext.ragDocuments().size(),
+                        "model", chatContext.effectiveModel()
+                ))),
+                Flux.just(eventJson("status", chatContext.sessionId(), traceId, Map.of(
+                        "stage", "answer_streaming"
+                ))),
                 promptSpec.stream()
                         .content()
                         .doOnNext(fullResponse::append)
                         .map(chunk -> {
-                            try {
-                                Map<String, String> data = new HashMap<>();
-                                data.put("content", chunk);
-                                return objectMapper.writeValueAsString(data);
-                            } catch (Exception e) {
-                                return "{\"content\":\"\"}";
-                            }
+                            return eventJson("token", chatContext.sessionId(), traceId, Map.of("content", chunk));
                         })
                         .doOnComplete(() -> {
                             String aiResponse = fullResponse.toString();
                             if (!aiResponse.isEmpty()) {
-                                chatMessageService.saveAssistantMessage(sessionId, userId, aiResponse);
-                                log.info("LLM stream completed: sessionId={}, length={}, cost={}ms",
-                                        sessionId, aiResponse.length(), System.currentTimeMillis() - llmStartTime);
+                                chatMessageService.saveAssistantMessage(chatContext.sessionId(), chatContext.userId(), aiResponse);
+                                ragConversationSupport.refreshSummaryAsync(chatContext.sessionId(), chatContext.userId(), "RAG");
+                                log.info("RAG chat completed: sessionId={}, traceId={}, answerLength={}, cost={}ms",
+                                        chatContext.sessionId(), traceId, aiResponse.length(), System.currentTimeMillis() - start);
                             }
                         })
-                        .doOnError(e -> log.error("LLM stream failed: sessionId={}, error={}", sessionId, e.getMessage()))
+                        .concatWithValues(eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)))
+                        .onErrorResume(e -> {
+                            log.error("RAG stream failed: sessionId={}, traceId={}", chatContext.sessionId(), traceId, e);
+                            return Flux.just(eventJson("error", chatContext.sessionId(), traceId, Map.of(
+                                    "message", e.getMessage() != null ? e.getMessage() : "Unknown error"
+                            )));
+                        })
         );
     }
 
@@ -244,5 +164,75 @@ public class RagServiceImpl implements RagService {
 
     private String formatMessageWithDocs(String message, List<Document> ragDocuments) {
         return ragConversationSupport.formatMessageWithDocs(message, ragDocuments);
+    }
+
+    private List<Message> buildFinalMessages(List<Message> allMessages) {
+        List<Message> messages = new ArrayList<>();
+        messages.add(new SystemMessage(promptService.getRagAnswerSystemPrompt()));
+        messages.addAll(allMessages);
+        return messages;
+    }
+
+    private void logContextMessages(String label, List<Message> messages) {
+        List<String> recentSystemMessages = collectRecentMessages(messages, SystemMessage.class, 2);
+        List<String> recentUserMessages = collectRecentMessages(messages, UserMessage.class, 3);
+        log.info("{}: totalMessages={}, recentSystemMessages={}, recentUserMessages={}",
+                label, messages.size(), recentSystemMessages.size(), recentUserMessages.size());
+        for (int i = 0; i < recentSystemMessages.size(); i++) {
+            log.info("[Context][System {}] {}", i + 1, recentSystemMessages.get(i));
+        }
+        for (int i = 0; i < recentUserMessages.size(); i++) {
+            log.info("[Context][User {}] {}", i + 1, recentUserMessages.get(i));
+        }
+    }
+
+    private List<String> collectRecentMessages(List<Message> messages, Class<? extends Message> targetType, int limit) {
+        List<String> collected = new ArrayList<>();
+        for (int i = messages.size() - 1; i >= 0 && collected.size() < limit; i--) {
+            Message message = messages.get(i);
+            if (targetType.isInstance(message)) {
+                collected.add(0, abbreviateLogContent(message.getContent()));
+            }
+        }
+        return collected;
+    }
+
+    private String abbreviateLogContent(String content) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+        String normalized = content.replaceAll("\\s+", " ").trim();
+        int maxLength = 400;
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength) + "...";
+    }
+
+    private String eventJson(String eventType, String sessionId, String traceId, Map<String, Object> payload) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("eventType", eventType);
+        data.put("sessionId", sessionId);
+        data.put("traceId", traceId);
+        data.put("ts", Instant.now().toEpochMilli());
+        data.put("payload", payload);
+        return toJsonQuietly(data);
+    }
+
+    private String toJsonQuietly(Object obj) {
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (Exception e) {
+            return "{\"eventType\":\"error\",\"payload\":{\"message\":\"json serialization failed\"}}";
+        }
+    }
+
+    private record RagChatContext(String sessionId,
+                                  Long userId,
+                                  String originalMessage,
+                                  String enhancedMessage,
+                                  String effectiveModel,
+                                  List<Document> ragDocuments,
+                                  List<Message> allMessages) {
     }
 }

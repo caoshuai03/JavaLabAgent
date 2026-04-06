@@ -322,8 +322,8 @@ const handleSend = async () => {
         const lastMessage = chatStore.getLastMessage(streamTask.conversationKey)
         if (!lastMessage) return
 
-        if (streamTask.mode === 'agent' && typeof data === 'object' && data.eventType) {
-          handleAgentEvent(data, streamTask, lastMessage)
+        if (typeof data === 'object' && data.eventType) {
+          handleStreamEvent(data, streamTask, lastMessage)
           return
         }
 
@@ -367,7 +367,7 @@ const handleSend = async () => {
   streamTasks.set(conversationKey, streamTask)
 }
 
-const handleAgentEvent = (event, streamTask, lastMessage) => {
+const handleStreamEvent = (event, streamTask, lastMessage) => {
   const payload = event.payload || {}
 
   if (event.eventType === 'session') {
@@ -383,19 +383,11 @@ const handleAgentEvent = (event, streamTask, lastMessage) => {
     return
   }
 
-  if (event.eventType === 'skill_loaded') {
-    chatStore.addToolEventToLastMessage({
-      eventType: event.eventType,
-      payload,
-      ts: event.ts,
-    }, streamTask.conversationKey)
-    return
-  }
-
   if (
     event.eventType === 'tool_call' ||
     event.eventType === 'tool_result' ||
-    event.eventType === 'status'
+    event.eventType === 'status' ||
+    event.eventType === 'skill_loaded'
   ) {
     chatStore.addToolEventToLastMessage({
       eventType: event.eventType,

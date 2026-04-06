@@ -8,6 +8,7 @@ import com.cs.rag.mapper.ChatSessionMapper;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;
 import com.cs.rag.service.PromptService;
+import com.cs.rag.service.SummaryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -23,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -44,17 +46,20 @@ public class RagConversationSupport {
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageService chatMessageService;
     private final PromptService promptService;
+    private final SummaryService summaryService;
 
     public RagConversationSupport(VectorStore vectorStore,
                                   ChatSessionService chatSessionService,
                                   ChatSessionMapper chatSessionMapper,
                                   ChatMessageService chatMessageService,
-                                  PromptService promptService) {
+                                  PromptService promptService,
+                                  SummaryService summaryService) {
         this.vectorStore = vectorStore;
         this.chatSessionService = chatSessionService;
         this.chatSessionMapper = chatSessionMapper;
         this.chatMessageService = chatMessageService;
         this.promptService = promptService;
+        this.summaryService = summaryService;
     }
 
     public String prepareSession(String message, String sessionId, Long userId) {
@@ -78,6 +83,10 @@ public class RagConversationSupport {
             log.info("历史会话: 保留最近{}条详细消息", recentMessages.size());
         }
         return contextMessages;
+    }
+
+    public void refreshSummaryAsync(String sessionId, Long userId, String source) {
+        CompletableFuture.runAsync(() -> refreshSummary(sessionId, userId, source));
     }
 
     public String selectModel(String model, List<Document> ragDocuments) {
@@ -195,5 +204,49 @@ public class RagConversationSupport {
     public long countMessagesBySession(String sessionId) {
         return chatMessageService.count(new LambdaQueryWrapper<ChatMessage>()
                 .apply("session_id = {0}::uuid", sessionId));
+    }
+
+    private void refreshSummary(String sessionId, Long userId, String source) {
+        try {
+            ChatSession session = chatSessionMapper.selectByIdAndUserId(sessionId, userId);
+            if (session == null) {
+                log.warn("Skip {} summary refresh: sessionId={}, userId={}, reason=session_not_found", source, sessionId, userId);
+                return;
+            }
+
+            long totalMessages = countMessagesBySession(sessionId);
+            if (!shouldRefreshSummary(totalMessages)) {
+                log.info("Skip {} summary refresh: sessionId={}, totalMessages={}, reason=refresh_condition_not_met",
+                        source, sessionId, totalMessages);
+                return;
+            }
+
+            int limit = calculateSummaryRefreshLimit(totalMessages);
+            List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, limit);
+            Collections.reverse(recentMessages);
+            log.info("{} summary refresh prepared: sessionId={}, limit={}, recentMessages={}, oldSummaryLength={}",
+                    source,
+                    sessionId,
+                    limit,
+                    recentMessages.size(),
+                    session.getSummary() != null ? session.getSummary().length() : 0);
+
+            String newSummary = summaryService.refreshSummary(session.getSummary(), recentMessages);
+            chatSessionMapper.updateSummary(sessionId, newSummary);
+            log.info("{} summary refresh completed: sessionId={}, newSummaryLength={}",
+                    source,
+                    sessionId,
+                    newSummary != null ? newSummary.length() : 0);
+        } catch (Exception e) {
+            log.error("{} summary refresh failed: sessionId={}", source, sessionId, e);
+        }
+    }
+
+    private boolean shouldRefreshSummary(long totalMessages) {
+        return totalMessages > 0 && totalMessages % MEMORY_SIZE <= 1;
+    }
+
+    private int calculateSummaryRefreshLimit(long totalMessages) {
+        return MEMORY_SIZE + (int) (totalMessages % MEMORY_SIZE);
     }
 }
