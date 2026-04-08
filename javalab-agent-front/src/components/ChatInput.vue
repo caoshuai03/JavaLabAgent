@@ -774,15 +774,15 @@ onUnmounted(() => {
     }
 
     &.stop-button {
-      width: 24px;
-      height: 24px;
+      width: 32px;
+      height: 32px;
       background-color: transparent;
       color: var(--text-primary);
       border: 1px solid var(--border-color);
 
       svg {
-        width: 1em;
-        height: 1em;
+        width: 1.2em;
+        height: 1.2em;
       }
 
       &:hover {
