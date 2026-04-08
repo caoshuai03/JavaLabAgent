@@ -28,7 +28,6 @@ public class ToolOutputSummarizer {
         JsonNode root = objectMapper.valueToTree(data);
         return switch (toolName) {
             case "knowledge_search" -> summarizeKnowledgeSearch(root);
-            case "session_recall" -> summarizeSessionRecall(root);
             default -> summarizeGenericTool(toolName, root);
         };
     }
@@ -74,34 +73,6 @@ public class ToolOutputSummarizer {
             summary.append("：").append(snippet);
         }
         return summary.toString();
-    }
-
-    private String summarizeSessionRecall(JsonNode root) {
-        JsonNode items = firstArray(root, "items", "memories", "records", "data", "list");
-        if (items != null && items.isArray() && !items.isEmpty()) {
-            StringBuilder summary = new StringBuilder("会话召回结果：共 ")
-                    .append(items.size())
-                    .append(" 条相关记忆。");
-            for (int i = 0; i < Math.min(items.size(), MAX_LIST_ITEMS); i++) {
-                JsonNode item = items.get(i);
-                summary.append("\n- 记忆")
-                        .append(i + 1)
-                        .append("：")
-                        .append(abbreviate(firstNonBlank(
-                                text(item, "summary"),
-                                text(item, "content"),
-                                text(item, "text"),
-                                "无摘要"
-                        )));
-            }
-            return summary.toString();
-        }
-        return "会话召回结果：" + abbreviate(firstNonBlank(
-                text(root, "summary"),
-                text(root, "content"),
-                text(root, "message"),
-                root.toString()
-        ));
     }
 
     private String summarizeGenericTool(String toolName, JsonNode root) {

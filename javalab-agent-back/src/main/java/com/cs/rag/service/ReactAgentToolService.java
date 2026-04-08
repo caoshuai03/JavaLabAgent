@@ -16,20 +16,52 @@ public interface ReactAgentToolService {
         private final boolean success;
         private final Object data;
         private final String errorMessage;
+        private final String summary;
+        private final String source;
+        private final long costMs;
+        private final Map<String, Object> metadata;
 
-        private ToolExecutionResult(String toolName, boolean success, Object data, String errorMessage) {
+        private ToolExecutionResult(String toolName,
+                                    boolean success,
+                                    Object data,
+                                    String errorMessage,
+                                    String summary,
+                                    String source,
+                                    long costMs,
+                                    Map<String, Object> metadata) {
             this.toolName = toolName;
             this.success = success;
             this.data = data;
             this.errorMessage = errorMessage;
+            this.summary = summary;
+            this.source = source;
+            this.costMs = costMs;
+            this.metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         }
 
         public static ToolExecutionResult success(String toolName, Object data) {
-            return new ToolExecutionResult(toolName, true, data, null);
+            return success(toolName, data, null, "builtin", 0L, Map.of());
         }
 
         public static ToolExecutionResult error(String toolName, String errorMessage) {
-            return new ToolExecutionResult(toolName, false, null, errorMessage);
+            return error(toolName, errorMessage, "builtin", 0L, Map.of());
+        }
+
+        public static ToolExecutionResult success(String toolName,
+                                                  Object data,
+                                                  String summary,
+                                                  String source,
+                                                  long costMs,
+                                                  Map<String, Object> metadata) {
+            return new ToolExecutionResult(toolName, true, data, null, summary, source, costMs, metadata);
+        }
+
+        public static ToolExecutionResult error(String toolName,
+                                                String errorMessage,
+                                                String source,
+                                                long costMs,
+                                                Map<String, Object> metadata) {
+            return new ToolExecutionResult(toolName, false, null, errorMessage, null, source, costMs, metadata);
         }
 
         public String getToolName() {
@@ -46,6 +78,22 @@ public interface ReactAgentToolService {
 
         public String getErrorMessage() {
             return errorMessage;
+        }
+
+        public String getSummary() {
+            return summary;
+        }
+
+        public String getSource() {
+            return source;
+        }
+
+        public long getCostMs() {
+            return costMs;
+        }
+
+        public Map<String, Object> getMetadata() {
+            return metadata;
         }
     }
 }

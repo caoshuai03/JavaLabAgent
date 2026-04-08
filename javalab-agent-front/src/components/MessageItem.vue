@@ -229,6 +229,7 @@ const toolCalls = computed(() => {
         type: 'tool',
         call: event,
         result: null,
+        hidden: false,
         round,
       }
       activeCalls.set(round, callItem)
@@ -243,24 +244,25 @@ const toolCalls = computed(() => {
         callItem.result = event
         activeCalls.delete(round)
       }
+      return
+    }
+
+    if (event.eventType === 'status' && event.payload?.stage === 'tool_done') {
+      const round = event.payload?.round
+      const callItem = activeCalls.get(round)
+      if (callItem && event.payload?.success === false) {
+        callItem.hidden = true
+        activeCalls.delete(round)
+      }
     }
   })
 
-  return list
+  return list.filter((item) => !item.hidden)
 })
 
 const getToolIconSvg = (toolName) => {
   if (toolName && toolName.startsWith('skill:')) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`
-  }
-  if (toolName === 'knowledge_search' || toolName === 'web_search') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>`
-  }
-  if (toolName === 'read_file' || toolName === 'write_file') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
-  }
-  if (toolName === 'run_command') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>`
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>`
 }
@@ -273,7 +275,12 @@ const getToolDisplayName = (toolName) => {
   const builtinNames = {
     knowledge_search: '知识检索',
     web_search: '搜索网页',
+    web_read: '网页读取',
     read_file: '读取',
+    file_read: '文件读取',
+    dir_list: '目录列表',
+    file_search: '文件搜索',
+    grep_search: '文本搜索',
     write_file: '写入',
     run_command: '运行命令',
     session_recall: '会话回顾',
@@ -296,7 +303,12 @@ const getToolSummary = (item) => {
     const builtinDescriptions = {
       knowledge_search: '查询知识库',
       web_search: '搜索网页',
+      web_read: '读取网页内容',
       read_file: '读取文件内容',
+      file_read: '读取工作区文件内容',
+      dir_list: '查看工作区目录内容',
+      file_search: '搜索工作区文件',
+      grep_search: '搜索工作区文本内容',
       write_file: '写入文件内容',
       run_command: '执行终端命令',
       session_recall: '回顾当前会话消息',

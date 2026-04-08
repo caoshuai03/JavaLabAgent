@@ -43,6 +43,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
     private static final String DEFAULT_PLAN_ERROR_ANSWER = "Planning failed. Falling back to direct answer.";
     private static final String DEFAULT_UNKNOWN_ERROR = "Unknown error";
+    private static final int MAX_TOTAL_WEB_READ_CALLS = 3;
+    private static final int MAX_SUCCESSFUL_WEB_READ_CALLS = 2;
 
     private final RagConversationSupport ragConversationSupport;
     private final LLMProviderRegistry llmProviderRegistry;
@@ -158,6 +160,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         List<String> observations = new ArrayList<>();
         Set<String> toolSignatureHistory = new LinkedHashSet<>();
         Set<String> emptyKnowledgeQueries = new LinkedHashSet<>();
+        int totalWebReadCalls = 0;
+        int successfulWebReadCalls = 0;
 
         java.util.function.Consumer<String> emit = event -> {
             sink.next(event);
@@ -218,8 +222,32 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 }
             }
 
+            if ("web_read".equals(toolName)
+                    && (totalWebReadCalls >= MAX_TOTAL_WEB_READ_CALLS || successfulWebReadCalls >= MAX_SUCCESSFUL_WEB_READ_CALLS)) {
+                emit.accept(eventJson("status", chatContext.sessionId(), traceId,
+                        Map.of("stage", "stop_excessive_web_read", "round", i, "toolName", toolName,
+                                "totalWebReadCalls", totalWebReadCalls, "successfulWebReadCalls", successfulWebReadCalls)));
+                observations.add("已有足够网页观察，请直接基于现有结果作答，不要继续猜测新的网页链接。");
+                return new ReactAgentPlanOutcome(events, observations, null);
+            }
+
             toolSignatureHistory.add(toolSignature);
-            executeToolRound(chatContext, traceId, emit, observations, emptyKnowledgeQueries, i, toolName, toolInput);
+            ReactAgentToolService.ToolExecutionResult result = executeToolRound(
+                    chatContext,
+                    traceId,
+                    emit,
+                    observations,
+                    emptyKnowledgeQueries,
+                    i,
+                    toolName,
+                    toolInput
+            );
+            if ("web_read".equals(toolName)) {
+                totalWebReadCalls++;
+                if (result.isSuccess()) {
+                    successfulWebReadCalls++;
+                }
+            }
         }
 
         emit.accept(eventJson("status", chatContext.sessionId(), traceId,
@@ -227,14 +255,14 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return new ReactAgentPlanOutcome(events, observations, null);
     }
 
-    private void executeToolRound(ReactAgentChatContext chatContext,
-                                  String traceId,
-                                  java.util.function.Consumer<String> emit,
-                                  List<String> observations,
-                                  Set<String> emptyKnowledgeQueries,
-                                  int round,
-                                  String toolName,
-                                  Map<String, Object> toolInput) {
+    private ReactAgentToolService.ToolExecutionResult executeToolRound(ReactAgentChatContext chatContext,
+                                                                        String traceId,
+                                                                        java.util.function.Consumer<String> emit,
+                                                                        List<String> observations,
+                                                                        Set<String> emptyKnowledgeQueries,
+                                                                        int round,
+                                                                        String toolName,
+                                                                        Map<String, Object> toolInput) {
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_running", "round", round, "toolName", toolName)));
 
         Map<String, Object> toolCallPayload = new HashMap<>();
@@ -245,7 +273,6 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         if (toolDesc != null) {
             toolCallPayload.put("description", toolDesc);
         }
-        emit.accept(eventJson("tool_call", chatContext.sessionId(), traceId, toolCallPayload));
 
         String decisionRecord = String.format("Agent decision: call tool %s with input %s", toolName, toJsonQuietly(toolInput));
         chatContext.allMessages().add(new AssistantMessage(decisionRecord));
@@ -260,6 +287,15 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         resultPayload.put("toolName", result.getToolName());
         resultPayload.put("success", result.isSuccess());
         resultPayload.put("costMs", costMs);
+        if (result.getCostMs() > 0) {
+            resultPayload.put("executorCostMs", result.getCostMs());
+        }
+        if (result.getSource() != null && !result.getSource().isBlank()) {
+            resultPayload.put("source", result.getSource());
+        }
+        if (result.getMetadata() != null && !result.getMetadata().isEmpty()) {
+            resultPayload.put("metadata", result.getMetadata());
+        }
 
         String toolResponse;
         if (result.isSuccess()) {
@@ -271,7 +307,10 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 }
                 toolResponse = "knowledge_search returned empty result for query: " + (query == null ? "" : query);
             } else {
-                String summarizedOutput = toolOutputSummarizer.summarize(result.getToolName(), result.getData());
+                String summarizedOutput = result.getSummary();
+                if (summarizedOutput == null || summarizedOutput.isBlank()) {
+                    summarizedOutput = toolOutputSummarizer.summarize(result.getToolName(), result.getData());
+                }
                 resultPayload.put("summary", summarizedOutput);
                 toolResponse = "Tool " + result.getToolName() + " returned summary: " + summarizedOutput;
             }
@@ -288,8 +327,18 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         chatContext.allMessages().add(new UserMessage(toolResultMsg));
         log.debug("[After Tool Call] totalMessages={}", chatContext.allMessages().size());
 
-        emit.accept(eventJson("tool_result", chatContext.sessionId(), traceId, resultPayload));
-        emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_done", "round", round)));
+        if (result.isSuccess()) {
+            emit.accept(eventJson("tool_call", chatContext.sessionId(), traceId, toolCallPayload));
+            emit.accept(eventJson("tool_result", chatContext.sessionId(), traceId, resultPayload));
+        }
+        emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of(
+                "stage", "tool_done",
+                "round", round,
+                "toolName", toolName,
+                "success", result.isSuccess(),
+                "visibleToUser", result.isSuccess()
+        )));
+        return result;
     }
 
     private ReactAgentDecision decideNextAction(ReactAgentChatContext chatContext,
@@ -321,7 +370,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                     .options(ChatOptions.builder().model(chatContext.effectiveModel()).temperature(0.1).build())
                     .call()
                     .content();
-            log.info("[LLM Decision Response] length={}, content={}", content.length(), content);
+            log.info("[LLM Decision Response] length={}, content={}", content == null ? 0 : content.length(), content);
             return parseDecision(content);
         } catch (Exception e) {
             log.error("[Decision Failed] {}", e.getMessage());
@@ -338,19 +387,41 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         try {
             String json = extractJson(content);
             JsonNode node = objectMapper.readTree(json);
-            decision.setAction(node.path("action").asText("final"));
-            decision.setToolName(node.path("toolName").asText(null));
+            String rawAction = node.path("action").asText("final");
+            String toolName = node.path("toolName").asText(null);
+            decision.setAction(rawAction);
+            decision.setToolName(toolName);
             JsonNode toolInputNode = node.path("toolInput");
             if (toolInputNode.isObject()) {
-                decision.setToolInput(objectMapper.convertValue(toolInputNode, new TypeReference<>() {
-                }));
+                decision.setToolInput(objectMapper.convertValue(toolInputNode, new TypeReference<>() {}));
             }
             decision.setFinalAnswer(node.path("finalAnswer").asText(null));
+            normalizeToolDecision(decision);
         } catch (Exception e) {
             decision.setAction("final");
             decision.setFinalAnswer(content);
         }
         return decision;
+    }
+
+    private void normalizeToolDecision(ReactAgentDecision decision) {
+        if (decision == null) {
+            return;
+        }
+        String action = decision.getAction();
+        String toolName = decision.getToolName();
+        if (toolName != null && !toolName.isBlank()) {
+            return;
+        }
+        if (action == null || action.isBlank() || "tool".equals(action) || "final".equals(action)) {
+            return;
+        }
+        if (reactAgentToolService.getToolDescription(action) == null) {
+            return;
+        }
+        decision.setAction("tool");
+        decision.setToolName(action);
+        log.warn("[Decision Normalized] normalized action '{}' to tool call", action);
     }
 
     private String extractJson(String text) {
@@ -392,15 +463,6 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             return trimmed.substring(left, right + 1);
         }
         return trimmed;
-    }
-
-    private void streamTextDirectly(FluxSink<String> sink, String text, String sessionId, String traceId) {
-        sink.next(eventJson("status", sessionId, traceId, Map.of("stage", "finalizing")));
-        int chunkSize = 25;
-        for (int i = 0; i < text.length(); i += chunkSize) {
-            int end = Math.min(i + chunkSize, text.length());
-            sink.next(eventJson("token", sessionId, traceId, Map.of("content", text.substring(i, end))));
-        }
     }
 
     private void saveMessageWithThinkingProcess(String sessionId, Long userId, String content, List<String> events) {
