@@ -1,12 +1,12 @@
 package com.cs.rag.service.impl;
 
-import com.cs.rag.llm.LLMProviderRegistry;
 import com.cs.rag.pojo.entity.ChatMessage;
 import com.cs.rag.pojo.entity.ChatSession;
+import com.cs.rag.service.AskService;
 import com.cs.rag.service.ChatMessageService;
 import com.cs.rag.service.ChatSessionService;
+import com.cs.rag.service.LLMProviderService;
 import com.cs.rag.service.PromptService;
-import com.cs.rag.service.RagService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -28,22 +28,22 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-public class RagServiceImpl implements RagService {
+public class AskServiceImpl implements AskService {
 
-    private final LLMProviderRegistry llmProviderRegistry;
+    private final LLMProviderService llmProviderService;
     private final PromptService promptService;
     private final ChatSessionService chatSessionService;
     private final ChatMessageService chatMessageService;
     private final ObjectMapper objectMapper;
     private final RagConversationSupport ragConversationSupport;
 
-    public RagServiceImpl(LLMProviderRegistry llmProviderRegistry,
+    public AskServiceImpl(LLMProviderService llmProviderService,
                           PromptService promptService,
                           ChatSessionService chatSessionService,
                           ChatMessageService chatMessageService,
                           ObjectMapper objectMapper,
                           RagConversationSupport ragConversationSupport) {
-        this.llmProviderRegistry = llmProviderRegistry;
+        this.llmProviderService = llmProviderService;
         this.promptService = promptService;
         this.chatSessionService = chatSessionService;
         this.chatMessageService = chatMessageService;
@@ -87,7 +87,7 @@ public class RagServiceImpl implements RagService {
     }
 
     private Flux<String> streamResponse(RagChatContext chatContext, String traceId, long start) {
-        ChatModel targetChatModel = llmProviderRegistry.getChatModel(chatContext.effectiveModel());
+        ChatModel targetChatModel = llmProviderService.getChatModel(chatContext.effectiveModel());
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
                 .messages(buildFinalMessages(chatContext.allMessages()))
@@ -236,3 +236,4 @@ public class RagServiceImpl implements RagService {
                                   List<Message> allMessages) {
     }
 }
+

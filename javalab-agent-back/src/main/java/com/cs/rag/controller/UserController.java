@@ -4,7 +4,7 @@ import com.cs.rag.common.*;
 import com.cs.rag.config.JwtProperties;
 import com.cs.rag.common.BaseContext;
 import com.cs.rag.constant.JwtClaimsConstant;
-import com.cs.rag.constant.UserMessageConstant;
+import com.cs.rag.constant.MessageConstant;
 import com.cs.rag.pojo.entity.User;
 import com.cs.rag.pojo.dto.PasswordDTO;
 import com.cs.rag.pojo.dto.UserDTO;
@@ -68,33 +68,33 @@ public class UserController {
         
         // 1. 校验新密码与确认密码是否一致
         if (!passwordDTO.getNewPassword().equals(passwordDTO.getConfirmPassword())) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.PASSWORD_NOT_MATCH);
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, MessageConstant.PASSWORD_NOT_MATCH);
         }
         
         // 2. 获取当前登录用户ID
         Long currentUserId = BaseContext.getCurrentId();
         log.info("当前登录用户ID：{}", currentUserId);
         if (currentUserId == null) {
-            return ResultUtils.error(ErrorCode.NOT_LOGIN_ERROR, UserMessageConstant.USER_NOT_LOGIN);
+            return ResultUtils.error(ErrorCode.NOT_LOGIN_ERROR, MessageConstant.USER_NOT_LOGIN);
         }
         
         // 3. 查询用户信息
         User user = userService.getById(currentUserId.intValue());
         if (user == null) {
-            return ResultUtils.error(ErrorCode.NOT_FOUND_ERROR, UserMessageConstant.ACCOUNT_NOT_FOUND);
+            return ResultUtils.error(ErrorCode.NOT_FOUND_ERROR, MessageConstant.ACCOUNT_NOT_FOUND);
         }
         
         // 4. 校验旧密码
         String encryptedOldPassword = DigestUtils.md5DigestAsHex(passwordDTO.getOldPassword().getBytes());
         if (!user.getPassword().equals(encryptedOldPassword)) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.OLD_PASSWORD_ERROR);
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, MessageConstant.OLD_PASSWORD_ERROR);
         }
         
         // 5. 更新密码
         user.setPassword(DigestUtils.md5DigestAsHex(passwordDTO.getNewPassword().getBytes()));
         userService.updateById(user);
         
-        return ResultUtils.success(UserMessageConstant.PASSWORD_EDIT_SUCCESS);
+        return ResultUtils.success(MessageConstant.PASSWORD_EDIT_SUCCESS);
     }
 
     /**
@@ -106,11 +106,11 @@ public class UserController {
         log.info("注册：{}", user.toString());
 
         if (userService.getByUsername(user.getUserName())) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, UserMessageConstant.USERNAME_ALREADY_EXISTS);
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, MessageConstant.USERNAME_ALREADY_EXISTS);
         } else {
             userService.register(user);
         }
-        return ResultUtils.success(UserMessageConstant.REGISTER_SUCCESS);
+        return ResultUtils.success(MessageConstant.REGISTER_SUCCESS);
     }
 
 
@@ -155,7 +155,7 @@ public class UserController {
     @PostMapping("/logout")
     @Operation(summary = "logout", description = "退出")
     public BaseResponse<String> logout() {
-        return ResultUtils.success(UserMessageConstant.LOGOUT_SUCCESS);
+        return ResultUtils.success(MessageConstant.LOGOUT_SUCCESS);
     }
 
     /**
@@ -169,7 +169,7 @@ public class UserController {
     public BaseResponse save(@RequestBody UserDTO userDTO) {
         log.info("新增员工：{}", userDTO);
         userService.saveUser(userDTO);
-        return ResultUtils.success(UserMessageConstant.ADD_SUCCESS);
+        return ResultUtils.success(MessageConstant.ADD_SUCCESS);
     }
 
     /**
@@ -198,7 +198,7 @@ public class UserController {
     public BaseResponse startOrStop(@PathVariable Integer status, Integer id) {
         log.info("启用禁用员工账号：{},{}", status, id);
         userService.startOrStop(status, id);
-        return ResultUtils.success(UserMessageConstant.DISABLE_SUCCESS);
+        return ResultUtils.success(MessageConstant.DISABLE_SUCCESS);
     }
 
     /**
@@ -232,7 +232,7 @@ public class UserController {
     public BaseResponse update(@RequestBody User user) {
         log.info("编辑员工信息：{}", user);
         userService.updateById(user);
-        return ResultUtils.success(UserMessageConstant.EDIT_SUCCESS);
+        return ResultUtils.success(MessageConstant.EDIT_SUCCESS);
     }
 
     /**
@@ -269,10 +269,10 @@ public class UserController {
         log.info("更新用户信息：{}", userDTO);
         try {
             userService.updateUser(userDTO);
-            return ResultUtils.success(UserMessageConstant.UPDATE_SUCCESS);
+            return ResultUtils.success(MessageConstant.UPDATE_SUCCESS);
         } catch (Exception e) {
             log.error("更新用户信息失败：", e);
-            return ResultUtils.error(ErrorCode.UPDATE_ERROR, UserMessageConstant.UPDATE_FAILED + ": " + e.getMessage());
+            return ResultUtils.error(ErrorCode.UPDATE_ERROR, MessageConstant.UPDATE_FAILED + ": " + e.getMessage());
         }
     }
 }

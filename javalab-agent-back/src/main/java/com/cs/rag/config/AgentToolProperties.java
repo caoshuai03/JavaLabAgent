@@ -7,8 +7,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Agent 工具运行时配置。
- * 用于控制工作区根目录、只读工具的结果截断策略以及网页访问范围。
+ * Agent 工具运行配置。
+ * 统一管理工作区边界、读写限制和终端执行约束。
  */
 @Component
 @ConfigurationProperties(prefix = "cs.agent.tools")
@@ -16,35 +16,88 @@ public class AgentToolProperties {
 
     /**
      * 工作区根目录。
-     * 未显式配置时，会在策略层根据当前启动目录自动推断。
+     * 为空时由策略层根据当前进程目录自动推断。
      */
     private String workspaceRoot;
 
     /**
-     * 允许访问的网页 Host 白名单。
-     * 为空时表示允许访问任意 http/https Host。
+     * Web 工具允许访问的域名列表。
+     * 为空表示不做域名级限制。
      */
     private List<String> allowedWebHosts = new ArrayList<>();
 
-    /** 文件读取最大返回行数。 */
+    /** `file_read` 最多返回的行数。 */
     private int maxReadLines = 200;
 
-    /** 文件读取最大返回字符数。 */
+    /** 文本读取和网页读取最多返回的字符数。 */
     private int maxReadCharacters = 12000;
 
-    /** 搜索类工具的最大返回条数。 */
+    /** 搜索类工具最多返回的条目数。 */
     private int maxSearchResults = 50;
-
-    /** 目录遍历默认最大深度。 */
-    private int maxDirectoryDepth = 6;
 
     /** 文件搜索默认最大深度。 */
     private int maxFileSearchDepth = 8;
 
-    /** grep 搜索最多扫描的文件数量。 */
+    /** `grep_search` 最多扫描的文件数。 */
     private int maxGrepFiles = 200;
 
-    /** 网页读取超时时间（秒）。 */
+    /** `file_write` 最多允许写入的字符数。 */
+    private int maxWriteCharacters = 24000;
+
+    /** `terminal_exec` 允许的最长执行秒数。 */
+    private int terminalTimeoutSeconds = 20;
+
+    /** `terminal_exec` 最多返回的输出字符数。 */
+    private int maxTerminalOutputCharacters = 12000;
+
+    /**
+     * `terminal_exec` 禁止执行的命令列表。
+     * 未出现在列表中的命令默认允许执行，但仍会继续经过其他安全规则校验。
+     */
+    private List<String> blockedTerminalCommands = new ArrayList<>(List.of(
+            "cmd",
+            "powershell",
+            "pwsh",
+            "bash",
+            "sh",
+            "zsh",
+            "rm",
+            "rmdir",
+            "rd",
+            "del",
+            "erase",
+            "format",
+            "diskpart",
+            "shutdown",
+            "reboot",
+            "halt",
+            "poweroff",
+            "taskkill",
+            "kill",
+            "pkill",
+            "reg",
+            "regedit",
+            "netsh",
+            "sc",
+            "bcdedit",
+            "takeown",
+            "icacls",
+            "sudo",
+            "runas",
+            "curl",
+            "wget",
+            "ssh",
+            "scp",
+            "sftp",
+            "ftp",
+            "telnet",
+            "dd",
+            "mkfs",
+            "mount",
+            "umount"
+    ));
+
+    /** `web_read` 和 `web_search` 的超时时间，单位秒。 */
     private int webReadTimeoutSeconds = 10;
 
     public String getWorkspaceRoot() {
@@ -87,14 +140,6 @@ public class AgentToolProperties {
         this.maxSearchResults = maxSearchResults;
     }
 
-    public int getMaxDirectoryDepth() {
-        return maxDirectoryDepth;
-    }
-
-    public void setMaxDirectoryDepth(int maxDirectoryDepth) {
-        this.maxDirectoryDepth = maxDirectoryDepth;
-    }
-
     public int getMaxFileSearchDepth() {
         return maxFileSearchDepth;
     }
@@ -109,6 +154,38 @@ public class AgentToolProperties {
 
     public void setMaxGrepFiles(int maxGrepFiles) {
         this.maxGrepFiles = maxGrepFiles;
+    }
+
+    public int getMaxWriteCharacters() {
+        return maxWriteCharacters;
+    }
+
+    public void setMaxWriteCharacters(int maxWriteCharacters) {
+        this.maxWriteCharacters = maxWriteCharacters;
+    }
+
+    public int getTerminalTimeoutSeconds() {
+        return terminalTimeoutSeconds;
+    }
+
+    public void setTerminalTimeoutSeconds(int terminalTimeoutSeconds) {
+        this.terminalTimeoutSeconds = terminalTimeoutSeconds;
+    }
+
+    public int getMaxTerminalOutputCharacters() {
+        return maxTerminalOutputCharacters;
+    }
+
+    public void setMaxTerminalOutputCharacters(int maxTerminalOutputCharacters) {
+        this.maxTerminalOutputCharacters = maxTerminalOutputCharacters;
+    }
+
+    public List<String> getBlockedTerminalCommands() {
+        return blockedTerminalCommands;
+    }
+
+    public void setBlockedTerminalCommands(List<String> blockedTerminalCommands) {
+        this.blockedTerminalCommands = blockedTerminalCommands;
     }
 
     public int getWebReadTimeoutSeconds() {

@@ -4,7 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.cs.rag.common.BaseResponse;
 import com.cs.rag.common.ErrorCode;
 import com.cs.rag.common.ResultUtils;
-import com.cs.rag.constant.FileMessageConstant;
+import com.cs.rag.constant.MessageConstant;
 import com.cs.rag.pojo.entity.AliOssFile;
 import com.cs.rag.service.AliOssFileService;
 import com.cs.rag.service.KnowledgeService;
@@ -60,7 +60,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     public BaseResponse uploadFiles(List<MultipartFile> files) {
         // 参数校验
         if (files == null || files.isEmpty()) {
-            return ResultUtils.error(ErrorCode.PARAMS_ERROR, FileMessageConstant.FILE_REQUIRED);
+            return ResultUtils.error(ErrorCode.PARAMS_ERROR, MessageConstant.FILE_REQUIRED);
         }
 
         // 记录失败的文件及原因
@@ -107,7 +107,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
         // 根据处理结果返回不同响应
         if (failedFiles.isEmpty()) {
-            return ResultUtils.success(FileMessageConstant.FILE_UPLOAD_SUCCESS);
+            return ResultUtils.success(MessageConstant.FILE_UPLOAD_SUCCESS);
         } else if (failedFiles.size() == files.size()) {
             // 全部失败
             String errorMsg = "文件上传失败: " + String.join(", ", failedFiles);

@@ -1,6 +1,6 @@
 package com.cs.rag.service;
 
-import com.cs.rag.skill.SkillInfo;
+import com.cs.rag.pojo.entity.SkillInfo;
 
 import java.util.List;
 

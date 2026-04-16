@@ -107,6 +107,52 @@ cs:
     user-secret-key: cssecret
     user-ttl: 86400000
     user-token-name: Authorization
+  agent:
+    tools:
+      max-write-characters: 24000
+      terminal-timeout-seconds: 20
+      max-terminal-output-characters: 12000
+      blocked-terminal-commands:
+        - cmd
+        - powershell
+        - pwsh
+        - bash
+        - sh
+        - zsh
+        - rm
+        - rmdir
+        - rd
+        - del
+        - erase
+        - format
+        - diskpart
+        - shutdown
+        - reboot
+        - halt
+        - poweroff
+        - taskkill
+        - kill
+        - pkill
+        - reg
+        - regedit
+        - netsh
+        - sc
+        - bcdedit
+        - takeown
+        - icacls
+        - sudo
+        - runas
+        - curl
+        - wget
+        - ssh
+        - scp
+        - sftp
+        - ftp
+        - telnet
+        - dd
+        - mkfs
+        - mount
+        - umount
 
 # ==================== Skills 配置 ====================
 skills:

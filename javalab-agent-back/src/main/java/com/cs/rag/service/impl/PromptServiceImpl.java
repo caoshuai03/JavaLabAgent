@@ -1,7 +1,7 @@
 package com.cs.rag.service.impl;
 
+import com.cs.rag.pojo.entity.SkillInfo;
 import com.cs.rag.service.PromptService;
-import com.cs.rag.skill.SkillInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 

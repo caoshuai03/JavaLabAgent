@@ -59,7 +59,7 @@ services:
     ports:
       - "8989:8989"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8989/actuator/health"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8989/actuator/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -74,7 +74,7 @@ services:
     ports:
       - "80:80"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

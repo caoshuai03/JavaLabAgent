@@ -1,13 +1,13 @@
 package com.cs.rag.service.impl;
 
 import com.cs.rag.constant.RagConstant;
-import com.cs.rag.llm.LLMProviderRegistry;
+import com.cs.rag.pojo.entity.SkillInfo;
+import com.cs.rag.service.AgentService;
 import com.cs.rag.service.ChatMessageService;
+import com.cs.rag.service.LLMProviderService;
 import com.cs.rag.service.PromptService;
-import com.cs.rag.service.ReactAgentService;
-import com.cs.rag.service.ReactAgentToolService;
-import com.cs.rag.skill.SkillInfo;
-import com.cs.rag.skill.SkillMatchService;
+import com.cs.rag.service.SkillService;
+import com.cs.rag.service.ToolService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,7 +39,7 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-public class ReactAgentServiceImpl implements ReactAgentService {
+public class AgentServiceImpl implements AgentService {
 
     private static final String DEFAULT_PLAN_ERROR_ANSWER = "Planning failed. Falling back to direct answer.";
     private static final String DEFAULT_UNKNOWN_ERROR = "Unknown error";
@@ -47,28 +47,28 @@ public class ReactAgentServiceImpl implements ReactAgentService {
     private static final int MAX_SUCCESSFUL_WEB_READ_CALLS = 2;
 
     private final RagConversationSupport ragConversationSupport;
-    private final LLMProviderRegistry llmProviderRegistry;
+    private final LLMProviderService llmProviderService;
     private final PromptService promptService;
     private final ChatMessageService chatMessageService;
-    private final ReactAgentToolService reactAgentToolService;
-    private final SkillMatchService skillMatchService;
+    private final ToolService toolService;
+    private final SkillService skillService;
     private final ToolOutputSummarizer toolOutputSummarizer;
     private final ObjectMapper objectMapper;
 
-    public ReactAgentServiceImpl(RagConversationSupport ragConversationSupport,
-                                 LLMProviderRegistry llmProviderRegistry,
+    public AgentServiceImpl(RagConversationSupport ragConversationSupport,
+                                 LLMProviderService llmProviderService,
                                  PromptService promptService,
                                  ChatMessageService chatMessageService,
-                                 ReactAgentToolService reactAgentToolService,
-                                 SkillMatchService skillMatchService,
+                                 ToolService toolService,
+                                 SkillService skillService,
                                  ToolOutputSummarizer toolOutputSummarizer,
                                  ObjectMapper objectMapper) {
         this.ragConversationSupport = ragConversationSupport;
-        this.llmProviderRegistry = llmProviderRegistry;
+        this.llmProviderService = llmProviderService;
         this.promptService = promptService;
         this.chatMessageService = chatMessageService;
-        this.reactAgentToolService = reactAgentToolService;
-        this.skillMatchService = skillMatchService;
+        this.toolService = toolService;
+        this.skillService = skillService;
         this.toolOutputSummarizer = toolOutputSummarizer;
         this.objectMapper = objectMapper;
     }
@@ -125,7 +125,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         List<Message> finalMessages = buildFinalMessages(chatContext.allMessages());
         log.info("[Final Answer] totalMessages={}", finalMessages.size());
 
-        ChatModel targetChatModel = llmProviderRegistry.getChatModel(chatContext.effectiveModel());
+        ChatModel targetChatModel = llmProviderService.getChatModel(chatContext.effectiveModel());
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
                 .messages(finalMessages)
@@ -170,7 +170,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
 
         emit.accept(eventJson("session", chatContext.sessionId(), traceId, Map.of("sessionId", chatContext.sessionId())));
 
-        List<SkillInfo> matchedSkills = skillMatchService.matchSkills(chatContext.originalMessage());
+        List<SkillInfo> matchedSkills = skillService.matchSkills(chatContext.originalMessage());
         if (!matchedSkills.isEmpty()) {
             List<Map<String, Object>> skillEvents = new ArrayList<>();
             for (SkillInfo skill : matchedSkills) {
@@ -227,12 +227,12 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                 emit.accept(eventJson("status", chatContext.sessionId(), traceId,
                         Map.of("stage", "stop_excessive_web_read", "round", i, "toolName", toolName,
                                 "totalWebReadCalls", totalWebReadCalls, "successfulWebReadCalls", successfulWebReadCalls)));
-                observations.add("已有足够网页观察，请直接基于现有结果作答，不要继续猜测新的网页链接。");
+                observations.add("已经有足够的网页观察，请直接基于现有结果作答，不要继续猜测新的网页链接。");
                 return new ReactAgentPlanOutcome(events, observations, null);
             }
 
             toolSignatureHistory.add(toolSignature);
-            ReactAgentToolService.ToolExecutionResult result = executeToolRound(
+            ToolService.ToolExecutionResult result = executeToolRound(
                     chatContext,
                     traceId,
                     emit,
@@ -255,21 +255,21 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return new ReactAgentPlanOutcome(events, observations, null);
     }
 
-    private ReactAgentToolService.ToolExecutionResult executeToolRound(ReactAgentChatContext chatContext,
-                                                                        String traceId,
-                                                                        java.util.function.Consumer<String> emit,
-                                                                        List<String> observations,
-                                                                        Set<String> emptyKnowledgeQueries,
-                                                                        int round,
-                                                                        String toolName,
-                                                                        Map<String, Object> toolInput) {
+    private ToolService.ToolExecutionResult executeToolRound(ReactAgentChatContext chatContext,
+                                                                       String traceId,
+                                                                       java.util.function.Consumer<String> emit,
+                                                                       List<String> observations,
+                                                                       Set<String> emptyKnowledgeQueries,
+                                                                       int round,
+                                                                       String toolName,
+                                                                       Map<String, Object> toolInput) {
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_running", "round", round, "toolName", toolName)));
 
         Map<String, Object> toolCallPayload = new HashMap<>();
         toolCallPayload.put("round", round);
         toolCallPayload.put("toolName", toolName);
         toolCallPayload.put("input", toolInput);
-        String toolDesc = reactAgentToolService.getToolDescription(toolName);
+        String toolDesc = toolService.getToolDescription(toolName);
         if (toolDesc != null) {
             toolCallPayload.put("description", toolDesc);
         }
@@ -279,7 +279,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         log.debug("[Before Tool Call] {}", decisionRecord);
 
         long toolStart = System.currentTimeMillis();
-        ReactAgentToolService.ToolExecutionResult result = reactAgentToolService.execute(toolName, toolInput, chatContext.sessionId(), chatContext.userId());
+        ToolService.ToolExecutionResult result = toolService.execute(toolName, toolInput, chatContext.sessionId(), chatContext.userId());
         long costMs = System.currentTimeMillis() - toolStart;
 
         Map<String, Object> resultPayload = new HashMap<>();
@@ -312,7 +312,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                     summarizedOutput = toolOutputSummarizer.summarize(result.getToolName(), result.getData());
                 }
                 resultPayload.put("summary", summarizedOutput);
-                toolResponse = "Tool " + result.getToolName() + " returned summary: " + summarizedOutput;
+                toolResponse = summarizedOutput;
             }
             observations.add(toolResponse);
             log.info("[Tool Success] tool={}, cost={}ms", toolName, costMs);
@@ -327,16 +327,14 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         chatContext.allMessages().add(new UserMessage(toolResultMsg));
         log.debug("[After Tool Call] totalMessages={}", chatContext.allMessages().size());
 
-        if (result.isSuccess()) {
-            emit.accept(eventJson("tool_call", chatContext.sessionId(), traceId, toolCallPayload));
-            emit.accept(eventJson("tool_result", chatContext.sessionId(), traceId, resultPayload));
-        }
+        emit.accept(eventJson("tool_call", chatContext.sessionId(), traceId, toolCallPayload));
+        emit.accept(eventJson("tool_result", chatContext.sessionId(), traceId, resultPayload));
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of(
                 "stage", "tool_done",
                 "round", round,
                 "toolName", toolName,
                 "success", result.isSuccess(),
-                "visibleToUser", result.isSuccess()
+                "visibleToUser", true
         )));
         return result;
     }
@@ -345,7 +343,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
                                                 List<SkillInfo> matchedSkills,
                                                 List<String> observations,
                                                 int round) {
-        String toolList = toJsonQuietly(reactAgentToolService.toolSchemas());
+        String toolList = toJsonQuietly(toolService.toolSchemas());
 
         List<Message> decisionMessages = new ArrayList<>();
         decisionMessages.add(new SystemMessage(promptService.getReactPlanSystemPrompt()));
@@ -363,7 +361,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         logRecentDecisionMessages(round, decisionMessages);
 
         try {
-            ChatModel targetChatModel = llmProviderRegistry.getChatModel(chatContext.effectiveModel());
+            ChatModel targetChatModel = llmProviderService.getChatModel(chatContext.effectiveModel());
             ChatClient chatClient = ChatClient.builder(targetChatModel).build();
             String content = chatClient.prompt()
                     .messages(decisionMessages)
@@ -393,7 +391,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
             decision.setToolName(toolName);
             JsonNode toolInputNode = node.path("toolInput");
             if (toolInputNode.isObject()) {
-                decision.setToolInput(objectMapper.convertValue(toolInputNode, new TypeReference<>() {}));
+                decision.setToolInput(objectMapper.convertValue(toolInputNode, new TypeReference<>() {
+                }));
             }
             decision.setFinalAnswer(node.path("finalAnswer").asText(null));
             normalizeToolDecision(decision);
@@ -416,7 +415,7 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         if (action == null || action.isBlank() || "tool".equals(action) || "final".equals(action)) {
             return;
         }
-        if (reactAgentToolService.getToolDescription(action) == null) {
+        if (toolService.getToolDescription(action) == null) {
             return;
         }
         decision.setAction("tool");
@@ -643,7 +642,8 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         return normalized.substring(0, maxLength) + "...";
     }
 
-    private record ReactAgentChatContext(String sessionId, Long userId, String originalMessage, String effectiveModel, List<Message> allMessages) {
+    private record ReactAgentChatContext(String sessionId, Long userId, String originalMessage, String effectiveModel,
+                                         List<Message> allMessages) {
     }
 
     private record ReactAgentPlanOutcome(List<String> events, List<String> observations, String finalAnswer) {
@@ -697,3 +697,4 @@ public class ReactAgentServiceImpl implements ReactAgentService {
         }
     }
 }
+

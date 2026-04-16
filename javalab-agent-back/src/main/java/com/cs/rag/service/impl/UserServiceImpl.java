@@ -2,10 +2,9 @@ package com.cs.rag.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.cs.rag.common.PageResult;
-import com.cs.rag.constant.PasswordConstant;
-import com.cs.rag.constant.StatusConstant;
-import com.cs.rag.constant.UserMessageConstant;
 import com.cs.rag.common.BaseContext;
+import com.cs.rag.constant.MessageConstant;
+import com.cs.rag.constant.PasswordConstant;
 import com.cs.rag.pojo.entity.User;
 import com.cs.rag.exception.AccountLockedException;
 import com.cs.rag.exception.AccountNotFoundException;
@@ -46,7 +45,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         //2、处理各种异常情况（用户名不存在、密码不对、账号被锁定）
         if (user == null) {
             //账号不存在
-            throw new AccountNotFoundException(UserMessageConstant.ACCOUNT_NOT_FOUND);
+            throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);
         }
 
         //密码比对
@@ -54,12 +53,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         password = DigestUtils.md5DigestAsHex(password.getBytes());
         if (!password.equals(user.getPassword())) {
             //密码错误
-            throw new PasswordErrorException(UserMessageConstant.PASSWORD_ERROR);
+            throw new PasswordErrorException(MessageConstant.PASSWORD_ERROR);
         }
 
-        if (user.getStatus() == StatusConstant.DISABLE) {
+        if (user.getStatus() == MessageConstant.DISABLE) {
             //账号被锁定
-            throw new AccountLockedException(UserMessageConstant.ACCOUNT_LOCKED);
+            throw new AccountLockedException(MessageConstant.ACCOUNT_LOCKED);
         }
 
         //3、返回实体对象
@@ -74,7 +73,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         BeanUtils.copyProperties(userDTO, user);
 
         //设置账号的状态，默认正常状态 1表示正常 0表示锁定
-        user.setStatus(StatusConstant.ENABLE);
+        user.setStatus(MessageConstant.ENABLE);
 
         //设置密码，默认密码123456
         user.setPassword(DigestUtils.md5DigestAsHex(PasswordConstant.DEFAULT_PASSWORD.getBytes()));
@@ -124,7 +123,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 检查更新结果
         Integer result = userMapper.updateUser(user);
         if (result == null || result <= 0) {
-            throw new RuntimeException(UserMessageConstant.USER_UPDATE_FAILED);
+            throw new RuntimeException(MessageConstant.USER_UPDATE_FAILED);
         }
     }
 
@@ -133,7 +132,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User userResult = new User();
         BeanUtils.copyProperties(user, userResult);
         //设置账号的状态，默认正常状态 1表示正常 0表示锁定
-        userResult.setStatus(StatusConstant.ENABLE);
+        userResult.setStatus(MessageConstant.ENABLE);
         //设置密码，使用用户注册时提供的密码
         userResult.setPassword(DigestUtils.md5DigestAsHex(user.getPassword().getBytes()));
         

@@ -124,7 +124,6 @@ public class RagConversationSupport {
             }
             return promptService.buildRagUserMessage(message, buildKnowledgeBlock(ragDocuments));
         }
-        log.info("未检索到相关文档");
         return promptService.buildRagUserMessage(message, "");
     }
 

@@ -2,8 +2,8 @@ package com.cs.rag.service.impl;
 
 import com.cs.rag.constant.RagConstant;
 import com.cs.rag.pojo.entity.ChatMessage;
-import com.cs.rag.llm.LLMProviderRegistry;
 import com.cs.rag.service.ChatMessageService;
+import com.cs.rag.service.LLMProviderService;
 import com.cs.rag.service.PromptService;
 import com.cs.rag.service.SummaryService;
 import lombok.extern.slf4j.Slf4j;
@@ -20,14 +20,14 @@ import java.util.stream.Collectors;
 @Service
 public class SummaryServiceImpl implements SummaryService {
 
-    private final LLMProviderRegistry llmProviderRegistry;
+    private final LLMProviderService llmProviderService;
     private final PromptService promptService;
     private final ChatMessageService chatMessageService;
 
-    public SummaryServiceImpl(LLMProviderRegistry llmProviderRegistry,
+    public SummaryServiceImpl(LLMProviderService llmProviderService,
                               PromptService promptService,
                               ChatMessageService chatMessageService) {
-        this.llmProviderRegistry = llmProviderRegistry;
+        this.llmProviderService = llmProviderService;
         this.promptService = promptService;
         this.chatMessageService = chatMessageService;
     }
@@ -65,7 +65,7 @@ public class SummaryServiceImpl implements SummaryService {
         }
     }
 
-    // 摘要输入统一走同一套消息转换逻辑，避免格式前后不一致。
+    // 
     private String buildChatHistory(List<ChatMessage> messages) {
         List<Message> aiMessages = chatMessageService.convertToAiMessages(messages);
         return aiMessages.stream()
@@ -73,7 +73,7 @@ public class SummaryServiceImpl implements SummaryService {
                 .collect(Collectors.joining("\n"));
     }
 
-    // 滚动摘要继续沿用“旧摘要 + 新对话”的合并方式。
+    // 
     private String buildRefreshInput(String oldSummary, String newChatHistory) {
         if (oldSummary != null && !oldSummary.isEmpty()) {
             return String.format("【已有上下文摘要】\n%s\n\n【新发生的对话】\n%s", oldSummary, newChatHistory);
@@ -86,7 +86,7 @@ public class SummaryServiceImpl implements SummaryService {
         if (systemPrompt == null || systemPrompt.isBlank()) {
             throw new IllegalStateException("Summary system prompt is empty: " + com.cs.rag.service.impl.PromptRegistry.SUMMARY_SYSTEM);
         }
-        ChatModel chatModel = llmProviderRegistry.getChatModel(RagConstant.DEFAULT_EXTERNAL_LLM);
+        ChatModel chatModel = llmProviderService.getChatModel(RagConstant.DEFAULT_EXTERNAL_LLM);
         ChatClient chatClient = ChatClient.builder(chatModel).build();
 
         String summary = chatClient.prompt()
@@ -100,3 +100,4 @@ public class SummaryServiceImpl implements SummaryService {
         return summary;
     }
 }
+

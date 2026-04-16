@@ -92,7 +92,6 @@ public class ChatSessionServiceImpl extends ServiceImpl<ChatSessionMapper, ChatS
     public ChatSession getOrCreateSession(String sessionId, Long userId, String title) {
         // 如果sessionId为空，创建新会话
         if (sessionId == null || sessionId.trim().isEmpty()) {
-            log.info("sessionId为空，创建新会话");
             return createSession(userId, title);
         }
         

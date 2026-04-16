@@ -272,23 +272,7 @@ const getToolDisplayName = (toolName) => {
     return toolName.substring(6)
   }
 
-  const builtinNames = {
-    knowledge_search: '知识检索',
-    web_search: '搜索网页',
-    web_read: '网页读取',
-    read_file: '读取',
-    file_read: '文件读取',
-    dir_list: '目录列表',
-    file_search: '文件搜索',
-    grep_search: '文本搜索',
-    write_file: '写入',
-    run_command: '运行命令',
-    session_recall: '会话回顾',
-    current_time: '获取时间',
-    calculator: '计算器',
-  }
-
-  return builtinNames[toolName] || toolName || '调用工具'
+  return toolName || 'tool'
 }
 
 const getToolSummary = (item) => {
@@ -300,23 +284,7 @@ const getToolSummary = (item) => {
       return item.call.payload.description
     }
 
-    const builtinDescriptions = {
-      knowledge_search: '查询知识库',
-      web_search: '搜索网页',
-      web_read: '读取网页内容',
-      read_file: '读取文件内容',
-      file_read: '读取工作区文件内容',
-      dir_list: '查看工作区目录内容',
-      file_search: '搜索工作区文件',
-      grep_search: '搜索工作区文本内容',
-      write_file: '写入文件内容',
-      run_command: '执行终端命令',
-      session_recall: '回顾当前会话消息',
-      current_time: '获取当前时间',
-      calculator: '计算数学表达式',
-    }
-
-    return builtinDescriptions[item.call.payload.toolName] || ''
+    return ''
   } catch {
     return ''
   }

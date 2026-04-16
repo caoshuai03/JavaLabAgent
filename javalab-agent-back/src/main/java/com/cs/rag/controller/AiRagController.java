@@ -1,120 +1,71 @@
 package com.cs.rag.controller;
 
 import com.cs.rag.common.ApplicationConstant;
-import com.cs.rag.pojo.entity.ChatMessage;
-import com.cs.rag.pojo.entity.ChatSession;
 import com.cs.rag.pojo.dto.ChatRequestDTO;
 import com.cs.rag.pojo.dto.DeleteSessionRequestDTO;
 import com.cs.rag.pojo.dto.HistoryRequestDTO;
 import com.cs.rag.pojo.dto.SessionListRequestDTO;
+import com.cs.rag.pojo.entity.ChatMessage;
+import com.cs.rag.pojo.entity.ChatSession;
 import com.cs.rag.pojo.vo.ChatMessageVO;
 import com.cs.rag.pojo.vo.ChatSessionVO;
-import com.cs.rag.service.RagService;
-import com.cs.rag.service.ReactAgentService;
-import org.springframework.http.MediaType;
+import com.cs.rag.service.AgentService;
+import com.cs.rag.service.AskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
 
 /**
- * RAG对话控制器
- * 
- * <p>该控制器负责处理RAG（检索增强生成）相关的HTTP请求，
- * 将业务逻辑委托给RagService处理，遵循MVC架构的关注点分离原则。</p>
- * 
- * <p>主要功能:</p>
- * <ul>
- *   <li>持久化RAG对话（数据库会话管理）</li>
- *   <li>会话历史查询</li>
- *   <li>用户会话列表查询</li>
- * </ul>
- * 
- * @author caoshuai
- * @since 1.0
+ * AI 对话控制器。
  */
-@Tag(name = "AiRagController", description = "RAG对话接口")
+@Tag(name = "AiRagController", description = "AI 对话接口")
 @Slf4j
 @RestController
 @RequestMapping(ApplicationConstant.API_VERSION + "/ai")
 public class AiRagController {
-    
-    /** RAG业务服务 */
-    @Autowired
-    private RagService ragService;
 
     @Autowired
-    private ReactAgentService reactAgentService;
-    
-    // ==================== 对话接口 ====================
-    
-    /**
-     * 持久化RAG对话接口
-     * 
-     * <p>使用POST请求体传递参数，支持更长的消息内容，更安全。
-     * 支持数据库持久化和滑动窗口上下文管理。</p>
-     * 
-     * <p>响应格式: 第一条消息为[SESSION_ID:xxx]，后续为LLM流式响应</p>
-     * 
-     * @param request 对话请求参数（JSON请求体）
-     * @return SSE流式响应，首条消息包含sessionId
-     */
-    @Operation(summary = "chat", description = "持久化RAG对话接口")
+    private AskService askService;
+
+    @Autowired
+    private AgentService agentService;
+
+    @Operation(summary = "chat", description = "RAG 对话接口")
     @PostMapping(value = "/rag", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> chat(@RequestBody ChatRequestDTO request) {
-        
-        // 参数校验与默认值处理
-        String message = (request.getMessage() != null) ? request.getMessage() : "你好";
+        String message = request.getMessage() != null ? request.getMessage() : "你好";
         String sessionId = request.getSessionId();
-        Long userId = (request.getUserId() != null) ? request.getUserId() : 1L;
-        String model = request.getModel();
-        
-        log.info("持久化RAG对话请求: message={}, sessionId={}, userId={}, model={}", 
-                 message, sessionId, userId, model);
-        
-        // 委托给Service层处理业务逻辑
-        return ragService.chat(message, sessionId, userId, model);
-    }
-
-    @Operation(summary = "reactAgentChat", description = "ReAct Agent 对话接口")
-    @PostMapping(value = "/react-agent", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> reactAgentChat(@RequestBody ChatRequestDTO request) {
-        String message = (request.getMessage() != null) ? request.getMessage() : "你好";
-        String sessionId = request.getSessionId();
-        Long userId = (request.getUserId() != null) ? request.getUserId() : 1L;
+        Long userId = request.getUserId() != null ? request.getUserId() : 1L;
         String model = request.getModel();
 
-        log.info("ReAct Agent 对话请求: message={}, sessionId={}, userId={}, model={}",
+        log.info("RAG 对话请求: message={}, sessionId={}, userId={}, model={}",
                 message, sessionId, userId, model);
-
-        return reactAgentService.chat(message, sessionId, userId, model);
+        return askService.chat(message, sessionId, userId, model);
     }
-    
-    // ==================== 会话管理接口 ====================
-    
-    /**
-     * 获取会话历史消息列表
-     * 增加用户ID校验，确保用户只能访问自己的消息
-     * 
-     * @param request 请求参数（JSON请求体）
-     * @return 消息列表（VO），按时间正序排列，隐藏 userId 字段
-     */
-    @Operation(summary = "getHistory", description = "获取会话历史消息")
-    @PostMapping(value = "/rag/history")
-    public List<ChatMessageVO> getHistory(
-            @RequestBody HistoryRequestDTO request) {
-        
+
+    @Operation(summary = "agentChat", description = "Agent 对话接口")
+    @PostMapping(value = "/react-agent", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> agentChat(@RequestBody ChatRequestDTO request) {
+        String message = request.getMessage() != null ? request.getMessage() : "你好";
         String sessionId = request.getSessionId();
-        Long userId = request.getUserId();
-        
-        log.info("获取会话历史: sessionId={}, userId={}", sessionId, userId);
-        List<ChatMessage> messages = ragService.getHistory(sessionId, userId);
-        
-        // 转换为 VO，隐藏 userId 字段
+        Long userId = request.getUserId() != null ? request.getUserId() : 1L;
+        String model = request.getModel();
+
+        log.info("Agent 对话请求: message={}, sessionId={}, userId={}, model={}",
+                message, sessionId, userId, model);
+        return agentService.chat(message, sessionId, userId, model);
+    }
+
+    @Operation(summary = "getHistory", description = "获取会话历史消息")
+    @PostMapping("/rag/history")
+    public List<ChatMessageVO> getHistory(@RequestBody HistoryRequestDTO request) {
+        List<ChatMessage> messages = askService.getHistory(request.getSessionId(), request.getUserId());
         return messages.stream()
                 .map(msg -> ChatMessageVO.builder()
                         .id(msg.getId())
@@ -123,28 +74,13 @@ public class AiRagController {
                         .content(msg.getContent())
                         .createdAt(msg.getCreatedAt())
                         .build())
-                .collect(java.util.stream.Collectors.toList());
+                .toList();
     }
 
-    
-    /**
-     * 获取用户的会话列表
-     * 
-     * @param request 请求参数（JSON请求体）
-     * @return 会话列表（VO），按更新时间倒序排列，隐藏 userId 和 deleted 字段
-     */
     @Operation(summary = "getSessions", description = "获取用户会话列表")
-    @PostMapping(value = "/rag/sessions")
-    public List<ChatSessionVO> listSessions(
-            @RequestBody SessionListRequestDTO request) {
-        
-        // 获取userId，DTO中已设置默认值为1
-        Long userId = request.getUserId();
-        
-        log.info("获取用户会话列表: userId={}", userId);
-        List<ChatSession> sessions = ragService.listSessions(userId);
-        
-        // 转换为 VO，隐藏 userId 和 deleted 字段
+    @PostMapping("/rag/sessions")
+    public List<ChatSessionVO> listSessions(@RequestBody SessionListRequestDTO request) {
+        List<ChatSession> sessions = askService.listSessions(request.getUserId());
         return sessions.stream()
                 .map(session -> ChatSessionVO.builder()
                         .id(session.getId())
@@ -152,37 +88,22 @@ public class AiRagController {
                         .createdAt(session.getCreatedAt())
                         .updatedAt(session.getUpdatedAt())
                         .build())
-                .collect(java.util.stream.Collectors.toList());
+                .toList();
     }
-    
-    /**
-     * 删除会话（逻辑删除）
-     * 增加用户ID校验，确保用户只能删除自己的会话
-     * 支持单个删除和批量删除
-     * 
-     * @param request 请求参数（JSON请求体）
-     * @return 删除结果，true表示成功，false表示失败
-     */
-    @Operation(summary = "deleteSession", description = "删除会话（逻辑删除），支持批量删除")
-    @PostMapping(value = "/rag/sessions/delete")
+
+    @Operation(summary = "deleteSession", description = "删除会话，支持批量删除")
+    @PostMapping("/rag/sessions/delete")
     public boolean delete(@RequestBody DeleteSessionRequestDTO request) {
-        
         Long userId = request.getUserId();
-        
-        // 优先处理批量删除
         if (request.getSessionIds() != null && !request.getSessionIds().isEmpty()) {
-            log.info("批量删除会话请求: sessionIds={}, userId={}", request.getSessionIds(), userId);
-            return ragService.deleteBatch(request.getSessionIds(), userId);
+            return askService.deleteBatch(request.getSessionIds(), userId);
         }
-        
-        // 处理单个删除
         String sessionId = request.getSessionId();
         if (sessionId != null && !sessionId.isEmpty()) {
-            log.info("删除会话请求: sessionId={}, userId={}", sessionId, userId);
-            return ragService.delete(sessionId, userId);
+            return askService.delete(sessionId, userId);
         }
-        
-        log.warn("删除会话请求参数错误: sessionId和sessionIds均为空");
+        log.warn("删除会话失败，sessionId 和 sessionIds 都为空");
         return false;
     }
 }
+

@@ -18,15 +18,15 @@ COPY src ./src
 # 打包 jar（跳过测试，提升构建速度）
 RUN mvn -q -DskipTests package
 
+# ---------- Node 运行时阶段 ----------
+FROM node:20-bookworm-slim AS node-runtime
+
 # ---------- 运行阶段 ----------
 FROM eclipse-temurin:17-jre
 
-# 安装 Node.js 和 npm（提供 npx），供 MCP stdio 模式的子进程使用
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# 直接从官方 Node 镜像复制 node/npm/npx，避免运行时镜像构建依赖 apt 源和 NodeSource
+COPY --from=node-runtime /usr/local/bin/ /usr/local/bin/
+COPY --from=node-runtime /usr/local/lib/node_modules/ /usr/local/lib/node_modules/
 
 # 说明：Spring Boot 默认会读取环境变量覆盖配置
 WORKDIR /app
