@@ -31,8 +31,7 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
      * @param registry 拦截器注册器
      */
     public void addInterceptors(InterceptorRegistry registry) {
-        log.info("开始注册自定义拦截器...");
-        
+
         // 注册JWT token拦截器
         registry.addInterceptor(jwtTokenUserInterceptor)
                 .addPathPatterns("/api/v1/**")  // 拦截所有v1 API路径
@@ -46,7 +45,6 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
                         "/favicon.ico"          // 排除网站图标
                 );
         
-        log.info("JWT token拦截器注册完成");
 
         // 注册管理员权限拦截器 - 只拦截知识库上传接口
         registry.addInterceptor(adminInterceptor)
@@ -55,6 +53,5 @@ public class WebMvcConfiguration implements WebMvcConfigurer {
                         "/api/v1/knowledge/delete"         // 删除接口
                 );
         
-        log.info("管理员权限拦截器注册完成");
     }
 }

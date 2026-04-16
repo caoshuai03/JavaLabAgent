@@ -146,7 +146,7 @@ public class McpServiceImpl implements McpService {
                 if (resource.exists()) {
                     try (InputStream is = resource.getInputStream()) {
                         jsonContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                        log.info("从classpath加载MCP配置: {}", CONFIG_FILE);
+                        log.info("加载MCP配置: {}", CONFIG_FILE);
                     }
                 }
             }
