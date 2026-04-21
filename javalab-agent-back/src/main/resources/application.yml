@@ -109,6 +109,10 @@ cs:
     user-token-name: Authorization
   agent:
     tools:
+      agent-total-timeout-seconds: 99999
+      tool-execution-timeout-seconds: 9999
+      llm-decision-timeout-seconds: 9999
+      mcp-stdio-timeout-seconds: 9999
       max-write-characters: 24000
       terminal-timeout-seconds: 20
       max-terminal-output-characters: 12000

@@ -6,7 +6,6 @@ import java.util.Map;
 
 public interface ToolService {
 
-    String TOOL_WEB_SEARCH = "web_search";
     String TOOL_FILE_READ = "file_read";
     String TOOL_FILE_WRITE = "file_write";
     String TOOL_FILE_SEARCH = "file_search";

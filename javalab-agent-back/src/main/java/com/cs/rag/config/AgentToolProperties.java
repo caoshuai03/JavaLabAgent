@@ -100,6 +100,32 @@ public class AgentToolProperties {
     /** `web_read` 和 `web_search` 的超时时间，单位秒。 */
     private int webReadTimeoutSeconds = 10;
 
+    /**
+     * Agent 全局执行超时（秒）。
+     * 涵盖所有轮次的规划 + 最终回答生成，超时后强制进入最终回答阶段。
+     * 参考: OpenAI Assistants 10min、LangChain max_execution_time。
+     */
+    private int agentTotalTimeoutSeconds = 180;
+
+    /**
+     * 单次工具执行兜底超时（秒）。
+     * 对所有工具类型统一生效，防止单个工具调用长时间挂起。
+     * 工具自身若有更短的超时（如 terminal_exec）则以自身为准。
+     */
+    private int toolExecutionTimeoutSeconds = 60;
+
+    /**
+     * LLM 决策推理超时（秒）。
+     * 单次 plan 轮中调用 LLM 的最大等待时间，超时后降级为直接回答。
+     */
+    private int llmDecisionTimeoutSeconds = 60;
+
+    /**
+     * MCP stdio 读取超时（秒）。
+     * stdio 模式下等待 MCP 服务响应的最大时间，防止 readLine 永久阻塞。
+     */
+    private int mcpStdioTimeoutSeconds = 30;
+
     public String getWorkspaceRoot() {
         return workspaceRoot;
     }
@@ -194,5 +220,37 @@ public class AgentToolProperties {
 
     public void setWebReadTimeoutSeconds(int webReadTimeoutSeconds) {
         this.webReadTimeoutSeconds = webReadTimeoutSeconds;
+    }
+
+    public int getAgentTotalTimeoutSeconds() {
+        return agentTotalTimeoutSeconds;
+    }
+
+    public void setAgentTotalTimeoutSeconds(int agentTotalTimeoutSeconds) {
+        this.agentTotalTimeoutSeconds = agentTotalTimeoutSeconds;
+    }
+
+    public int getToolExecutionTimeoutSeconds() {
+        return toolExecutionTimeoutSeconds;
+    }
+
+    public void setToolExecutionTimeoutSeconds(int toolExecutionTimeoutSeconds) {
+        this.toolExecutionTimeoutSeconds = toolExecutionTimeoutSeconds;
+    }
+
+    public int getLlmDecisionTimeoutSeconds() {
+        return llmDecisionTimeoutSeconds;
+    }
+
+    public void setLlmDecisionTimeoutSeconds(int llmDecisionTimeoutSeconds) {
+        this.llmDecisionTimeoutSeconds = llmDecisionTimeoutSeconds;
+    }
+
+    public int getMcpStdioTimeoutSeconds() {
+        return mcpStdioTimeoutSeconds;
+    }
+
+    public void setMcpStdioTimeoutSeconds(int mcpStdioTimeoutSeconds) {
+        this.mcpStdioTimeoutSeconds = mcpStdioTimeoutSeconds;
     }
 }

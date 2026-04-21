@@ -7,7 +7,7 @@
             <div v-for="(item, idx) in toolCalls" :key="`tool-${idx}`" class="tool-call-item">
               <div v-if="idx !== toolCalls.length - 1" class="tool-call-line"></div>
 
-              <div class="tool-call-content">
+              <div class="tool-call-content" :class="{ 'tool-timeout': item.call.eventType === 'tool_timeout' || item.call.eventType === 'global_timeout' }">
                 <div class="tool-icon-wrapper">
                   <span
                     class="tool-icon"
@@ -16,13 +16,20 @@
                         item.type === 'skill'
                           ? 'skill:' + item.call.payload.skillName
                           : item.call.payload.toolName,
+                        item.call.eventType,
                       )
                     "
                   ></span>
                 </div>
                 <div class="tool-text">
                   <span class="tool-name">
-                    <template v-if="item.type === 'skill'">
+                    <template v-if="item.call.eventType === 'global_timeout'">
+                      ⚠️ 全局超时
+                    </template>
+                    <template v-else-if="item.call.eventType === 'tool_timeout'">
+                      ⚠️ 工具超时：{{ getToolDisplayName(item.call.payload.toolName) }}
+                    </template>
+                    <template v-else-if="item.type === 'skill'">
                       调用 Skill：{{ item.call.payload.skillName }}
                     </template>
                     <template
@@ -42,6 +49,7 @@
                   <span
                     v-if="getToolSummary(item)"
                     class="tool-summary"
+                    :class="{ 'tool-summary-timeout': item.call.eventType === 'tool_timeout' || item.call.eventType === 'global_timeout' }"
                     v-tooltip="getToolSummary(item)"
                   >
                     {{ truncateText(getToolSummary(item)) }}
@@ -255,12 +263,64 @@ const toolCalls = computed(() => {
         activeCalls.delete(round)
       }
     }
+
+    // 处理工具超时事件，展示为失败的工具调用
+    if (event.eventType === 'status' && event.payload?.stage === 'tool_timeout') {
+      const round = event.payload?.round
+      const toolName = event.payload?.toolName || 'unknown'
+      const timeoutSeconds = event.payload?.timeoutSeconds || 60
+      const callItem = {
+        type: 'tool',
+        call: {
+          eventType: 'tool_timeout',
+          payload: {
+            toolName,
+            description: `工具执行超时（${timeoutSeconds}秒）`,
+            timeoutSeconds,
+          },
+          ts: event.ts,
+        },
+        result: { success: false, error: 'timeout' },
+        hidden: false,
+        round,
+      }
+      // 如果该轮次已有工具调用，替换为超时状态
+      const existing = activeCalls.get(round)
+      if (existing) {
+        existing.call = callItem.call
+        existing.result = callItem.result
+      } else {
+        list.push(callItem)
+      }
+    }
+
+    // 处理全局超时事件，展示为特殊的系统提示
+    if (event.eventType === 'status' && event.payload?.stage === 'global_timeout') {
+      const timeoutSeconds = event.payload?.timeoutSeconds || 180
+      list.push({
+        type: 'system',
+        call: {
+          eventType: 'global_timeout',
+          payload: {
+            description: `全局执行超时（${timeoutSeconds}秒），Agent 基于已有信息作答`,
+            timeoutSeconds,
+          },
+          ts: event.ts,
+        },
+        result: { success: false, error: 'global_timeout' },
+        hidden: false,
+      })
+    }
   })
 
   return list.filter((item) => !item.hidden)
 })
 
-const getToolIconSvg = (toolName) => {
+const getToolIconSvg = (toolName, eventType) => {
+  // 超时事件使用警告图标
+  if (eventType === 'tool_timeout' || eventType === 'global_timeout') {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`
+  }
   if (toolName && toolName.startsWith('skill:')) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`
   }
@@ -839,6 +899,18 @@ watch(
   &:hover {
     color: #90138b;
   }
+}
+
+// 超时事件样式
+.tool-timeout {
+  .tool-icon {
+    color: #f59e0b;
+  }
+}
+
+.tool-summary-timeout {
+  color: #f59e0b !important;
+  font-weight: 500;
 }
 
 .message-footer {

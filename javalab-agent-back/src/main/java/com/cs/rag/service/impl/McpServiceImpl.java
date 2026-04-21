@@ -1,5 +1,6 @@
 package com.cs.rag.service.impl;
 
+import com.cs.rag.config.AgentToolProperties;
 import com.cs.rag.constant.RagConstant;
 import com.cs.rag.pojo.entity.McpServerConfig;
 import com.cs.rag.pojo.entity.McpToolInfo;
@@ -26,7 +27,11 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -39,6 +44,7 @@ import java.util.stream.Collectors;
 public class McpServiceImpl implements McpService {
 
     private final ObjectMapper objectMapper;
+    private final AgentToolProperties toolProperties;
 
     /** 防止初始化锁，避免并发场景下同一服务重复初始化 */
     private final Object initLock = new Object();
@@ -48,6 +54,16 @@ public class McpServiceImpl implements McpService {
 
     /** JSON-RPC 请求ID计数器 */
     private final AtomicInteger requestIdCounter = new AtomicInteger(1);
+
+    /**
+     * 用于 stdio readLine 超时控制的线程池。
+     * readLine 本身不可中断，通过独立线程 + Future.get(timeout) 实现兜底超时。
+     */
+    private final ExecutorService stdioReadExecutor = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "mcp-stdio-read");
+        t.setDaemon(true);
+        return t;
+    });
 
     /** 当前加载的MCP配置 */
     private volatile McpToolsConfig currentConfig;
@@ -70,8 +86,9 @@ public class McpServiceImpl implements McpService {
     /** HTTP客户端(用于http和sse模式) */
     private final HttpClient httpClient;
 
-    public McpServiceImpl(ObjectMapper objectMapper) {
+    public McpServiceImpl(ObjectMapper objectMapper, AgentToolProperties toolProperties) {
         this.objectMapper = objectMapper;
+        this.toolProperties = toolProperties;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -256,7 +273,6 @@ public class McpServiceImpl implements McpService {
             }
             initializingServers.add(serverName);
             try {
-                log.info("MCP 服务 [{}] 首次使用，开始延迟初始化", serverName);
                 initServer(serverName, config);
             } finally {
                 initializingServers.remove(serverName);
@@ -510,7 +526,6 @@ public class McpServiceImpl implements McpService {
                     tools.add(tool);
                 }
                 toolsCache.put(serverName, tools);
-                log.info("MCP 服务 [{}] 工具列表刷新成功，发现 {} 个工具", serverName, tools.size());
             } else {
                 log.warn("MCP 服务 [{}] 工具列表刷新失败，响应={}", serverName, response);
             }
@@ -681,7 +696,17 @@ public class McpServiceImpl implements McpService {
             writer.newLine();
             writer.flush();
 
-            String responseLine = reader.readLine();
+            // 用 Future 包装 readLine，防止 MCP 子进程无响应时永久阻塞
+            int stdioTimeout = toolProperties.getMcpStdioTimeoutSeconds();
+            Future<String> readFuture = stdioReadExecutor.submit(reader::readLine);
+            String responseLine;
+            try {
+                responseLine = readFuture.get(stdioTimeout, TimeUnit.SECONDS);
+            } catch (TimeoutException te) {
+                readFuture.cancel(true);
+                log.warn("MCP 服务 [{}] stdio 读取超时（{}秒），方法={}", serverName, stdioTimeout, method);
+                return null;
+            }
             if (responseLine == null) {
                 log.warn("MCP 服务 [{}] stdio连接异常，响应为空", serverName);
                 return null;

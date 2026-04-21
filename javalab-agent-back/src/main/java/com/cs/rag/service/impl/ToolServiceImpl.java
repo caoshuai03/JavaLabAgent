@@ -9,28 +9,11 @@ import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URI;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -47,17 +30,8 @@ public class ToolServiceImpl implements ToolService {
     /** 文本文件读取大小上限。 */
     private static final long MAX_TEXT_FILE_SIZE_BYTES = 1024 * 1024;
 
-    /** 默认网页搜索主机。 */
-    private static final String WEB_SEARCH_HOST = "html.duckduckgo.com";
-
     /** 页面标题提取规则。 */
     private static final Pattern TITLE_PATTERN = Pattern.compile("(?is)<title[^>]*>(.*?)</title>");
-
-    /** DuckDuckGo 搜索结果链接提取规则。 */
-    private static final Pattern SEARCH_RESULT_LINK_PATTERN = Pattern.compile("(?is)<a[^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>");
-
-    /** DuckDuckGo 搜索结果摘要提取规则。 */
-    private static final Pattern SEARCH_RESULT_SNIPPET_PATTERN = Pattern.compile("(?is)<(?:a|div)[^>]*class=\"[^\"]*result__snippet[^\"]*\"[^>]*>(.*?)</(?:a|div)>");
 
     /** 工具策略评估相关常量。 */
     private static final Set<String> SHELL_EXECUTABLES = Set.of("cmd", "powershell", "pwsh", "bash", "sh", "zsh");
@@ -163,11 +137,6 @@ public class ToolServiceImpl implements ToolService {
      */
     private List<ToolDescriptor> builtinTools() {
         return List.of(
-                new ToolDescriptor(TOOL_WEB_SEARCH, "Search the web for relevant pages", "builtin",
-                        schemaOf(mapOf(
-                                "query", property("string", "Search query"),
-                                "maxResults", property("integer", "Optional max result count")
-                        )), true),
                 new ToolDescriptor(TOOL_FILE_READ, "Read a text file inside workspace", "builtin",
                         schemaOf(mapOf(
                                 "path", property("string", "Workspace-relative or absolute file path"),
@@ -200,11 +169,7 @@ public class ToolServiceImpl implements ToolService {
                                 "command", property("array", "Executable plus args as a JSON array, for example [\"mvn\",\"-q\",\"-DskipTests\",\"compile\"]"),
                                 "workdir", property("string", "Optional workspace directory for the command"),
                                 "timeoutSeconds", property("integer", "Optional timeout, capped by server policy")
-                        )), false),
-                new ToolDescriptor(TOOL_WEB_READ, "Read webpage content from an http or https URL", "builtin",
-                        schemaOf(mapOf(
-                                "url", property("string", "Target webpage URL")
-                        )), true)
+                        )), false)
         );
     }
 
@@ -276,13 +241,11 @@ public class ToolServiceImpl implements ToolService {
      */
     private ToolExecutionResult executeBuiltinTool(String toolName, Map<String, Object> input) {
         return switch (toolName) {
-            case TOOL_WEB_SEARCH -> executeWebSearch(input);
             case TOOL_FILE_READ -> executeFileRead(input);
             case TOOL_FILE_WRITE -> executeFileWrite(input);
             case TOOL_FILE_SEARCH -> executeFileSearch(input);
             case TOOL_GREP_SEARCH -> executeGrepSearch(input);
             case TOOL_TERMINAL_EXEC -> executeTerminalExec(input);
-            case TOOL_WEB_READ -> executeWebRead(input);
             default -> ToolExecutionResult.error(toolName, "Unsupported builtin tool", "builtin", 0L, Map.of());
         };
     }
@@ -319,72 +282,6 @@ public class ToolServiceImpl implements ToolService {
                     System.currentTimeMillis() - start,
                     Map.of()
             );
-        }
-    }
-
-    private ToolExecutionResult executeWebSearch(Map<String, Object> input) {
-        long start = System.currentTimeMillis();
-        String query = asString(input.get("query"));
-        int maxResults = asInt(input.get("maxResults"), 5);
-        if (query == null || query.isBlank()) {
-            return ToolExecutionResult.error(TOOL_WEB_SEARCH, "Missing query", "builtin", System.currentTimeMillis() - start, Map.of());
-        }
-
-        try {
-            String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://" + WEB_SEARCH_HOST + "/html/?q=" + encodedQuery))
-                    .timeout(Duration.ofSeconds(properties.getWebReadTimeoutSeconds()))
-                    .header("User-Agent", "JavaLabAgent/1.0")
-                    .header("Accept", "text/html,application/xhtml+xml")
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            String html = response.body() == null ? "" : response.body();
-
-            List<Map<String, Object>> results = new ArrayList<>();
-            Matcher matcher = SEARCH_RESULT_LINK_PATTERN.matcher(html);
-            while (matcher.find() && results.size() < maxResults) {
-                String link = normalizeSearchResultUrl(matcher.group(1));
-                String title = normalizeText(stripHtml(matcher.group(2)));
-                String snippet = extractSearchSnippet(html, matcher.end());
-                if (link == null || link.isBlank() || title.isBlank()) {
-                    continue;
-                }
-                Map<String, Object> result = new LinkedHashMap<>();
-                result.put("url", link);
-                result.put("title", title);
-                result.put("snippet", snippet);
-                results.add(result);
-            }
-
-            if (response.statusCode() >= 400) {
-                return ToolExecutionResult.error(
-                        TOOL_WEB_SEARCH,
-                        "HTTP status " + response.statusCode() + " while searching web",
-                        "builtin",
-                        System.currentTimeMillis() - start,
-                        Map.of("query", query, "statusCode", response.statusCode())
-                );
-            }
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("query", query);
-            data.put("count", results.size());
-            data.put("results", results);
-            String summary = results.isEmpty() ? "网页搜索未找到合适结果。" : "网页搜索找到 " + results.size() + " 条结果。";
-            return ToolExecutionResult.success(
-                    TOOL_WEB_SEARCH,
-                    data,
-                    summary,
-                    "builtin",
-                    System.currentTimeMillis() - start,
-                    Map.of("query", query, "statusCode", response.statusCode())
-            );
-        } catch (Exception e) {
-            String message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
-            return ToolExecutionResult.error(TOOL_WEB_SEARCH, "Failed to search web: " + message, "builtin",
-                    System.currentTimeMillis() - start, Map.of("query", query));
         }
     }
 
@@ -652,79 +549,6 @@ public class ToolServiceImpl implements ToolService {
         );
     }
 
-    private ToolExecutionResult executeWebRead(Map<String, Object> input) {
-        long start = System.currentTimeMillis();
-        String url = asString(input.get("url"));
-        if (url == null || url.isBlank()) {
-            return ToolExecutionResult.error(TOOL_WEB_READ, "Missing url", "builtin",
-                    System.currentTimeMillis() - start, Map.of());
-        }
-
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(properties.getWebReadTimeoutSeconds()))
-                    .header("User-Agent", "JavaLabAgent/1.0")
-                    .header("Accept", "text/html,application/xhtml+xml")
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            String html = response.body() == null ? "" : response.body();
-            String title = extractTitle(html);
-            String text = normalizeText(stripHtml(html));
-            String content = abbreviate(text, properties.getMaxReadCharacters());
-
-            if (response.statusCode() >= 400) {
-                return ToolExecutionResult.error(
-                        TOOL_WEB_READ,
-                        "HTTP status " + response.statusCode() + " while reading webpage",
-                        "builtin",
-                        System.currentTimeMillis() - start,
-                        Map.of("url", url, "statusCode", response.statusCode(), "title", title == null ? "" : title)
-                );
-            }
-            if (isLikelyErrorPage(title, content)) {
-                return ToolExecutionResult.error(
-                        TOOL_WEB_READ,
-                        "Webpage looks like an error page: " + firstNonBlank(title, "unknown page"),
-                        "builtin",
-                        System.currentTimeMillis() - start,
-                        Map.of("url", url, "statusCode", response.statusCode(), "title", title == null ? "" : title)
-                );
-            }
-            if (content.isBlank() || content.length() < 80) {
-                return ToolExecutionResult.error(
-                        TOOL_WEB_READ,
-                        "Webpage content is empty or too short to be useful",
-                        "builtin",
-                        System.currentTimeMillis() - start,
-                        Map.of("url", url, "statusCode", response.statusCode(), "title", title == null ? "" : title)
-                );
-            }
-
-            String excerpt = abbreviate(extractUsefulExcerpt(content), 260);
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("url", url);
-            data.put("finalUrl", response.uri() == null ? url : response.uri().toString());
-            data.put("statusCode", response.statusCode());
-            data.put("title", title);
-            data.put("excerpt", excerpt);
-            data.put("content", content);
-            String summary = (title == null || title.isBlank() ? "网页读取成功：" + url : "网页读取成功：" + title) + "；摘要：" + excerpt;
-            return ToolExecutionResult.success(
-                    TOOL_WEB_READ,
-                    data,
-                    summary,
-                    "builtin",
-                    System.currentTimeMillis() - start,
-                    Map.of("url", url, "finalUrl", response.uri() == null ? url : response.uri().toString(), "statusCode", response.statusCode())
-            );
-        } catch (Exception e) {
-            String message = e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
-            return ToolExecutionResult.error(TOOL_WEB_READ, "Failed to read webpage: " + message, "builtin",
-                    System.currentTimeMillis() - start, Map.of("url", url));
-        }
-    }
 
     private void collectMatches(Path file, String query, boolean caseSensitive, List<Map<String, Object>> matches) {
         String normalizedQuery = caseSensitive ? query : query.toLowerCase(Locale.ROOT);
@@ -884,16 +708,20 @@ public class ToolServiceImpl implements ToolService {
         return builder.isEmpty() ? abbreviate(normalized, 220) : builder.toString();
     }
 
+    /**
+     * 检测是否为错误页面，只在标题中检测错误关键词
+     * 避免页面内容中包含正常的技术术语（如 "not found"）时被误判为错误页面
+     */
     private boolean isLikelyErrorPage(String title, String content) {
-        String combined = (firstNonBlank(title, "") + " " + firstNonBlank(content, "")).toLowerCase(Locale.ROOT);
-        return combined.contains("404")
-                || combined.contains("page not found")
-                || combined.contains("not found")
-                || combined.contains("access denied")
-                || combined.contains("forbidden")
-                || combined.contains("error page")
-                || combined.contains("错误页面")
-                || combined.contains("找不到页面");
+        String titleLower = firstNonBlank(title, "").toLowerCase(Locale.ROOT);
+        return titleLower.contains("404")
+                || titleLower.contains("page not found")
+                || titleLower.contains("not found")
+                || titleLower.contains("access denied")
+                || titleLower.contains("forbidden")
+                || titleLower.contains("error page")
+                || titleLower.contains("错误页面")
+                || titleLower.contains("找不到页面");
     }
 
     private boolean isLikelyNoiseSentence(String sentence) {
@@ -916,39 +744,6 @@ public class ToolServiceImpl implements ToolService {
             }
         }
         return null;
-    }
-
-    private String normalizeSearchResultUrl(String rawUrl) {
-        if (rawUrl == null || rawUrl.isBlank()) {
-            return null;
-        }
-        String trimmed = rawUrl.trim();
-        try {
-            URI uri = URI.create(trimmed);
-            String query = uri.getQuery();
-            if (query != null && query.contains("uddg=")) {
-                for (String pair : query.split("&")) {
-                    if (pair.startsWith("uddg=")) {
-                        return URLDecoder.decode(pair.substring(5), StandardCharsets.UTF_8);
-                    }
-                }
-            }
-            return trimmed;
-        } catch (Exception e) {
-            return trimmed;
-        }
-    }
-
-    private String extractSearchSnippet(String html, int startIndex) {
-        if (html == null || html.isBlank() || startIndex < 0 || startIndex >= html.length()) {
-            return "";
-        }
-        String tail = html.substring(startIndex, Math.min(html.length(), startIndex + 2000));
-        Matcher matcher = SEARCH_RESULT_SNIPPET_PATTERN.matcher(tail);
-        if (!matcher.find()) {
-            return "";
-        }
-        return abbreviate(normalizeText(stripHtml(matcher.group(1))), 220);
     }
 
     private OutputCapture captureProcessOutput(InputStream inputStream) throws Exception {
@@ -1084,8 +879,6 @@ public class ToolServiceImpl implements ToolService {
             case TOOL_FILE_SEARCH -> evaluateFileSearch(normalizedInput);
             case TOOL_GREP_SEARCH -> evaluateGrepSearch(normalizedInput);
             case TOOL_TERMINAL_EXEC -> evaluateTerminalExec(normalizedInput);
-            case TOOL_WEB_SEARCH -> evaluateWebSearch(normalizedInput);
-            case TOOL_WEB_READ -> evaluateWebRead(normalizedInput);
             default -> ToolPolicyDecision.allow(normalizedInput);
         };
     }
@@ -1253,43 +1046,6 @@ public class ToolServiceImpl implements ToolService {
         return ToolPolicyDecision.allow(input);
     }
 
-    private ToolPolicyDecision evaluateWebSearch(Map<String, Object> input) {
-        String query = asString(input.get("query"));
-        if (query == null || query.isBlank()) {
-            return ToolPolicyDecision.deny("web_search requires query");
-        }
-        if (!isAllowedHost(WEB_SEARCH_HOST)) {
-            return ToolPolicyDecision.deny("web_search host is not allowed by policy");
-        }
-        input.put("query", query.trim());
-        input.put("maxResults", clamp(asInt(input.get("maxResults"), 5), 1, Math.max(1, properties.getMaxSearchResults())));
-        return ToolPolicyDecision.allow(input);
-    }
-
-    private ToolPolicyDecision evaluateWebRead(Map<String, Object> input) {
-        String rawUrl = asString(input.get("url"));
-        if (rawUrl == null || rawUrl.isBlank()) {
-            return ToolPolicyDecision.deny("web_read requires url");
-        }
-        try {
-            URI uri = URI.create(rawUrl.trim());
-            String scheme = uri.getScheme();
-            if (scheme == null || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
-                return ToolPolicyDecision.deny("web_read only supports http or https URLs");
-            }
-            String host = uri.getHost();
-            if (host == null || host.isBlank()) {
-                return ToolPolicyDecision.deny("web_read requires a valid host");
-            }
-            if (!isAllowedHost(host)) {
-                return ToolPolicyDecision.deny("web_read host is not allowed by policy");
-            }
-            input.put("url", uri.toString());
-            return ToolPolicyDecision.allow(input);
-        } catch (Exception e) {
-            return ToolPolicyDecision.deny("web_read url is invalid: " + e.getMessage());
-        }
-    }
 
     private boolean isAllowedHost(String host) {
         List<String> allowedWebHosts = properties.getAllowedWebHosts();

@@ -9,6 +9,17 @@
       "env": {
         "AMAP_MAPS_API_KEY": "e96448c5e73e89ddd8665d11a95596d4"
       }
+    },
+    "tavily-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "tavily-mcp@latest"
+      ],
+      "env": {
+        "TAVILY_API_KEY": "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"
+      },
+      "enable": true
     }
   }
 }
