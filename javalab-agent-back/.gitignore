@@ -30,3 +30,5 @@ Thumbs.db
 *-local.properties
 *-dev.properties
 *-prod.properties
+
+.env
