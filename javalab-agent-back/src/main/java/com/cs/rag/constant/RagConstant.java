@@ -43,4 +43,26 @@ public class RagConstant {
      * 最大轮次
      */
     public static final int MAX_ROUNDS = 10;
+
+    // ==================== MCP 配置常量 ====================
+
+    /**
+     * MCP 配置文件名（classpath 及外部目录均使用此名称）
+     */
+    public static final String MCP_CONFIG_FILE = "mcp-tools.json";
+
+    /**
+     * MCP 传输类型: stdio（子进程模式）
+     */
+    public static final String MCP_TRANSPORT_STDIO = "stdio";
+
+    /**
+     * MCP 传输类型: http（远程HTTP模式）
+     */
+    public static final String MCP_TRANSPORT_HTTP = "http";
+
+    /**
+     * MCP 传输类型: sse（Server-Sent Events模式）
+     */
+    public static final String MCP_TRANSPORT_SSE = "sse";
 }

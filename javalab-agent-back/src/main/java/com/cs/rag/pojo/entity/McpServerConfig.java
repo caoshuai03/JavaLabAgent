@@ -1,5 +1,6 @@
-package com.cs.rag.mcp;
+package com.cs.rag.pojo.entity;
 
+import com.cs.rag.constant.RagConstant;
 import lombok.Data;
 
 import java.util.List;
@@ -18,7 +19,7 @@ public class McpServerConfig {
     private boolean enabled = true;
 
     /** 传输类型: stdio（子进程）或 http（远程HTTP） */
-    private String type = "stdio";
+    private String type = RagConstant.MCP_TRANSPORT_STDIO;
 
     /** stdio 模式下的可执行命令（如 npx, python, node） */
     private String command;

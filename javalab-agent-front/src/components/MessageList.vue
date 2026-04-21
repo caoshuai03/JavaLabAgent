@@ -1,6 +1,6 @@
 <template>
   <div class="message-list-wrapper">
-    <div class="message-list" ref="messageListRef" @scroll="handleScroll">
+    <div class="message-list" ref="messageListRef" @scroll="handleScroll" @wheel="handleWheel">
       <MessageItem v-for="message in chatStore.messages" :key="message.id" :message="message" />
 
       <div v-if="chatStore.isStreaming" class="typing-indicator">
@@ -52,41 +52,41 @@ const checkIsAtBottom = () => {
   if (!messageListRef.value) return false
 
   const { scrollTop, scrollHeight, clientHeight } = messageListRef.value
-  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-
-  return distanceFromBottom <= BOTTOM_THRESHOLD
+  return scrollHeight - scrollTop - clientHeight <= BOTTOM_THRESHOLD
 }
 
-let scrollTimer = null
+// 标记：程序正在执行滚动，防止 handleScroll 误判
 let isProgrammaticScroll = false
 
+/**
+ * 鼠标滚轮事件 —— 用户向上滚动时立即标记，
+ * wheel 事件在 scroll 事件之前触发，因此不受异步延迟影响，
+ * 可以在下一个 token 到达前抢先设置 userHasScrolledUp。
+ */
+const handleWheel = (e) => {
+  if (e.deltaY < 0) {
+    // deltaY < 0 表示用户向上滚动
+    userHasScrolledUp.value = true
+    showScrollToBottomButton.value = true
+  }
+}
+
+/**
+ * scroll 事件 —— 同步检查位置（不做防抖），
+ * 滚回底部时恢复自动跟随；不在底部且非程序滚动时标记上滑。
+ */
 const handleScroll = () => {
-  // 程序主动设置 scrollTop 时会触发 scroll 事件，这里跳过，避免误判为用户手动滚动
-  if (isProgrammaticScroll) {
-    return
+  if (!messageListRef.value) return
+
+  if (checkIsAtBottom()) {
+    // 在底部 → 无论是程序滚动还是用户滚动，都恢复自动跟随
+    userHasScrolledUp.value = false
+    showScrollToBottomButton.value = false
+  } else if (!isProgrammaticScroll) {
+    // 不在底部 且 非程序触发 → 标记为用户主动上滑（兼容拖拽滚动条等场景）
+    userHasScrolledUp.value = true
+    showScrollToBottomButton.value = true
   }
-
-  // 清除之前的定时器
-  if (scrollTimer) {
-    clearTimeout(scrollTimer)
-  }
-
-  // 延迟检查，避免频繁触发
-  scrollTimer = setTimeout(() => {
-    if (!messageListRef.value) return
-
-    const isAtBottom = checkIsAtBottom()
-
-    if (isAtBottom) {
-      // 用户滚动到底部了，恢复自动跟随
-      userHasScrolledUp.value = false
-      showScrollToBottomButton.value = false
-    } else {
-      // 用户不在底部，标记为已上滑
-      userHasScrolledUp.value = true
-      showScrollToBottomButton.value = true
-    }
-  }, 100)
 }
 
 // 滚动到底部
@@ -95,21 +95,18 @@ const scrollToBottom = (force = false) => {
 
   // 只有在强制滚动或用户未主动上滑时才自动滚动
   if (force || !userHasScrolledUp.value) {
-    // 使用 nextTick 确保 DOM 已更新，再加一个 setTimeout 确保渲染完成
     nextTick(() => {
-      setTimeout(() => {
-        if (messageListRef.value) {
-          // 标记为程序滚动，防止被 handleScroll 误判
-          isProgrammaticScroll = true
-          messageListRef.value.scrollTop = messageListRef.value.scrollHeight
-          showScrollToBottomButton.value = false
+      if (messageListRef.value) {
+        // 标记为程序滚动，防止 handleScroll else 分支误判
+        isProgrammaticScroll = true
+        messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+        showScrollToBottomButton.value = false
 
-          // 下一帧恢复，保证后续真实用户滚动仍然能被识别
-          requestAnimationFrame(() => {
-            isProgrammaticScroll = false
-          })
-        }
-      }, 0)
+        // 50ms 后重置，确保本次 scroll 事件已处理完毕
+        setTimeout(() => {
+          isProgrammaticScroll = false
+        }, 50)
+      }
     })
   }
 }

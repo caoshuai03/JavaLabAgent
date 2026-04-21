@@ -1,5 +1,12 @@
 <template>
-  <router-view />
+  <!-- 使用 keep-alive 缓存 Chat 组件，
+       路由切换到 MCP/Skills/知识库 时不销毁 Chat，
+       避免 SSE 流式响应被中断 -->
+  <router-view v-slot="{ Component }">
+    <keep-alive include="Chat">
+      <component :is="Component" />
+    </keep-alive>
+  </router-view>
 </template>
 
 <script setup>

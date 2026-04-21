@@ -1,9 +1,9 @@
 package com.cs.rag.controller;
 
 import com.cs.rag.common.ApplicationConstant;
-import com.cs.rag.mcp.McpServerConfig;
-import com.cs.rag.mcp.McpToolInfo;
-import com.cs.rag.mcp.McpToolsConfig;
+import com.cs.rag.pojo.entity.McpServerConfig;
+import com.cs.rag.pojo.entity.McpToolInfo;
+import com.cs.rag.pojo.entity.McpToolsConfig;
 import com.cs.rag.service.McpService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

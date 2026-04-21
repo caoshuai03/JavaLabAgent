@@ -1,8 +1,9 @@
 package com.cs.rag.service.impl;
 
-import com.cs.rag.mcp.McpServerConfig;
-import com.cs.rag.mcp.McpToolInfo;
-import com.cs.rag.mcp.McpToolsConfig;
+import com.cs.rag.constant.RagConstant;
+import com.cs.rag.pojo.entity.McpServerConfig;
+import com.cs.rag.pojo.entity.McpToolInfo;
+import com.cs.rag.pojo.entity.McpToolsConfig;
 import com.cs.rag.service.McpService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -44,12 +45,6 @@ public class McpServiceImpl implements McpService {
 
     /** 正在初始化的服务集合，避免初始化过程中递归重入 */
     private final Set<String> initializingServers = ConcurrentHashMap.newKeySet();
-
-    /** MCP配置文件路径 (classpath中) */
-    private static final String CONFIG_FILE = "mcp-tools.json";
-
-    /** 外部配置文件路径 (项目根目录下, 优先级高于classpath) */
-    private static final String EXTERNAL_CONFIG_FILE = "mcp-tools.json";
 
     /** JSON-RPC 请求ID计数器 */
     private final AtomicInteger requestIdCounter = new AtomicInteger(1);
@@ -134,7 +129,7 @@ public class McpServiceImpl implements McpService {
             String jsonContent = null;
 
             // 1. 优先从外部文件加载(支持运行时修改)
-            Path externalPath = Paths.get(EXTERNAL_CONFIG_FILE);
+            Path externalPath = Paths.get(RagConstant.MCP_CONFIG_FILE);
             if (Files.exists(externalPath)) {
                 jsonContent = Files.readString(externalPath, StandardCharsets.UTF_8);
                 log.info("从外部文件加载MCP配置: {}", externalPath.toAbsolutePath());
@@ -142,11 +137,11 @@ public class McpServiceImpl implements McpService {
 
             // 2. 回退到classpath资源
             if (jsonContent == null) {
-                ClassPathResource resource = new ClassPathResource(CONFIG_FILE);
+                ClassPathResource resource = new ClassPathResource(RagConstant.MCP_CONFIG_FILE);
                 if (resource.exists()) {
                     try (InputStream is = resource.getInputStream()) {
                         jsonContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                        log.info("加载MCP配置: {}", CONFIG_FILE);
+                        log.info("加载MCP配置: {}", RagConstant.MCP_CONFIG_FILE);
                     }
                 }
             }
@@ -183,14 +178,14 @@ public class McpServiceImpl implements McpService {
             }
             if ((serverConfig.getType() == null || serverConfig.getType().isBlank())
                     && serverConfig.getUrl() != null && !serverConfig.getUrl().isBlank()) {
-                serverConfig.setType("http");
+                serverConfig.setType(RagConstant.MCP_TRANSPORT_HTTP);
                 log.info("MCP 服务 [{}] 未显式配置 type，已根据 url 自动识别为 http", name);
             }
 
             // 自动将包含 /sse 路径的 URL 识别为 SSE 传输类型
             if (serverConfig.getUrl() != null
                     && serverConfig.getUrl().toLowerCase(Locale.ROOT).contains("/sse")) {
-                serverConfig.setType("sse");
+                serverConfig.setType(RagConstant.MCP_TRANSPORT_SSE);
                 log.info("MCP服务器[{}]检测到SSE地址，自动切换为SSE传输模式: {}", name, serverConfig.getUrl());
             }
         });
@@ -201,7 +196,7 @@ public class McpServiceImpl implements McpService {
      */
     public void saveConfig() {
         try {
-            Path externalPath = Paths.get(EXTERNAL_CONFIG_FILE);
+            Path externalPath = Paths.get(RagConstant.MCP_CONFIG_FILE);
             String json = objectMapper.writerWithDefaultPrettyPrinter()
                     .writeValueAsString(currentConfig);
             Files.writeString(externalPath, json, StandardCharsets.UTF_8);
@@ -229,12 +224,12 @@ public class McpServiceImpl implements McpService {
             return;
         }
         // 杩欓噷鍙仛鍗忚鍒嗗彂锛屽叿浣撳疄鐜版斁鍒板悇鑷柟娉曘€?
-        if ("stdio".equalsIgnoreCase(config.getType())) {
+        if (RagConstant.MCP_TRANSPORT_STDIO.equalsIgnoreCase(config.getType())) {
             initStdioServer(name, config);
-        } else if ("sse".equalsIgnoreCase(config.getType())) {
+        } else if (RagConstant.MCP_TRANSPORT_SSE.equalsIgnoreCase(config.getType())) {
             // SSE妯″紡锛氬厛鎻℃墜鑾峰彇JSON-RPC POST绔偣锛屽啀鑾峰彇宸ュ叿鍒楄〃
             initSseServer(name, config);
-        } else if ("http".equalsIgnoreCase(config.getType())) {
+        } else if (RagConstant.MCP_TRANSPORT_HTTP.equalsIgnoreCase(config.getType())) {
             // HTTP妯″紡涓嶉渶瑕佸缓绔嬮暱杩炴帴锛岄娆′娇鐢ㄦ椂浠呭埛鏂板伐鍏风紦瀛?
             log.info("MCP 服务 [{}] 使用 HTTP 连接，url={}", name, config.getUrl());
             refreshToolsForServer(name);
@@ -276,16 +271,16 @@ public class McpServiceImpl implements McpService {
         if (config == null || !config.isEnabled()) {
             return false;
         }
-        if ("stdio".equalsIgnoreCase(config.getType())) {
+        if (RagConstant.MCP_TRANSPORT_STDIO.equalsIgnoreCase(config.getType())) {
             return stdioProcesses.containsKey(serverName)
                     && stdioWriters.containsKey(serverName)
                     && stdioReaders.containsKey(serverName)
                     && toolsCache.containsKey(serverName);
         }
-        if ("sse".equalsIgnoreCase(config.getType())) {
+        if (RagConstant.MCP_TRANSPORT_SSE.equalsIgnoreCase(config.getType())) {
             return sseEndpoints.containsKey(serverName) && toolsCache.containsKey(serverName);
         }
-        if ("http".equalsIgnoreCase(config.getType())) {
+        if (RagConstant.MCP_TRANSPORT_HTTP.equalsIgnoreCase(config.getType())) {
             return toolsCache.containsKey(serverName);
         }
         return false;
@@ -497,7 +492,7 @@ public class McpServiceImpl implements McpService {
                 return;
             }
 
-            if (!"http".equalsIgnoreCase(config.getType()) && !initializingServers.contains(serverName)) {
+            if (!RagConstant.MCP_TRANSPORT_HTTP.equalsIgnoreCase(config.getType()) && !initializingServers.contains(serverName)) {
                 ensureServerReady(serverName);
             }
             JsonNode response = sendJsonRpc(serverName, "tools/list", Map.of());
@@ -647,10 +642,10 @@ public class McpServiceImpl implements McpService {
             config = getServerConfig(serverName);
         }
 
-        if ("sse".equalsIgnoreCase(config.getType())) {
+        if (RagConstant.MCP_TRANSPORT_SSE.equalsIgnoreCase(config.getType())) {
             // SSE妯″紡锛歅OST鍒版彙鎵嬮樁娈佃幏鍙栫殑endpoint URL
             return sendJsonRpcSse(serverName, method, params);
-        } else if ("http".equalsIgnoreCase(config.getType())) {
+        } else if (RagConstant.MCP_TRANSPORT_HTTP.equalsIgnoreCase(config.getType())) {
             return sendJsonRpcHttp(serverName, config, method, params);
         } else {
             return sendJsonRpcStdio(serverName, method, params);
@@ -716,7 +711,7 @@ public class McpServiceImpl implements McpService {
             return;
         }
 
-        if ("stdio".equalsIgnoreCase(config.getType())) {
+        if (RagConstant.MCP_TRANSPORT_STDIO.equalsIgnoreCase(config.getType())) {
             BufferedWriter writer = stdioWriters.get(serverName);
             if (writer == null) {
                 return;
@@ -737,7 +732,7 @@ public class McpServiceImpl implements McpService {
             }
         }
 
-        if ("sse".equalsIgnoreCase(config.getType())) {
+        if (RagConstant.MCP_TRANSPORT_SSE.equalsIgnoreCase(config.getType())) {
             String endpointUrl = sseEndpoints.get(serverName);
             if (endpointUrl == null) {
                 return;

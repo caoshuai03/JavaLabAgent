@@ -11,6 +11,10 @@ import { useChatStore } from '../stores/chat'
 import Sidebar from '../components/Sidebar.vue'
 import ChatMain from '../components/ChatMain.vue'
 
+// 声明组件名称，配合 App.vue 的 keep-alive 使用，
+// 确保路由切换到 MCP/Skills/知识库 时 Chat 组件不被销毁
+defineOptions({ name: 'Chat' })
+
 const chatStore = useChatStore()
 
 /**

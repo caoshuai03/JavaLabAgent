@@ -1,8 +1,8 @@
 package com.cs.rag.service;
 
-import com.cs.rag.mcp.McpServerConfig;
-import com.cs.rag.mcp.McpToolInfo;
-import com.cs.rag.mcp.McpToolsConfig;
+import com.cs.rag.pojo.entity.McpServerConfig;
+import com.cs.rag.pojo.entity.McpToolInfo;
+import com.cs.rag.pojo.entity.McpToolsConfig;
 
 import java.util.List;
 import java.util.Map;

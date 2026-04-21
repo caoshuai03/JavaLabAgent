@@ -1,7 +1,7 @@
 package com.cs.rag.service.impl;
 
 import com.cs.rag.config.AgentToolProperties;
-import com.cs.rag.mcp.McpToolInfo;
+import com.cs.rag.pojo.entity.McpToolInfo;
 import com.cs.rag.service.McpService;
 import com.cs.rag.service.ToolService;
 import org.springframework.ai.document.Document;

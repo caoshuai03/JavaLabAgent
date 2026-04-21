@@ -1,4 +1,4 @@
-package com.cs.rag.mcp;
+package com.cs.rag.pojo.entity;
 
 import lombok.Data;
 
