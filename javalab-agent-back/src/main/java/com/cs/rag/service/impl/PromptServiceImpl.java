@@ -52,6 +52,13 @@ public class PromptServiceImpl implements PromptService {
     }
 
     @Override
+    public String buildContextSummaryMessage(String summary) {
+        // 使用模板渲染历史会话摘要，避免硬编码
+        String template = promptRegistry.get(PromptRegistry.CONTEXT_SUMMARY);
+        return renderTemplate(template, Map.of("SUMMARY", summary));
+    }
+
+    @Override
     public String buildReactPlanUserPrompt(String toolList,
                                            String userMessage,
                                            String observations,

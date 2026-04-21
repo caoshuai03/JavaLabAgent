@@ -30,8 +30,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,6 +45,8 @@ public class AgentServiceImpl implements AgentService {
     private static final String DEFAULT_UNKNOWN_ERROR = "Unknown error";
     private static final int MAX_TOTAL_WEB_READ_CALLS = 3;
     private static final int MAX_SUCCESSFUL_WEB_READ_CALLS = 2;
+    // 同一工具累计失败次数上限，超过后不再重试
+    private static final int MAX_TOOL_FAILURES = 2;
 
     private final RagConversationSupport ragConversationSupport;
     private final LLMProviderService llmProviderService;
@@ -56,13 +58,13 @@ public class AgentServiceImpl implements AgentService {
     private final ObjectMapper objectMapper;
 
     public AgentServiceImpl(RagConversationSupport ragConversationSupport,
-                                 LLMProviderService llmProviderService,
-                                 PromptService promptService,
-                                 ChatMessageService chatMessageService,
-                                 ToolService toolService,
-                                 SkillService skillService,
-                                 ToolOutputSummarizer toolOutputSummarizer,
-                                 ObjectMapper objectMapper) {
+                            LLMProviderService llmProviderService,
+                            PromptService promptService,
+                            ChatMessageService chatMessageService,
+                            ToolService toolService,
+                            SkillService skillService,
+                            ToolOutputSummarizer toolOutputSummarizer,
+                            ObjectMapper objectMapper) {
         this.ragConversationSupport = ragConversationSupport;
         this.llmProviderService = llmProviderService;
         this.promptService = promptService;
@@ -158,8 +160,10 @@ public class AgentServiceImpl implements AgentService {
     private ReactAgentPlanOutcome runPlanningLoop(ReactAgentChatContext chatContext, String traceId, FluxSink<String> sink) {
         List<String> events = new ArrayList<>();
         List<String> observations = new ArrayList<>();
-        Set<String> toolSignatureHistory = new LinkedHashSet<>();
-        Set<String> emptyKnowledgeQueries = new LinkedHashSet<>();
+        // 重复工具检测，主要拦截 web_search 等工具的重复调用
+        Set<String> toolSignatureHistory = new HashSet<>();
+        // 按工具名统计失败次数，防止换 query 绕过签名去重
+        Map<String, Integer> toolFailureCounts = new HashMap<>();
         int totalWebReadCalls = 0;
         int successfulWebReadCalls = 0;
 
@@ -186,11 +190,9 @@ public class AgentServiceImpl implements AgentService {
         }
 
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "thinking")));
-        log.info("[Planning Started] sessionId={}, question={}", chatContext.sessionId(), chatContext.originalMessage());
 
         for (int i = 1; i <= RagConstant.MAX_ROUNDS; i++) {
             ReactAgentDecision decision = decideNextAction(chatContext, matchedSkills, observations, i);
-            log.info("[Round {}] action={}, tool={}", i, decision.getAction(), decision.getToolName());
 
             if ("final".equals(decision.getAction())) {
                 emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "ready_to_answer", "round", i)));
@@ -204,7 +206,9 @@ public class AgentServiceImpl implements AgentService {
 
             String toolName = decision.getToolName() == null ? "" : decision.getToolName();
             Map<String, Object> toolInput = decision.getToolInput() == null ? new HashMap<>() : decision.getToolInput();
-            String toolSignature = normalizeToolSignature(toolName, toolInput);
+
+            // 重复工具检测：签名相同则跳过
+            String toolSignature = buildToolSignature(toolName, toolInput);
             if (toolSignatureHistory.contains(toolSignature)) {
                 emit.accept(eventJson("status", chatContext.sessionId(), traceId,
                         Map.of("stage", "stop_repeated_tool", "round", i, "toolName", toolName)));
@@ -212,14 +216,13 @@ public class AgentServiceImpl implements AgentService {
                 continue;
             }
 
-            if ("knowledge_search".equals(toolName)) {
-                String query = extractKnowledgeQuery(toolInput);
-                if (query != null && emptyKnowledgeQueries.contains(query)) {
-                    emit.accept(eventJson("status", chatContext.sessionId(), traceId,
-                            Map.of("stage", "skip_redundant_knowledge_search", "round", i, "query", query)));
-                    observations.add("The same knowledge search query already returned empty result.");
-                    return new ReactAgentPlanOutcome(events, observations, null);
-                }
+            // 同一工具累计失败次数超限，停止重试（解决换 query 绕过签名去重的问题）
+            int failures = toolFailureCounts.getOrDefault(toolName, 0);
+            if (failures >= MAX_TOOL_FAILURES) {
+                emit.accept(eventJson("status", chatContext.sessionId(), traceId,
+                        Map.of("stage", "stop_tool_max_failures", "round", i, "toolName", toolName, "failures", failures)));
+                observations.add("工具 " + toolName + " 已连续失败 " + failures + " 次，请基于已有信息作答或使用其他工具。");
+                continue;
             }
 
             if ("web_read".equals(toolName)
@@ -237,11 +240,15 @@ public class AgentServiceImpl implements AgentService {
                     traceId,
                     emit,
                     observations,
-                    emptyKnowledgeQueries,
                     i,
                     toolName,
                     toolInput
             );
+
+            // 统计工具失败次数
+            if (!result.isSuccess()) {
+                toolFailureCounts.merge(toolName, 1, Integer::sum);
+            }
             if ("web_read".equals(toolName)) {
                 totalWebReadCalls++;
                 if (result.isSuccess()) {
@@ -256,13 +263,12 @@ public class AgentServiceImpl implements AgentService {
     }
 
     private ToolService.ToolExecutionResult executeToolRound(ReactAgentChatContext chatContext,
-                                                                       String traceId,
-                                                                       java.util.function.Consumer<String> emit,
-                                                                       List<String> observations,
-                                                                       Set<String> emptyKnowledgeQueries,
-                                                                       int round,
-                                                                       String toolName,
-                                                                       Map<String, Object> toolInput) {
+                                                             String traceId,
+                                                             java.util.function.Consumer<String> emit,
+                                                             List<String> observations,
+                                                             int round,
+                                                             String toolName,
+                                                             Map<String, Object> toolInput) {
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_running", "round", round, "toolName", toolName)));
 
         Map<String, Object> toolCallPayload = new HashMap<>();
@@ -300,20 +306,13 @@ public class AgentServiceImpl implements AgentService {
         String toolResponse;
         if (result.isSuccess()) {
             resultPayload.put("data", result.getData());
-            if (isKnowledgeSearchNoResult(result.getToolName(), result.getData())) {
-                String query = extractKnowledgeQuery(toolInput);
-                if (query != null && !query.isBlank()) {
-                    emptyKnowledgeQueries.add(query);
-                }
-                toolResponse = "knowledge_search returned empty result for query: " + (query == null ? "" : query);
-            } else {
-                String summarizedOutput = result.getSummary();
-                if (summarizedOutput == null || summarizedOutput.isBlank()) {
-                    summarizedOutput = toolOutputSummarizer.summarize(result.getToolName(), result.getData());
-                }
-                resultPayload.put("summary", summarizedOutput);
-                toolResponse = summarizedOutput;
+            // 统一走摘要逻辑，不再区分 knowledge_search
+            String summarizedOutput = result.getSummary();
+            if (summarizedOutput == null || summarizedOutput.isBlank()) {
+                summarizedOutput = toolOutputSummarizer.summarize(result.getToolName(), result.getData());
             }
+            resultPayload.put("summary", summarizedOutput);
+            toolResponse = summarizedOutput;
             observations.add(toolResponse);
             log.info("[Tool Success] tool={}, cost={}ms", toolName, costMs);
         } else {
@@ -368,7 +367,7 @@ public class AgentServiceImpl implements AgentService {
                     .options(ChatOptions.builder().model(chatContext.effectiveModel()).temperature(0.1).build())
                     .call()
                     .content();
-            log.info("[LLM Decision Response] length={}, content={}", content == null ? 0 : content.length(), content);
+            log.info("[Round {}] [LLM Decision Response] length={}, content={}", round, content == null ? 0 : content.length(), content);
             return parseDecision(content);
         } catch (Exception e) {
             log.error("[Decision Failed] {}", e.getMessage());
@@ -503,45 +502,17 @@ public class AgentServiceImpl implements AgentService {
         }
     }
 
-    private boolean isKnowledgeSearchNoResult(String toolName, Object data) {
-        if (!"knowledge_search".equals(toolName)) {
-            return false;
-        }
-        if (!(data instanceof Map<?, ?> map)) {
-            return false;
-        }
-        Object countObj = map.get("count");
-        if (countObj instanceof Number number) {
-            return number.intValue() == 0;
-        }
-        if (countObj != null) {
-            try {
-                return Integer.parseInt(String.valueOf(countObj)) == 0;
-            } catch (Exception ignored) {
-                return false;
-            }
-        }
-        Object hitsObj = map.get("hits");
-        return hitsObj instanceof List<?> list && list.isEmpty();
-    }
 
-    private String extractKnowledgeQuery(Map<String, Object> toolInput) {
-        if (toolInput == null) {
-            return null;
+    /**
+     * 构建工具调用签名，用于重复调用检测。
+     * web_search 按 query 去重，其他工具按完整输入去重。
+     */
+    private String buildToolSignature(String toolName, Map<String, Object> toolInput) {
+        if ("web_search".equals(toolName)) {
+            Object query = toolInput.get("query");
+            return "web_search|" + (query == null ? "" : String.valueOf(query).trim().toLowerCase());
         }
-        Object query = toolInput.get("query");
-        return query == null ? null : String.valueOf(query).trim();
-    }
-
-    private String normalizeToolSignature(String toolName, Map<String, Object> toolInput) {
-        String normalizedToolName = normalizeText(toolName);
-        return switch (normalizedToolName) {
-            case "knowledge_search" -> normalizedToolName + "|query=" + normalizeText(toolInput.get("query"));
-            case "maps_geo" -> normalizedToolName + "|address=" + normalizeText(toolInput.get("address"))
-                    + "|city=" + normalizeText(toolInput.get("city"));
-            case "maps_regeocode" -> normalizedToolName + "|location=" + normalizeText(toolInput.get("location"));
-            default -> normalizedToolName + "|" + canonicalizeJson(toolInput);
-        };
+        return toolName + "|" + canonicalizeJson(toolInput);
     }
 
     private String canonicalizeJson(Object value) {
@@ -582,15 +553,6 @@ public class AgentServiceImpl implements AgentService {
                 + ". Do not call it again; answer with existing result or choose another tool.";
     }
 
-    private String normalizeText(Object value) {
-        if (value == null) {
-            return "";
-        }
-        return String.valueOf(value)
-                .trim()
-                .toLowerCase()
-                .replaceAll("\\s+", "");
-    }
 
     private String formatObservationsForPrompt(List<String> observations) {
         if (observations == null || observations.isEmpty()) {
@@ -609,11 +571,6 @@ public class AgentServiceImpl implements AgentService {
     private void logRecentDecisionMessages(int round, List<Message> decisionMessages) {
         List<String> recentSystemMessages = collectRecentMessages(decisionMessages, SystemMessage.class, 2);
         List<String> recentUserMessages = collectRecentMessages(decisionMessages, UserMessage.class, 2);
-        log.info("[Round {}] decisionContext: totalMessages={}, recentSystemMessages={}, recentUserMessages={}",
-                round, decisionMessages.size(), recentSystemMessages.size(), recentUserMessages.size());
-        for (int i = 0; i < recentSystemMessages.size(); i++) {
-            log.info("[Round {}][System {}] {}", round, i + 1, recentSystemMessages.get(i));
-        }
         for (int i = 0; i < recentUserMessages.size(); i++) {
             log.info("[Round {}][User {}] {}", round, i + 1, recentUserMessages.get(i));
         }

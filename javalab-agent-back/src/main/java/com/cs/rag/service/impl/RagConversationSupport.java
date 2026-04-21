@@ -73,7 +73,8 @@ public class RagConversationSupport {
         String existingSummary = session != null ? session.getSummary() : null;
         List<Message> contextMessages = new ArrayList<>();
         if (existingSummary != null && !existingSummary.isEmpty()) {
-            contextMessages.add(new SystemMessage("以下是早期对话的摘要总结，请基于此背景继续对话：\n" + existingSummary));
+            // 使用提示词模板渲染摘要内容，避免硬编码
+            contextMessages.add(new SystemMessage(promptService.buildContextSummaryMessage(existingSummary)));
             log.info("历史会话: 使用预存的滚动摘要 (长度: {})", existingSummary.length());
         }
         List<ChatMessage> recentMessages = chatMessageService.getRecentMessages(sessionId, userId, MEMORY_SIZE);

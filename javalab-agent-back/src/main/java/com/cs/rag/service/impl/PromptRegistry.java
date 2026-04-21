@@ -21,6 +21,8 @@ public class PromptRegistry {
     public static final String REACT_ANSWER_SYSTEM = "prompts/react/react-answer-system.md";
     public static final String REACT_PLAN_USER = "prompts/react/react-plan-user.md";
     public static final String REACT_SKILLS_FRAGMENT = "prompts/react/react-skills-fragment.md";
+    // 历史会话摘要上下文提示词
+    public static final String CONTEXT_SUMMARY = "prompts/context/context-summary-system.md";
 
     private final Map<String, String> promptCache = new ConcurrentHashMap<>();
 
@@ -33,6 +35,7 @@ public class PromptRegistry {
         preloadPrompt(REACT_ANSWER_SYSTEM);
         preloadPrompt(REACT_PLAN_USER);
         preloadPrompt(REACT_SKILLS_FRAGMENT);
+        preloadPrompt(CONTEXT_SUMMARY);
     }
 
     public String get(String location) {

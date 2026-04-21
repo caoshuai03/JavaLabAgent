@@ -13,7 +13,8 @@ import java.util.Map;
 public class ToolOutputSummarizer {
 
     private static final int MAX_LIST_ITEMS = 3;
-    private static final int MAX_TEXT_LENGTH = 100;
+    // 摘要文本截断长度，保留足够上下文信息
+    private static final int MAX_TEXT_LENGTH = 300;
 
     private final ObjectMapper objectMapper;
 
@@ -26,185 +27,49 @@ public class ToolOutputSummarizer {
             return "工具返回空结果。";
         }
         JsonNode root = objectMapper.valueToTree(data);
-        return switch (toolName) {
-            case "knowledge_search" -> summarizeKnowledgeSearch(root);
-            default -> summarizeGenericTool(toolName, root);
-        };
+        // 统一走通用摘要逻辑
+        return summarizeGenericTool(toolName, root);
     }
 
-    private String summarizeKnowledgeSearch(JsonNode root) {
-        int count = root.path("count").asInt(root.path("hits").isArray() ? root.path("hits").size() : 0);
-        JsonNode hits = root.path("hits");
-        if (!hits.isArray() || hits.isEmpty()) {
-            return "知识检索结果：未找到相关文档。";
-        }
-
-        StringBuilder summary = new StringBuilder("知识检索结果：找到 ")
-                .append(count)
-                .append(" 条相关文档。");
-        for (int i = 0; i < Math.min(hits.size(), MAX_LIST_ITEMS); i++) {
-            JsonNode hit = hits.get(i);
-            String title = firstNonBlank(
-                    text(hit, "title"),
-                    text(hit.path("metadata"), "title"),
-                    text(hit.path("metadata"), "fileName"),
-                    text(hit.path("metadata"), "source"),
-                    "文档" + (i + 1)
-            );
-            String score = firstNonBlank(
-                    scalar(hit, "score"),
-                    scalar(hit.path("metadata"), "score"),
-                    scalar(hit.path("metadata"), "relevanceScore"),
-                    null
-            );
-            String snippet = abbreviate(firstNonBlank(
-                    text(hit, "snippet"),
-                    text(hit, "summary"),
-                    text(hit, "content"),
-                    text(hit, "text"),
-                    text(hit.path("metadata"), "summary"),
-                    "无摘要"
-            ));
-            summary.append("\n- ")
-                    .append(title);
-            if (score != null) {
-                summary.append("（score=").append(score).append("）");
-            }
-            summary.append("：").append(snippet);
-        }
-        return summary.toString();
-    }
-
+    /**
+     * 通用工具输出摘要。
+     * 设计原则：简洁优先，只保留核心信息，让模型自行推理细节。
+     */
     private String summarizeGenericTool(String toolName, JsonNode root) {
-        JsonNode representative = representativeNode(root);
-        String coordinateSummary = summarizeCoordinates(representative);
-        if (coordinateSummary != null) {
-            return coordinateSummary;
-        }
-
-        JsonNode items = firstArray(root, "return", "results", "items", "list", "data", "hits");
+        // 1. 查找列表字段，列出条目标题
+        JsonNode items = firstArray(root, "results", "items", "list", "data", "hits", "return");
         if (items != null && items.isArray() && !items.isEmpty()) {
             StringBuilder summary = new StringBuilder(toolName)
-                    .append(" 返回 ")
-                    .append(items.size())
-                    .append(" 条结果。");
+                    .append(" 返回 ").append(items.size()).append(" 条结果。");
             for (int i = 0; i < Math.min(items.size(), MAX_LIST_ITEMS); i++) {
                 JsonNode item = items.get(i);
                 String title = firstNonBlank(
-                        text(item, "title"),
-                        text(item, "name"),
-                        text(item, "id"),
-                        "结果" + (i + 1)
-                );
-                String snippet = abbreviate(firstNonBlank(
-                        text(item, "summary"),
-                        text(item, "snippet"),
-                        text(item, "description"),
-                        text(item, "content"),
-                        text(item, "text"),
-                        scalarSummary(item)
-                ));
-                summary.append("\n- ").append(title).append("：").append(snippet);
+                        text(item, "title"), text(item, "name"),
+                        text(item, "url"), text(item, "id"),
+                        "结果" + (i + 1));
+                summary.append("\n- ").append(abbreviate(title));
             }
             return summary.toString();
         }
 
+        // 2. 尝试从根节点或一层嵌套中提取主要文本
+        JsonNode target = root;
+        if (root.has("result") && root.path("result").isObject()) {
+            target = root.path("result");
+        } else if (root.has("data") && root.path("data").isObject()) {
+            target = root.path("data");
+        }
         String primaryText = firstNonBlank(
-                text(representative, "result"),
-                text(representative, "content"),
-                text(representative, "summary"),
-                text(representative, "message"),
-                text(representative, "text"),
-                locationSummary(representative),
-                scalarSummary(representative),
-                scalarSummary(root)
-        );
-        return toolName + " 返回：" + abbreviate(primaryText);
-    }
+                text(target, "result"), text(target, "content"),
+                text(target, "summary"), text(target, "message"),
+                text(target, "text"), text(target, "output"),
+                scalarSummary(target));
+        if (primaryText != null) {
+            return toolName + " 返回：" + abbreviate(primaryText);
+        }
 
-    private String summarizeCoordinates(JsonNode root) {
-        if (root == null || root.isMissingNode() || root.isNull()) {
-            return null;
-        }
-        String lat = firstNonBlank(scalar(root, "lat"), scalar(root, "latitude"), scalar(root.path("location"), "lat"), scalar(root.path("location"), "latitude"), null);
-        String lon = firstNonBlank(scalar(root, "lon"), scalar(root, "lng"), scalar(root, "longitude"), scalar(root.path("location"), "lon"), scalar(root.path("location"), "lng"), scalar(root.path("location"), "longitude"), null);
-        String locationText = text(root, "location");
-        if ((lat == null || lon == null) && locationText != null && locationText.contains(",")) {
-            String[] parts = locationText.split(",", 2);
-            if (parts.length == 2) {
-                lon = firstNonBlank(lon, parts[0].trim(), null);
-                lat = firstNonBlank(lat, parts[1].trim(), null);
-            }
-        }
-        if (lat == null || lon == null) {
-            JsonNode coordinates = root.path("coordinates");
-            lat = firstNonBlank(lat, scalar(coordinates, "lat"), scalar(coordinates, "latitude"), null);
-            lon = firstNonBlank(lon, scalar(coordinates, "lon"), scalar(coordinates, "lng"), scalar(coordinates, "longitude"), null);
-        }
-        if (lat == null || lon == null) {
-            return null;
-        }
-        String location = firstNonBlank(
-                locationSummary(root),
-                text(root, "location"),
-                text(root, "address"),
-                text(root, "name"),
-                text(root.path("location"), "name"),
-                text(root.path("result"), "formatted_address"),
-                "目标位置"
-        );
-        return "地图查询结果：" + location + "，坐标 (" + lon + ", " + lat + ")。";
-    }
-
-    private JsonNode representativeNode(JsonNode root) {
-        if (root == null || root.isMissingNode() || root.isNull()) {
-            return root;
-        }
-        JsonNode firstReturn = firstArray(root, "return");
-        if (firstReturn != null && firstReturn.isArray() && !firstReturn.isEmpty()) {
-            JsonNode item = firstReturn.get(0);
-            if (item != null && !item.isNull()) {
-                return item;
-            }
-        }
-        JsonNode result = root.path("result");
-        if (result.isObject()) {
-            return result;
-        }
-        JsonNode data = root.path("data");
-        if (data.isObject()) {
-            return data;
-        }
-        return root;
-    }
-
-    private String locationSummary(JsonNode node) {
-        if (node == null || !node.isObject()) {
-            return null;
-        }
-        String district = text(node, "district");
-        String city = text(node, "city");
-        String province = text(node, "province");
-        String country = text(node, "country");
-        StringBuilder builder = new StringBuilder();
-        appendLocationPart(builder, country);
-        appendLocationPart(builder, province);
-        appendLocationPart(builder, city);
-        appendLocationPart(builder, district);
-        if (builder.isEmpty()) {
-            return null;
-        }
-        return builder.toString();
-    }
-
-    private void appendLocationPart(StringBuilder builder, String value) {
-        if (value == null || value.isBlank()) {
-            return;
-        }
-        if (!builder.isEmpty() && builder.toString().endsWith(value)) {
-            return;
-        }
-        builder.append(value.trim());
+        // 3. 兆底：直接截断 JSON
+        return toolName + " 返回：" + abbreviate(root.toString());
     }
 
     private JsonNode firstArray(JsonNode root, String... fieldNames) {
@@ -224,18 +89,6 @@ public class ToolOutputSummarizer {
         }
         String text = value.asText(null);
         return text == null || text.isBlank() ? null : text.trim();
-    }
-
-    private String scalar(JsonNode node, String fieldName) {
-        JsonNode value = node.path(fieldName);
-        if (value.isMissingNode() || value.isNull()) {
-            return null;
-        }
-        if (value.isValueNode()) {
-            String text = value.asText(null);
-            return text == null || text.isBlank() ? null : text.trim();
-        }
-        return null;
     }
 
     private String scalarSummary(JsonNode node) {

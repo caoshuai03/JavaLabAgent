@@ -4,7 +4,6 @@ import com.cs.rag.config.AgentToolProperties;
 import com.cs.rag.pojo.entity.McpToolInfo;
 import com.cs.rag.service.McpService;
 import com.cs.rag.service.ToolService;
-import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -68,15 +67,12 @@ public class ToolServiceImpl implements ToolService {
             ".zip", ".tar", ".gz", ".7z", ".ps1", ".bat", ".cmd", ".sh"
     );
 
-    private final RagConversationSupport ragConversationSupport;
     private final AgentToolProperties properties;
     private final McpService mcpService;
     private final HttpClient httpClient;
 
-    public ToolServiceImpl(RagConversationSupport ragConversationSupport,
-                           AgentToolProperties properties,
+    public ToolServiceImpl(AgentToolProperties properties,
                            McpService mcpService) {
-        this.ragConversationSupport = ragConversationSupport;
         this.properties = properties;
         this.mcpService = mcpService;
         this.httpClient = HttpClient.newBuilder()
@@ -167,10 +163,6 @@ public class ToolServiceImpl implements ToolService {
      */
     private List<ToolDescriptor> builtinTools() {
         return List.of(
-                new ToolDescriptor(TOOL_KNOWLEDGE_SEARCH, "Search the Java experiment knowledge base", "builtin",
-                        schemaOf(mapOf(
-                                "query", property("string", "Search query")
-                        )), true),
                 new ToolDescriptor(TOOL_WEB_SEARCH, "Search the web for relevant pages", "builtin",
                         schemaOf(mapOf(
                                 "query", property("string", "Search query"),
@@ -284,7 +276,6 @@ public class ToolServiceImpl implements ToolService {
      */
     private ToolExecutionResult executeBuiltinTool(String toolName, Map<String, Object> input) {
         return switch (toolName) {
-            case TOOL_KNOWLEDGE_SEARCH -> executeKnowledgeSearch(input);
             case TOOL_WEB_SEARCH -> executeWebSearch(input);
             case TOOL_FILE_READ -> executeFileRead(input);
             case TOOL_FILE_WRITE -> executeFileWrite(input);
@@ -329,42 +320,6 @@ public class ToolServiceImpl implements ToolService {
                     Map.of()
             );
         }
-    }
-
-    private ToolExecutionResult executeKnowledgeSearch(Map<String, Object> input) {
-        long start = System.currentTimeMillis();
-        String query = asString(input.get("query"));
-        if (query == null || query.isBlank()) {
-            return ToolExecutionResult.error(TOOL_KNOWLEDGE_SEARCH, "Missing query", "builtin", 0L, Map.of());
-        }
-
-        List<Document> documents = ragConversationSupport.performSearch(query);
-        List<Map<String, Object>> hits = new ArrayList<>();
-        if (documents != null) {
-            for (Document document : documents) {
-                Map<String, Object> hit = new LinkedHashMap<>();
-                hit.put("score", document.getScore());
-                hit.put("content", abbreviate(document.getText(), 400));
-                hits.add(hit);
-                if (hits.size() >= 5) {
-                    break;
-                }
-            }
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("query", query);
-        data.put("count", hits.size());
-        data.put("hits", hits);
-        String summary = hits.isEmpty() ? "知识检索未找到相关结果。" : "知识检索找到 " + hits.size() + " 条结果。";
-        return ToolExecutionResult.success(
-                TOOL_KNOWLEDGE_SEARCH,
-                data,
-                summary,
-                "builtin",
-                System.currentTimeMillis() - start,
-                Map.of()
-        );
     }
 
     private ToolExecutionResult executeWebSearch(Map<String, Object> input) {
