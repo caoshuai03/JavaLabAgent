@@ -1,7 +1,6 @@
 package com.cs.rag.service.impl;
 
 
-
 import com.cs.rag.config.AgentToolProperties;
 
 import com.cs.rag.constant.RagConstant;
@@ -57,7 +56,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
 
-
 import java.time.Instant;
 
 import java.util.ArrayList;
@@ -91,13 +89,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 
-
 @Slf4j
 
 @Service
 
 public class AgentServiceImpl implements AgentService {
-
 
 
     private static final String DEFAULT_PLAN_ERROR_ANSWER = "Planning failed. Falling back to direct answer.";
@@ -111,7 +107,6 @@ public class AgentServiceImpl implements AgentService {
     // 同一工具累计失败次数上限，超过后不再重试
 
     private static final int MAX_TOOL_FAILURES = 2;
-
 
 
     private final RagConversationSupport ragConversationSupport;
@@ -133,13 +128,10 @@ public class AgentServiceImpl implements AgentService {
     private final AgentToolProperties toolProperties;
 
 
-
     /**
-
      * 用于超时控制的线程池，将 LLM 决策和工具执行提交到独立线程，
-
+     * <p>
      * 主线程通过 Future.get(timeout) 实现兜底超时。
-
      */
 
     private final ExecutorService timeoutExecutor = Executors.newCachedThreadPool(r -> {
@@ -151,7 +143,6 @@ public class AgentServiceImpl implements AgentService {
         return t;
 
     });
-
 
 
     public AgentServiceImpl(RagConversationSupport ragConversationSupport,
@@ -193,7 +184,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     @Override
 
     public Flux<String> chat(String message, String sessionId, Long userId, String model) {
@@ -205,7 +195,6 @@ public class AgentServiceImpl implements AgentService {
         long start = System.currentTimeMillis();
 
 
-
         return Flux.create(sink -> {
 
             Thread thread = new Thread(() -> handleChat(chatContext, traceId, start, sink));
@@ -215,7 +204,6 @@ public class AgentServiceImpl implements AgentService {
             thread.setDaemon(true);
 
             thread.start();
-
 
 
             // 客户端断开连接（前端点击停止按钮）时中断工作线程，释放 LLM 调用与工具执行等后端资源
@@ -232,6 +220,74 @@ public class AgentServiceImpl implements AgentService {
 
     }
 
+    /**
+     * 安全发送 SSE 事件。
+     * <p>
+     * 客户端取消、sink 已结束或发送时出现的异常，都只记录日志，不再向外抛出，
+     * 以避免 Reactor 产生 onErrorDropped。
+     */
+    private void safeSinkNext(FluxSink<String> sink, String event, String traceId, String eventType) {
+        if (sink == null || event == null) {
+            return;
+        }
+        try {
+            if (!sink.isCancelled()) {
+                sink.next(event);
+            }
+        } catch (Exception e) {
+            // SSE 发送失败通常是客户端已断开或 sink 已终止，记录日志即可。
+            log.error("[SSE Send Failed] eventType={}, traceId={}, cancelled={}",
+                    eventType, traceId, sink.isCancelled(), e);
+        }
+    }
+
+    /**
+     * 判断当前模型是否已经是 Ollama。
+     * <p>
+     * 如果已经是本地模型，就不要再做二次回退，避免无意义重试。
+     */
+    private boolean isOllamaModel(String model) {
+        return llmProviderService.getChatModel(model) == llmProviderService.getOllamaChatModel();
+    }
+
+    /**
+     * 构建最终回答阶段的内容流。
+     * <p>
+     * 这里只返回模型原始输出内容，外层负责转成 SSE 事件并处理回退/取消。
+     */
+    private Flux<String> buildFinalAnswerContentFlux(List<Message> finalMessages, String effectiveModel, String modelName, boolean fallbackMode) {
+        try {
+            ChatModel targetChatModel = fallbackMode ? llmProviderService.getOllamaChatModel() : llmProviderService.getChatModel(effectiveModel);
+            ChatClient chatClient = ChatClient.builder(targetChatModel).build();
+            return chatClient.prompt()
+                    .messages(finalMessages)
+                    .options(ChatOptions.builder().model(modelName).build())
+                    .stream()
+                    .content();
+        } catch (Exception e) {
+            // 构建阶段异常直接转成错误流，交给外层回退逻辑处理。
+            return Flux.error(e);
+        }
+    }
+
+    /**
+     * 安全结束 SSE 流。
+     * <p>
+     * 仅在 sink 未取消时完成，且吞掉终结阶段的重复完成异常。
+     */
+    private void safeSinkComplete(FluxSink<String> sink, String traceId) {
+        if (sink == null) {
+            return;
+        }
+        try {
+            if (!sink.isCancelled()) {
+                sink.complete();
+            }
+        } catch (Exception e) {
+            // 流已经终止或客户端已断开，直接记录日志。
+            log.error("[SSE Complete Failed] traceId={}, cancelled={}", traceId, sink.isCancelled(), e);
+        }
+    }
 
 
     private ReactAgentChatContext prepareChatContext(String message, String sessionId, Long userId, String model) {
@@ -241,9 +297,7 @@ public class AgentServiceImpl implements AgentService {
         List<Message> contextMessages = ragConversationSupport.buildContext(finalSessionId, userId);
 
 
-
         chatMessageService.saveUserMessage(finalSessionId, userId, message);
-
 
 
         List<Document> ragDocuments = ragConversationSupport.performSearch(message);
@@ -253,13 +307,11 @@ public class AgentServiceImpl implements AgentService {
         String effectiveModel = ragConversationSupport.selectModel(model, ragDocuments);
 
 
-
         List<Message> allMessages = new ArrayList<>();
 
         allMessages.addAll(contextMessages);
 
         allMessages.add(new UserMessage(enhancedMessage));
-
 
 
         log.debug("ReAct context prepared: totalMessages={}", allMessages.size());
@@ -269,237 +321,178 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private void handleChat(ReactAgentChatContext chatContext, String traceId, long start, FluxSink<String> sink) {
-
         // 计算全局截止时间（参考 OpenAI Assistants run 超时机制）
-
         Instant deadline = Instant.now().plusSeconds(toolProperties.getAgentTotalTimeoutSeconds());
 
-
-
         try {
-
             ReactAgentPlanOutcome planOutcome = runPlanningLoop(chatContext, traceId, sink, deadline);
 
-
-
             // 规划循环结束后再次检查是否已被客户端取消
-
             if (isAgentCancelled(sink)) {
-
                 log.info("[Cancelled] client disconnected after planning: traceId={}", traceId);
 
                 // 如果规划结果中有最终答案，尝试直接输出（避免前端无法收到结果）
-
                 if (planOutcome.finalAnswer() != null && !planOutcome.finalAnswer().isBlank()) {
-
                     log.info("[Cancelled] emitting final answer from plan outcome: traceId={}", traceId);
-
-                    sink.next(eventJson("token", chatContext.sessionId(), traceId,
-
-                            Map.of("content", planOutcome.finalAnswer())));
+                    safeSinkNext(sink,
+                            eventJson("token", chatContext.sessionId(), traceId,
+                                    Map.of("content", planOutcome.finalAnswer())),
+                            traceId,
+                            "token");
 
                     saveMessageWithThinkingProcess(chatContext.sessionId(), chatContext.userId(),
-
                             planOutcome.finalAnswer(), planOutcome.events());
 
-                    sink.next(eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)));
-
+                    safeSinkNext(sink,
+                            eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)),
+                            traceId,
+                            "final");
                 } else {
-
                     // 没有最终答案，保存部分响应
-
                     savePartialResponse(chatContext, new StringBuilder(), planOutcome);
-
                 }
 
-                tryComplete(sink);
-
+                safeSinkComplete(sink, traceId);
                 return;
-
             }
 
-
-
             streamFinalAnswer(chatContext, traceId, start, sink, planOutcome);
-
         } catch (Exception e) {
-
             // 客户端取消导致的线程中断，静默结束即可
-
             if (isAgentCancelled(sink)) {
-
                 log.info("[Cancelled] agent interrupted: sessionId={}, traceId={}", chatContext.sessionId(), traceId);
-
-                tryComplete(sink);
-
+                safeSinkComplete(sink, traceId);
                 return;
-
             }
 
             log.error("ReactAgent failed: sessionId={}, traceId={}", chatContext.sessionId(), traceId, e);
-
-            sink.next(eventJson("error", chatContext.sessionId(), traceId,
-
-                    Map.of("message", e.getMessage() != null ? e.getMessage() : DEFAULT_UNKNOWN_ERROR)));
-
-            sink.complete();
-
+            safeSinkNext(sink,
+                    eventJson("error", chatContext.sessionId(), traceId,
+                            Map.of("message", e.getMessage() != null ? e.getMessage() : DEFAULT_UNKNOWN_ERROR)),
+                    traceId,
+                    "error");
+            safeSinkComplete(sink, traceId);
         }
-
     }
-
-
 
     /**
-
      * 流式输出最终回答。
-
+     * <p>
      * 使用 CountDownLatch 让工作线程等待内部 LLM 流完成，
-
      * 以便在客户端取消时能中断工作线程并 dispose 内部订阅，真正停止 LLM 输出。
-
      */
-
     private void streamFinalAnswer(ReactAgentChatContext chatContext,
-
                                    String traceId,
-
                                    long start,
-
                                    FluxSink<String> sink,
-
                                    ReactAgentPlanOutcome planOutcome) {
-
         List<Message> finalMessages = buildFinalMessages(chatContext.allMessages());
-
         log.info("[Final Answer] totalMessages={}", finalMessages.size());
 
-
-
-        ChatModel targetChatModel = llmProviderService.getChatModel(chatContext.effectiveModel());
-
-        ChatClient chatClient = ChatClient.builder(targetChatModel).build();
-
-        ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
-
-                .messages(finalMessages)
-
-                .options(ChatOptions.builder().model(chatContext.effectiveModel()).build());
-
-
-
         StringBuilder fullResponse = new StringBuilder();
-
         CountDownLatch latch = new CountDownLatch(1);
-
-
-
-        // 订阅 LLM 流式输出，通过 latch 同步等待完成或被取消
-
-        Disposable subscription = promptSpec.stream()
-
-                .content()
-
-                .doOnNext(chunk -> {
-
-                    // 已取消时不再向客户端推送
-
-                    if (sink.isCancelled()) return;
-
-                    fullResponse.append(chunk);
-
-                    sink.next(eventJson("token", chatContext.sessionId(), traceId, Map.of("content", chunk)));
-
-                })
-
-                .doOnComplete(() -> {
-
-                    if (!sink.isCancelled()) {
-
-                        String aiResponse = fullResponse.toString();
-
-                        if (!aiResponse.isEmpty()) {
-
-                            saveMessageWithThinkingProcess(chatContext.sessionId(), chatContext.userId(), aiResponse, planOutcome.events());
-
-                            ragConversationSupport.refreshSummaryAsync(chatContext.sessionId(), chatContext.userId(), "ReactAgent");
-
-                            log.info("[Flow Completed] answerLength={}, cost={}ms", aiResponse.length(), System.currentTimeMillis() - start);
-
-                        }
-
-                        sink.next(eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)));
-
-                        sink.complete();
-
-                    }
-
-                    latch.countDown();
-
-                })
-
-                .doOnError(e -> {
-
-                    if (!sink.isCancelled()) {
-
-                        sink.next(eventJson("error", chatContext.sessionId(), traceId,
-
-                                Map.of("message", e.getMessage() != null ? e.getMessage() : DEFAULT_UNKNOWN_ERROR)));
-
-                        sink.complete();
-
-                    }
-
-                    latch.countDown();
-
-                })
-
-                .doOnCancel(latch::countDown)
-
-                .subscribe();
-
-
-
-        // 在工作线程中轮询等待内部流完成，同时响应线程中断（客户端取消）
+        String primaryModelName = chatContext.effectiveModel();
+        String fallbackModelName = llmProviderService.getOllamaModelName();
+        boolean primaryIsOllama = isOllamaModel(primaryModelName);
 
         try {
+            Flux<String> contentFlux = buildFinalAnswerContentFlux(finalMessages, primaryModelName, primaryModelName, false)
+                    .onErrorResume(primaryError -> {
+                        if (primaryIsOllama) {
+                            return Flux.error(primaryError);
+                        }
 
+                        // 主模型失败时，立即切换到本地 Ollama，保证回答链路继续。
+                        log.warn("[Final Answer] primary model failed, fallback to Ollama: sessionId={}, traceId={}, model={}, fallbackModel={}",
+                                chatContext.sessionId(), traceId, primaryModelName, fallbackModelName, primaryError);
+                        safeSinkNext(sink,
+                                eventJson("status", chatContext.sessionId(), traceId, Map.of(
+                                        "stage", "fallback_to_ollama",
+                                        "model", fallbackModelName,
+                                        "reason", "外部模型失败，自动切换到本地 Ollama 模型继续回答。"
+                                )),
+                                traceId,
+                                "status");
+                        return buildFinalAnswerContentFlux(finalMessages, primaryModelName, fallbackModelName, true);
+                    });
+
+            // 订阅 LLM 流式输出，通过 latch 同步等待完成或被取消
+            Disposable subscription = contentFlux
+                    .doOnNext(chunk -> {
+                        // 已取消时不再向客户端推送
+                        if (sink.isCancelled()) {
+                            return;
+                        }
+                        fullResponse.append(chunk);
+                        safeSinkNext(sink,
+                                eventJson("token", chatContext.sessionId(), traceId, Map.of("content", chunk)),
+                                traceId,
+                                "token");
+                    })
+                    .doOnComplete(() -> {
+                        if (!sink.isCancelled()) {
+                            String aiResponse = fullResponse.toString();
+                            if (!aiResponse.isEmpty()) {
+                                saveMessageWithThinkingProcess(chatContext.sessionId(), chatContext.userId(),
+                                        aiResponse, planOutcome.events());
+                                ragConversationSupport.refreshSummaryAsync(chatContext.sessionId(), chatContext.userId(), "ReactAgent");
+                            }
+                            safeSinkNext(sink,
+                                    eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)),
+                                    traceId,
+                                    "final");
+                            safeSinkComplete(sink, traceId);
+                        }
+                        latch.countDown();
+                    })
+                    .doOnError(e -> {
+                        if (!sink.isCancelled()) {
+                            log.error("[Final Answer Stream Error] sessionId={}, traceId={}", chatContext.sessionId(), traceId, e);
+                            safeSinkNext(sink,
+                                    eventJson("error", chatContext.sessionId(), traceId,
+                                            Map.of("message", e.getMessage() != null ? e.getMessage() : DEFAULT_UNKNOWN_ERROR)),
+                                    traceId,
+                                    "error");
+                            safeSinkComplete(sink, traceId);
+                        }
+                        latch.countDown();
+                    })
+                    .doOnCancel(latch::countDown)
+                    .subscribe();
+
+            // 在工作线程中轮询等待内部流完成，同时响应线程中断（客户端取消）
             while (!latch.await(200, TimeUnit.MILLISECONDS)) {
-
                 if (isAgentCancelled(sink)) {
-
                     log.info("[Cancelled] disposing final answer stream: traceId={}", traceId);
-
                     subscription.dispose();
-
                     savePartialResponse(chatContext, fullResponse, planOutcome);
-
-                    tryComplete(sink);
-
+                    safeSinkComplete(sink, traceId);
                     return;
-
                 }
-
+            }
+        } catch (InterruptedException e) {
+            log.info("[Cancelled] final answer streaming interrupted: traceId={}", traceId);
+            Thread.currentThread().interrupt();
+            savePartialResponse(chatContext, fullResponse, planOutcome);
+            safeSinkComplete(sink, traceId);
+        } catch (Exception e) {
+            if (isAgentCancelled(sink)) {
+                log.info("[Cancelled] final answer stream aborted: traceId={}", traceId);
+                savePartialResponse(chatContext, fullResponse, planOutcome);
+                safeSinkComplete(sink, traceId);
+                return;
             }
 
-        } catch (InterruptedException e) {
-
-            log.info("[Cancelled] final answer streaming interrupted: traceId={}", traceId);
-
-            subscription.dispose();
-
-            savePartialResponse(chatContext, fullResponse, planOutcome);
-
-            Thread.currentThread().interrupt();
-
-            tryComplete(sink);
-
+            log.error("[Final Answer Stream Failed] sessionId={}, traceId={}", chatContext.sessionId(), traceId, e);
+            safeSinkNext(sink,
+                    eventJson("error", chatContext.sessionId(), traceId,
+                            Map.of("message", e.getMessage() != null ? e.getMessage() : DEFAULT_UNKNOWN_ERROR)),
+                    traceId,
+                    "error");
+            safeSinkComplete(sink, traceId);
         }
-
     }
-
 
 
     private ReactAgentPlanOutcome runPlanningLoop(ReactAgentChatContext chatContext, String traceId, FluxSink<String> sink, Instant deadline) {
@@ -521,19 +514,16 @@ public class AgentServiceImpl implements AgentService {
         int successfulWebReadCalls = 0;
 
 
-
         java.util.function.Consumer<String> emit = event -> {
 
-            sink.next(event);
+            safeSinkNext(sink, event, traceId, "agent_event");
 
             events.add(event);
 
         };
 
 
-
         emit.accept(eventJson("session", chatContext.sessionId(), traceId, Map.of("sessionId", chatContext.sessionId())));
-
 
 
         List<SkillInfo> matchedSkills = skillService.matchSkills(chatContext.originalMessage());
@@ -565,9 +555,7 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "thinking")));
-
 
 
         for (int i = 1; i <= RagConstant.MAX_ROUNDS; i++) {
@@ -581,7 +569,6 @@ public class AgentServiceImpl implements AgentService {
                 break;
 
             }
-
 
 
             // ===== Layer 1: 全局 Agent 超时检查 =====
@@ -611,7 +598,6 @@ public class AgentServiceImpl implements AgentService {
             }
 
 
-
             // ===== Layer 2: 单轮时间预算（剩余时间 / 剩余轮次） =====
 
             int remainingRounds = RagConstant.MAX_ROUNDS - i + 1;
@@ -619,7 +605,6 @@ public class AgentServiceImpl implements AgentService {
             long roundBudgetMs = Math.max(remainingMs / remainingRounds, 5000L); // 最少 5s
 
             log.debug("[Round {}] remainingMs={}, roundBudgetMs={}, remainingRounds={}", i, remainingMs, roundBudgetMs, remainingRounds);
-
 
 
             // ===== Layer 3: LLM 决策超时控制 =====
@@ -635,7 +620,6 @@ public class AgentServiceImpl implements AgentService {
             ReactAgentDecision decision = decideNextActionWithTimeout(chatContext, matchedSkills, observations, i, llmTimeoutMs);
 
 
-
             if ("final".equals(decision.getAction())) {
 
                 emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "ready_to_answer", "round", i)));
@@ -643,7 +627,6 @@ public class AgentServiceImpl implements AgentService {
                 return new ReactAgentPlanOutcome(events, observations, decision.getFinalAnswer());
 
             }
-
 
 
             if (!"tool".equals(decision.getAction())) {
@@ -655,11 +638,9 @@ public class AgentServiceImpl implements AgentService {
             }
 
 
-
             String toolName = decision.getToolName() == null ? "" : decision.getToolName();
 
             Map<String, Object> toolInput = decision.getToolInput() == null ? new HashMap<>() : decision.getToolInput();
-
 
 
             // 重复工具检测：签名相同则跳过
@@ -679,7 +660,6 @@ public class AgentServiceImpl implements AgentService {
             }
 
 
-
             // 同一工具累计失败次数超限，停止重试（解决换 query 绕过签名去重的问题）
 
             int failures = toolFailureCounts.getOrDefault(toolName, 0);
@@ -695,7 +675,6 @@ public class AgentServiceImpl implements AgentService {
                 continue;
 
             }
-
 
 
             if ("web_read".equals(toolName)
@@ -715,9 +694,7 @@ public class AgentServiceImpl implements AgentService {
             }
 
 
-
             toolSignatureHistory.add(toolSignature);
-
 
 
             // ===== Layer 4: 工具执行超时控制 =====
@@ -753,7 +730,6 @@ public class AgentServiceImpl implements AgentService {
             );
 
 
-
             // 统计工具失败次数
 
             if (!result.isSuccess()) {
@@ -777,7 +753,6 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         emit.accept(eventJson("status", chatContext.sessionId(), traceId,
 
                 Map.of("stage", "plan_round_limit_reached", "round", RagConstant.MAX_ROUNDS)));
@@ -787,15 +762,12 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     /**
-
      * 带超时控制的工具执行入口。
-
+     * <p>
      * 将实际工具调用提交到独立线程，主线程通过 Future.get(timeout) 实现兜底超时。
-
+     * <p>
      * 参考: Coze 单工具超时、LangChain tool_timeout 设计。
-
      */
 
     private ToolService.ToolExecutionResult executeToolRoundWithTimeout(
@@ -817,13 +789,11 @@ public class AgentServiceImpl implements AgentService {
             long timeoutMs) {
 
 
-
         Future<ToolService.ToolExecutionResult> future = timeoutExecutor.submit(
 
                 () -> executeToolRound(chatContext, traceId, emit, observations, round, toolName, toolInput)
 
         );
-
 
 
         try {
@@ -841,7 +811,6 @@ public class AgentServiceImpl implements AgentService {
             log.warn("[Tool Timeout] tool={} exceeded {}s timeout at round {}", toolName, timeoutSec, round);
 
 
-
             // 向前端推送工具超时事件
 
             emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of(
@@ -857,13 +826,11 @@ public class AgentServiceImpl implements AgentService {
             )));
 
 
-
             String timeoutMsg = "Tool " + toolName + " timed out after " + timeoutSec + "s";
 
             observations.add(timeoutMsg);
 
             chatContext.allMessages().add(new UserMessage("Tool " + toolName + " execution result: " + timeoutMsg));
-
 
 
             return ToolService.ToolExecutionResult.error(
@@ -897,6 +864,84 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
+    /**
+     * 带 Ollama 回退的决策调用。
+     * <p>
+     * 主模型（通常是百度外部模型）失败时，自动切换到本地 Ollama，避免因额度耗尽直接中断规划流程。
+     */
+    private ReactAgentDecision decideNextAction(ReactAgentChatContext chatContext,
+                                                List<SkillInfo> matchedSkills,
+                                                List<String> observations,
+                                                int round) {
+        String primaryModelName = chatContext.effectiveModel();
+        String fallbackModelName = llmProviderService.getOllamaModelName();
+
+        try {
+            return callDecision(chatContext, matchedSkills, observations, round, primaryModelName, false);
+        } catch (Exception primaryError) {
+            if (isOllamaModel(primaryModelName)) {
+                // 如果当前已经是 Ollama，就不要继续回退，直接返回默认最终答复。
+                log.error("[Decision Failed] Ollama model failed at round {}: {}", round, primaryError.getMessage(), primaryError);
+                ReactAgentDecision decision = new ReactAgentDecision();
+                decision.setAction("final");
+                decision.setFinalAnswer(DEFAULT_PLAN_ERROR_ANSWER);
+                return decision;
+            }
+
+            log.warn("[Decision Fallback] primary model failed, fallback to Ollama: round={}, model={}, fallbackModel={},error={}",
+                    round, primaryModelName, fallbackModelName, primaryError.getMessage());
+            try {
+                return callDecision(chatContext, matchedSkills, observations, round, fallbackModelName, true);
+            } catch (Exception fallbackError) {
+                log.error("[Decision Failed] fallback Ollama also failed at round {}: {}", round, fallbackError.getMessage(), fallbackError);
+                ReactAgentDecision decision = new ReactAgentDecision();
+                decision.setAction("final");
+                decision.setFinalAnswer(DEFAULT_PLAN_ERROR_ANSWER);
+                return decision;
+            }
+        }
+    }
+
+    /**
+     * 执行一次决策模型调用。
+     * <p>
+     * 这里不吞掉异常，由外层负责决定是否回退到 Ollama。
+     */
+    private ReactAgentDecision callDecision(ReactAgentChatContext chatContext,
+                                            List<SkillInfo> matchedSkills,
+                                            List<String> observations,
+                                            int round,
+                                            String modelName,
+                                            boolean fallbackMode) {
+        String toolList = toJsonQuietly(toolService.toolSchemas());
+
+        List<Message> decisionMessages = new ArrayList<>();
+        decisionMessages.add(new SystemMessage(promptService.getReactPlanSystemPrompt()));
+        decisionMessages.addAll(chatContext.allMessages());
+
+        String structuredPrompt = promptService.buildReactPlanUserPrompt(
+                toolList,
+                chatContext.originalMessage(),
+                formatObservationsForPrompt(observations),
+                matchedSkills,
+                round
+        );
+        decisionMessages.add(new UserMessage(structuredPrompt));
+
+        logRecentDecisionMessages(round, decisionMessages);
+
+        ChatModel targetChatModel = fallbackMode ? llmProviderService.getOllamaChatModel() : llmProviderService.getChatModel(chatContext.effectiveModel());
+        ChatClient chatClient = ChatClient.builder(targetChatModel).build();
+        String content = chatClient.prompt()
+                .messages(decisionMessages)
+                .options(ChatOptions.builder().model(modelName).temperature(0.1).build())
+                .call()
+                .content();
+
+        log.info("[LLM Decision Response] model={}, length={}, content={}", modelName, content == null ? 0 : content.length(), content);
+        return parseDecision(content);
+    }
+
 
     private ToolService.ToolExecutionResult executeToolRound(ReactAgentChatContext chatContext,
 
@@ -913,7 +958,6 @@ public class AgentServiceImpl implements AgentService {
                                                              Map<String, Object> toolInput) {
 
         emit.accept(eventJson("status", chatContext.sessionId(), traceId, Map.of("stage", "tool_running", "round", round, "toolName", toolName)));
-
 
 
         Map<String, Object> toolCallPayload = new HashMap<>();
@@ -933,7 +977,6 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         String decisionRecord = String.format("Agent decision: call tool %s with input %s", toolName, toJsonQuietly(toolInput));
 
         chatContext.allMessages().add(new AssistantMessage(decisionRecord));
@@ -941,13 +984,11 @@ public class AgentServiceImpl implements AgentService {
         log.debug("[Before Tool Call] {}", decisionRecord);
 
 
-
         long toolStart = System.currentTimeMillis();
 
         ToolService.ToolExecutionResult result = toolService.execute(toolName, toolInput, chatContext.sessionId(), chatContext.userId());
 
         long costMs = System.currentTimeMillis() - toolStart;
-
 
 
         Map<String, Object> resultPayload = new HashMap<>();
@@ -977,7 +1018,6 @@ public class AgentServiceImpl implements AgentService {
             resultPayload.put("metadata", result.getMetadata());
 
         }
-
 
 
         String toolResponse;
@@ -1017,13 +1057,11 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         String toolResultMsg = String.format("Tool %s execution result: %s", toolName, toolResponse);
 
         chatContext.allMessages().add(new UserMessage(toolResultMsg));
 
         log.debug("[After Tool Call] totalMessages={}", chatContext.allMessages().size());
-
 
 
         emit.accept(eventJson("tool_call", chatContext.sessionId(), traceId, toolCallPayload));
@@ -1049,15 +1087,12 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     /**
-
      * 带超时控制的 LLM 决策入口。
-
+     * <p>
      * 将 LLM 调用提交到独立线程，主线程通过 Future.get(timeout) 实现超时控制。
-
+     * <p>
      * 参考: LangChain max_iteration_time、Dify 单节点超时设计。
-
      */
 
     private ReactAgentDecision decideNextActionWithTimeout(ReactAgentChatContext chatContext,
@@ -1075,7 +1110,6 @@ public class AgentServiceImpl implements AgentService {
                 () -> decideNextAction(chatContext, matchedSkills, observations, round)
 
         );
-
 
 
         try {
@@ -1113,87 +1147,6 @@ public class AgentServiceImpl implements AgentService {
         }
 
     }
-
-
-
-    private ReactAgentDecision decideNextAction(ReactAgentChatContext chatContext,
-
-                                                List<SkillInfo> matchedSkills,
-
-                                                List<String> observations,
-
-                                                int round) {
-
-        String toolList = toJsonQuietly(toolService.toolSchemas());
-
-
-
-        List<Message> decisionMessages = new ArrayList<>();
-
-        decisionMessages.add(new SystemMessage(promptService.getReactPlanSystemPrompt()));
-
-        decisionMessages.addAll(chatContext.allMessages());
-
-
-
-        String structuredPrompt = promptService.buildReactPlanUserPrompt(
-
-                toolList,
-
-                chatContext.originalMessage(),
-
-                formatObservationsForPrompt(observations),
-
-                matchedSkills,
-
-                round
-
-        );
-
-        decisionMessages.add(new UserMessage(structuredPrompt));
-
-
-
-        logRecentDecisionMessages(round, decisionMessages);
-
-
-
-        try {
-
-            ChatModel targetChatModel = llmProviderService.getChatModel(chatContext.effectiveModel());
-
-            ChatClient chatClient = ChatClient.builder(targetChatModel).build();
-
-            String content = chatClient.prompt()
-
-                    .messages(decisionMessages)
-
-                    .options(ChatOptions.builder().model(chatContext.effectiveModel()).temperature(0.1).build())
-
-                    .call()
-
-                    .content();
-
-            log.info("[Round {}] [LLM Decision Response] length={}, content={}", round, content == null ? 0 : content.length(), content);
-
-            return parseDecision(content);
-
-        } catch (Exception e) {
-
-            log.error("[Decision Failed] {}", e.getMessage());
-
-            ReactAgentDecision decision = new ReactAgentDecision();
-
-            decision.setAction("final");
-
-            decision.setFinalAnswer(DEFAULT_PLAN_ERROR_ANSWER);
-
-            return decision;
-
-        }
-
-    }
-
 
 
     private ReactAgentDecision parseDecision(String content) {
@@ -1243,7 +1196,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private void normalizeToolDecision(ReactAgentDecision decision) {
 
         if (decision == null) {
@@ -1283,7 +1235,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private String extractJson(String text) {
 
         if (text == null) {
@@ -1307,7 +1258,6 @@ public class AgentServiceImpl implements AgentService {
             }
 
         }
-
 
 
         if (trimmed.startsWith("[")) {
@@ -1349,7 +1299,6 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         int left = trimmed.indexOf('{');
 
         int right = trimmed.lastIndexOf('}');
@@ -1363,7 +1312,6 @@ public class AgentServiceImpl implements AgentService {
         return trimmed;
 
     }
-
 
 
     private void saveMessageWithThinkingProcess(String sessionId, Long userId, String content, List<String> events) {
@@ -1393,7 +1341,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private List<Message> buildFinalMessages(List<Message> allMessages) {
 
         List<Message> messages = new ArrayList<>();
@@ -1405,7 +1352,6 @@ public class AgentServiceImpl implements AgentService {
         return messages;
 
     }
-
 
 
     private String eventJson(String eventType, String sessionId, String traceId, Map<String, Object> payload) {
@@ -1427,7 +1373,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private String toJsonQuietly(Object obj) {
 
         try {
@@ -1443,11 +1388,8 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     /**
-
      * 检查 Agent 是否已被客户端取消（前端点击停止 → SSE 断开 → Flux 取消信号 / 线程中断）
-
      */
 
     private boolean isAgentCancelled(FluxSink<?> sink) {
@@ -1457,37 +1399,22 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     /**
-
      * 安全地完成 FluxSink，如果已被取消或终结则忽略
-
      */
 
     private void tryComplete(FluxSink<?> sink) {
 
-        try {
-
-            if (!sink.isCancelled()) {
-
-                sink.complete();
-
-            }
-
-        } catch (Exception ignored) {
-
-            // sink 可能已经终结，忽略异常
-
-        }
+        // 统一收口到安全完成逻辑，避免旧入口直接触发异常。
+        @SuppressWarnings("unchecked")
+        FluxSink<String> stringSink = (FluxSink<String>) sink;
+        safeSinkComplete(stringSink, "legacy_complete");
 
     }
 
 
-
     /**
-
      * 客户端取消时保存已生成的部分回答，避免丢失有效内容
-
      */
 
     private void savePartialResponse(ReactAgentChatContext chatContext,
@@ -1511,27 +1438,19 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
-
-
     /**
-
      * 搜索类工具名称集合，用于按 query 参数去重。
-
+     * <p>
      * 包含 MCP PhindSearch 暴露的工具名以及可能的常见搜索工具名。
-
      */
 
     private static final Set<String> SEARCH_TOOL_NAMES = Set.of("search", "web_search", "phpiSearch");
 
 
-
     /**
-
      * 构建工具调用签名，用于重复调用检测。
-
+     * <p>
      * 搜索类工具（含 MCP 搜索工具）按 query 去重，其他工具按完整输入去重。
-
      */
 
     private String buildToolSignature(String toolName, Map<String, Object> toolInput) {
@@ -1551,7 +1470,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private String canonicalizeJson(Object value) {
 
         try {
@@ -1567,7 +1485,6 @@ public class AgentServiceImpl implements AgentService {
         }
 
     }
-
 
 
     private JsonNode canonicalizeNode(JsonNode node) {
@@ -1617,7 +1534,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private String buildRepeatedToolObservation(String toolName, Map<String, Object> toolInput) {
 
         return "Tool " + toolName + " already ran with equivalent input " + canonicalizeJson(toolInput)
@@ -1625,9 +1541,6 @@ public class AgentServiceImpl implements AgentService {
                 + ". Do not call it again; answer with existing result or choose another tool.";
 
     }
-
-
-
 
 
     private String formatObservationsForPrompt(List<String> observations) {
@@ -1657,7 +1570,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private void logRecentDecisionMessages(int round, List<Message> decisionMessages) {
 
         List<String> recentSystemMessages = collectRecentMessages(decisionMessages, SystemMessage.class, 2);
@@ -1671,7 +1583,6 @@ public class AgentServiceImpl implements AgentService {
         }
 
     }
-
 
 
     private List<String> collectRecentMessages(List<Message> messages, Class<? extends Message> targetType, int limit) {
@@ -1693,7 +1604,6 @@ public class AgentServiceImpl implements AgentService {
         return collected;
 
     }
-
 
 
     private String abbreviateLogContent(String content) {
@@ -1719,7 +1629,6 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private record ReactAgentChatContext(String sessionId, Long userId, String originalMessage, String effectiveModel,
 
                                          List<Message> allMessages) {
@@ -1727,11 +1636,9 @@ public class AgentServiceImpl implements AgentService {
     }
 
 
-
     private record ReactAgentPlanOutcome(List<String> events, List<String> observations, String finalAnswer) {
 
     }
-
 
 
     private static class ReactAgentDecision {
@@ -1747,13 +1654,11 @@ public class AgentServiceImpl implements AgentService {
         private String rawResponse;
 
 
-
         public String getAction() {
 
             return action;
 
         }
-
 
 
         public void setAction(String action) {
@@ -1763,13 +1668,11 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         public String getToolName() {
 
             return toolName;
 
         }
-
 
 
         public void setToolName(String toolName) {
@@ -1779,13 +1682,11 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         public Map<String, Object> getToolInput() {
 
             return toolInput;
 
         }
-
 
 
         public void setToolInput(Map<String, Object> toolInput) {
@@ -1795,13 +1696,11 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         public String getFinalAnswer() {
 
             return finalAnswer;
 
         }
-
 
 
         public void setFinalAnswer(String finalAnswer) {
@@ -1811,13 +1710,11 @@ public class AgentServiceImpl implements AgentService {
         }
 
 
-
         public String getRawResponse() {
 
             return rawResponse;
 
         }
-
 
 
         public void setRawResponse(String rawResponse) {

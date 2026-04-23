@@ -86,18 +86,39 @@ public class SummaryServiceImpl implements SummaryService {
         if (systemPrompt == null || systemPrompt.isBlank()) {
             throw new IllegalStateException("Summary system prompt is empty: " + com.cs.rag.service.impl.PromptRegistry.SUMMARY_SYSTEM);
         }
-        ChatModel chatModel = llmProviderService.getChatModel(RagConstant.DEFAULT_EXTERNAL_LLM);
-        ChatClient chatClient = ChatClient.builder(chatModel).build();
+        return callLlmForSummary(inputContent, RagConstant.DEFAULT_EXTERNAL_LLM, false, systemPrompt);
+    }
 
-        String summary = chatClient.prompt()
-                .system(systemPrompt)
-                .user(inputContent)
-                .options(ChatOptions.builder().model(RagConstant.DEFAULT_EXTERNAL_LLM).build())
-                .call()
-                .content();
+    /**
+     * 调用摘要模型，并在主模型失败时自动回退到 Ollama。
+     * <p>
+     * 这里优先保证摘要能力可用，而不是让额度耗尽直接中断业务。
+     */
+    private String callLlmForSummary(String inputContent, String modelName, boolean fallbackMode, String systemPrompt) {
+        try {
+            ChatModel chatModel = fallbackMode ? llmProviderService.getOllamaChatModel() : llmProviderService.getChatModel(RagConstant.DEFAULT_EXTERNAL_LLM);
+            ChatClient chatClient = ChatClient.builder(chatModel).build();
 
-        log.info("Summary generation completed, output length={}", summary.length());
-        return summary;
+            String summary = chatClient.prompt()
+                    .system(systemPrompt)
+                    .user(inputContent)
+                    .options(ChatOptions.builder().model(modelName).build())
+                    .call()
+                    .content();
+
+            log.info("Summary generation completed, output length={}, model={}", summary.length(), modelName);
+            return summary;
+        } catch (Exception e) {
+            if (!fallbackMode) {
+                // 主模型失败时回退到本地 Ollama，保证摘要继续可用。
+                log.warn("Summary primary model failed, fallback to Ollama: model={}", modelName, e.getMessage());
+                return callLlmForSummary(inputContent, llmProviderService.getOllamaModelName(), true, systemPrompt);
+            }
+
+            // 兜底模型也失败时，只记录日志并返回空字符串，避免影响主流程。
+            log.error("Summary generation failed with fallback model: model={}", modelName, e.getMessage());
+            return "";
+        }
     }
 }
 

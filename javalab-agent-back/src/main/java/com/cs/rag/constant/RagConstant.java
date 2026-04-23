@@ -30,7 +30,7 @@ public class RagConstant {
     /**
      * 默认外部大模型
      */
-    public static final String DEFAULT_EXTERNAL_LLM = "ernie-4.5-turbo-128k-preview";
+    public static final String DEFAULT_EXTERNAL_LLM = "qwen3:8b";
 
     /**
      * 本地大模型

@@ -175,89 +175,81 @@ public class AskServiceImpl implements AskService {
 
 
     private Flux<String> streamResponse(RagChatContext chatContext, String traceId, long start) {
+        String finalModelName = chatContext.effectiveModel();
+        String fallbackModelName = llmProviderService.getOllamaModelName();
+        String fallbackReason = "外部模型失败，自动切换到本地 Ollama 模型继续回答。";
 
-        ChatModel targetChatModel = llmProviderService.getChatModel(chatContext.effectiveModel());
+        // 先构建主模型流；若在构建或订阅阶段失败，再切换到本地稳定模型。
+        return buildStreamingResponse(chatContext, traceId, start, finalModelName, false)
+                .onErrorResume(primaryError -> {
+                    log.warn("RAG primary model failed, fallback to Ollama: sessionId={}, traceId={}, model={}, fallbackModel={}",
+                            chatContext.sessionId(), traceId, finalModelName, fallbackModelName, primaryError);
+                    return Flux.concat(
+                            Flux.just(eventJson("status", chatContext.sessionId(), traceId, Map.of(
+                                    "stage", "fallback_to_ollama",
+                                    "model", fallbackModelName,
+                                    "reason", fallbackReason
+                            ))),
+                            buildStreamingResponse(chatContext, traceId, start, fallbackModelName, true)
+                    );
+                });
 
+    }
+
+    /**
+     * 构建一次完整的流式回答 Flux。
+     * <p>
+     * 当 `fallbackMode` 为 true 时，使用 Ollama 模型名和本地模型 bean。
+     */
+    private Flux<String> buildStreamingResponse(RagChatContext chatContext,
+                                                String traceId,
+                                                long start,
+                                                String modelName,
+                                                boolean fallbackMode) {
+        ChatModel targetChatModel = fallbackMode ? llmProviderService.getOllamaChatModel() : llmProviderService.getChatModel(chatContext.effectiveModel());
         ChatClient chatClient = ChatClient.builder(targetChatModel).build();
-
         ChatClient.ChatClientRequestSpec promptSpec = chatClient.prompt()
-
                 .messages(buildFinalMessages(chatContext.allMessages()))
-
-                .options(ChatOptions.builder().model(chatContext.effectiveModel()).build());
-
-
+                .options(ChatOptions.builder().model(modelName).build());
 
         StringBuilder fullResponse = new StringBuilder();
 
-
-
         return Flux.concat(
-
                 Flux.just(eventJson("session", chatContext.sessionId(), traceId, Map.of("sessionId", chatContext.sessionId()))),
-
                 Flux.just(eventJson("status", chatContext.sessionId(), traceId, Map.of(
-
-                        "stage", "retrieval_completed",
-
+                        "stage", fallbackMode ? "fallback_answer_streaming" : "retrieval_completed",
                         "ragDocCount", chatContext.ragDocuments().size(),
-
-                        "model", chatContext.effectiveModel()
-
+                        "model", modelName
                 ))),
-
                 Flux.just(eventJson("status", chatContext.sessionId(), traceId, Map.of(
-
                         "stage", "answer_streaming"
-
                 ))),
-
                 promptSpec.stream()
-
                         .content()
-
                         .doOnNext(fullResponse::append)
-
-                        .map(chunk -> {
-
-                            return eventJson("token", chatContext.sessionId(), traceId, Map.of("content", chunk));
-
-                        })
-
+                        .map(chunk -> eventJson("token", chatContext.sessionId(), traceId, Map.of("content", chunk)))
                         .doOnComplete(() -> {
-
                             String aiResponse = fullResponse.toString();
-
                             if (!aiResponse.isEmpty()) {
-
                                 chatMessageService.saveAssistantMessage(chatContext.sessionId(), chatContext.userId(), aiResponse);
-
                                 ragConversationSupport.refreshSummaryAsync(chatContext.sessionId(), chatContext.userId(), "RAG");
-
-                                log.info("RAG chat completed: sessionId={}, traceId={}, answerLength={}, cost={}ms",
-
-                                        chatContext.sessionId(), traceId, aiResponse.length(), System.currentTimeMillis() - start);
-
+                                log.info("RAG chat completed: sessionId={}, traceId={}, model={}, answerLength={}, cost={}ms",
+                                        chatContext.sessionId(), traceId, modelName, aiResponse.length(), System.currentTimeMillis() - start);
                             }
-
                         })
-
                         .concatWithValues(eventJson("final", chatContext.sessionId(), traceId, Map.of("done", true)))
-
                         .onErrorResume(e -> {
-
-                            log.error("RAG stream failed: sessionId={}, traceId={}", chatContext.sessionId(), traceId, e);
-
-                            return Flux.just(eventJson("error", chatContext.sessionId(), traceId, Map.of(
-
-                                    "message", e.getMessage() != null ? e.getMessage() : "Unknown error"
-
-                            )));
-
+                            // 主模型失败时抛出错误给上层触发 fallback；兜底模型才返回 error 事件结束。
+                            log.error("RAG stream failed: sessionId={}, traceId={}, model={}, fallbackMode={}",
+                                    chatContext.sessionId(), traceId, modelName, fallbackMode, e);
+                            if (fallbackMode) {
+                                return Flux.just(eventJson("error", chatContext.sessionId(), traceId, Map.of(
+                                        "message", e.getMessage() != null ? e.getMessage() : "Unknown error"
+                                )));
+                            }
+                            return Flux.error(e);
                         })
-
         );
-
     }
 
 

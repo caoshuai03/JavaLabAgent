@@ -4,6 +4,7 @@ import com.cs.rag.config.AgentToolProperties;
 import com.cs.rag.pojo.entity.McpToolInfo;
 import com.cs.rag.service.McpService;
 import com.cs.rag.service.ToolService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -24,6 +25,7 @@ import java.util.stream.Stream;
  * ReAct 工具服务实现。
  * 统一承接工具注册、参数校验、内置工具执行与 MCP 工具转发。
  */
+@Slf4j
 @Service
 public class ToolServiceImpl implements ToolService {
 
@@ -58,26 +60,42 @@ public class ToolServiceImpl implements ToolService {
     @Override
     public ToolExecutionResult execute(String toolName, Map<String, Object> input, String sessionId, Long userId) {
         Map<String, Object> safeInput = input == null ? Map.of() : new LinkedHashMap<>(input);
-        ToolDescriptor descriptor = findTool(toolName);
-        if (descriptor == null) {
-            return ToolExecutionResult.error(toolName, "Unsupported tool", "registry", 0L, Map.of());
-        }
+        try {
+            ToolDescriptor descriptor = findTool(toolName);
+            if (descriptor == null) {
+                return ToolExecutionResult.error(toolName, "Unsupported tool", "registry", 0L, Map.of());
+            }
 
-        ToolPolicyDecision policyDecision = evaluateToolPolicy(descriptor, safeInput);
-        if (!policyDecision.allowed()) {
+            ToolPolicyDecision policyDecision = evaluateToolPolicy(descriptor, safeInput);
+            if (!policyDecision.allowed()) {
+                return ToolExecutionResult.error(
+                        toolName,
+                        "Tool policy blocked: " + policyDecision.message(),
+                        "policy",
+                        0L,
+                        Map.of("toolName", toolName)
+                );
+            }
+
+            if ("builtin".equals(descriptor.source())) {
+                return executeBuiltinTool(toolName, policyDecision.normalizedInput());
+            }
+            return executeMcpTool(toolName, policyDecision.normalizedInput());
+        } catch (Exception e) {
+            // 顶层兜底，避免工具异常直接抛出到 agent 主流程。
+            log.error("Tool execution failed: toolName={}, sessionId={}, userId={}, input={}",
+                    toolName, sessionId, userId, safeInput, e);
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("sessionId", String.valueOf(sessionId));
+            metadata.put("userId", String.valueOf(userId));
             return ToolExecutionResult.error(
                     toolName,
-                    "Tool policy blocked: " + policyDecision.message(),
-                    "policy",
+                    "Tool execution failed: " + (e.getMessage() != null ? e.getMessage() : "unknown"),
+                    "executor",
                     0L,
-                    Map.of("toolName", toolName)
+                    metadata
             );
         }
-
-        if ("builtin".equals(descriptor.source())) {
-            return executeBuiltinTool(toolName, policyDecision.normalizedInput());
-        }
-        return executeMcpTool(toolName, policyDecision.normalizedInput());
     }
 
     @Override
@@ -275,9 +293,11 @@ public class ToolServiceImpl implements ToolService {
                     Map.of()
             );
         } catch (Exception e) {
+            // MCP 调用异常只记录日志，并转换为工具错误结果，避免影响上层 agent 的规划与回答。
+            log.error("MCP tool invocation failed: toolName={}, input={}", toolName, input, e);
             return ToolExecutionResult.error(
                     toolName,
-                    "MCP tool invocation failed: " + e.getMessage(),
+                    "MCP tool invocation failed: " + (e.getMessage() != null ? e.getMessage() : "unknown"),
                     "mcp",
                     System.currentTimeMillis() - start,
                     Map.of()
@@ -322,6 +342,8 @@ public class ToolServiceImpl implements ToolService {
                 truncated = true;
             }
         } catch (Exception e) {
+            // 只读读取失败不向外抛出，交给 agent 继续降级处理。
+            log.error("Failed to read file: path={}", path, e);
             return ToolExecutionResult.error(TOOL_FILE_READ, "Failed to read file: " + e.getMessage(),
                     "builtin", System.currentTimeMillis() - start, Map.of("path", path.toString()));
         }
@@ -387,9 +409,11 @@ public class ToolServiceImpl implements ToolService {
                     Map.of("path", path.toString(), "operation", operation)
             );
         } catch (Exception e) {
+            // 文件写入失败返回工具错误结果，由上层决定是否继续对话流程。
+            log.error("Failed to write file: path={}, append={}, createDirectories={}", path, append, createDirectories, e);
             return ToolExecutionResult.error(
                     TOOL_FILE_WRITE,
-                    "Failed to write file: " + e.getMessage(),
+                    "Failed to write file: " + (e.getMessage() != null ? e.getMessage() : "unknown"),
                     "builtin",
                     System.currentTimeMillis() - start,
                     Map.of("path", path.toString())
@@ -457,9 +481,12 @@ public class ToolServiceImpl implements ToolService {
                     Map.of("command", formatCommand(command), "exitCode", exitCode, "timedOut", !finished)
             );
         } catch (Exception e) {
+            // 终端执行失败只返回工具错误，不中断 agent 大模型主链路。
+            log.error("Failed to execute terminal command: command={}, workdir={}, timeoutSeconds={}",
+                    formatCommand(command), workdir, timeoutSeconds, e);
             return ToolExecutionResult.error(
                     TOOL_TERMINAL_EXEC,
-                    "Failed to execute terminal command: " + e.getMessage(),
+                    "Failed to execute terminal command: " + (e.getMessage() != null ? e.getMessage() : "unknown"),
                     "builtin",
                     System.currentTimeMillis() - start,
                     Map.of("command", formatCommand(command), "workdir", workdir.toString())
@@ -484,6 +511,8 @@ public class ToolServiceImpl implements ToolService {
                 files.add(toPathEntry(matchedPath));
             }
         } catch (Exception e) {
+            // 文件搜索失败仅记录日志并返回错误结果，避免影响其他工具调用。
+            log.error("Failed to search files: baseDir={}, pattern={}, maxDepth={}", baseDir, pattern, maxDepth, e);
             return ToolExecutionResult.error(TOOL_FILE_SEARCH, "Failed to search files: " + e.getMessage(),
                     "builtin", System.currentTimeMillis() - start, Map.of("baseDir", baseDir.toString()));
         }
@@ -528,6 +557,9 @@ public class ToolServiceImpl implements ToolService {
                 collectMatches(candidateFile, query, caseSensitive, matches);
             }
         } catch (Exception e) {
+            // 文本搜索失败只影响当前工具结果，不影响 agent 的继续推理。
+            log.error("Failed to search text: baseDir={}, query={}, caseSensitive={}, includes={}",
+                    baseDir, query, caseSensitive, includes, e);
             return ToolExecutionResult.error(TOOL_GREP_SEARCH, "Failed to search text: " + e.getMessage(),
                     "builtin", System.currentTimeMillis() - start, Map.of("baseDir", baseDir.toString()));
         }
@@ -566,15 +598,18 @@ public class ToolServiceImpl implements ToolService {
                 match.put("line", lineNumber);
                 match.put("content", abbreviate(line, 300));
                 matches.add(match);
-                if (matches.size() >= properties.getMaxSearchResults()) {
-                    return;
-                }
             }
-        } catch (Exception ignored) {
-            // 只读搜索场景中，单文件失败直接跳过，避免影响整体结果。
+        } catch (Exception e) {
+            // 单文件匹配失败只记录日志并跳过，不影响整体 grep 搜索结果。
+            log.error("Failed to collect grep matches: file={}, query={}, caseSensitive={}", file, query, caseSensitive, e);
         }
     }
 
+    /**
+     * 将路径转换为前端可展示的条目。
+     * <p>
+     * 这里会尽量返回相对路径和文件大小，若读取失败则只保留基础信息。
+     */
     private Map<String, Object> toPathEntry(Path path) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("path", relativize(path));
@@ -582,6 +617,8 @@ public class ToolServiceImpl implements ToolService {
         try {
             entry.put("size", Files.isDirectory(path) ? null : Files.size(path));
         } catch (Exception e) {
+            // 这里不阻断文件搜索结果，只记录日志并返回空大小。
+            log.error("Failed to read path size: path={}", path, e);
             entry.put("size", null);
         }
         return entry;

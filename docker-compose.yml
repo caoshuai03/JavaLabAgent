@@ -69,7 +69,7 @@ services:
       OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
 
     ports:
-      - "8989:8989"
+      - "18989:8989"
 
   frontend:
     # 前端同样使用多阶段构建：node build -> nginx 静态站点

@@ -73,7 +73,6 @@ public class UserController {
         
         // 2. 获取当前登录用户ID
         Long currentUserId = BaseContext.getCurrentId();
-        log.info("当前登录用户ID：{}", currentUserId);
         if (currentUserId == null) {
             return ResultUtils.error(ErrorCode.NOT_LOGIN_ERROR, MessageConstant.USER_NOT_LOGIN);
         }
@@ -124,7 +123,6 @@ public class UserController {
     @Operation(summary = "login", description = "登录")
     public BaseResponse login(@RequestParam(value = "userName") String userName,
                               @RequestParam(value = "password") String password) throws AccountLockedException, AccountNotFoundException {
-        log.info("登录：{}", userName);
 
         User user = userService.login(userName, password);
 
