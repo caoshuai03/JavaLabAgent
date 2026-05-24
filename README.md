@@ -51,12 +51,12 @@
 # Ollama 服务地址
 OLlama_BASE_URL=http://xxx:11434
 
-# =================【API Key（必填，敏感信息）】=================
-# 百度千帆 / OpenAI 兼容接口的 API Key
+# =================【API Key（敏感信息）】=================
+# 百度千帆 / OpenAI 兼容接口的 API Key（必填）
 OPENAI_API_KEY=your_openai_api_key
-# MCP 工具：高德地图 API Key
+# MCP 工具：高德地图 API Key（可选，不配置则自动禁用该 MCP 服务）
 AMAP_MAPS_API_KEY=your_amap_maps_api_key
-# MCP 工具：Tavily 搜索 API Key
+# MCP 工具：Tavily 搜索 API Key（可选，不配置则自动禁用该 MCP 服务）
 TAVILY_API_KEY=your_tavily_api_key
 
 # =================【存储配置（二选一）】=================

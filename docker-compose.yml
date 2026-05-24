@@ -69,12 +69,12 @@ services:
       OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
 
       # -------------------- API Key（敏感信息，必须通过 .env 注入） --------------------
-      # 百度千帆 / OpenAI 兼容接口
+      # 百度千帆 / OpenAI 兼容接口（必填，未配置启动失败）
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      # MCP 工具：高德地图
-      AMAP_MAPS_API_KEY: ${AMAP_MAPS_API_KEY}
-      # MCP 工具：Tavily 搜索
-      TAVILY_API_KEY: ${TAVILY_API_KEY}
+      # MCP 工具：高德地图（可选，未配置则该 MCP 服务自动禁用）
+      AMAP_MAPS_API_KEY: ${AMAP_MAPS_API_KEY:-}
+      # MCP 工具：Tavily 搜索（可选，未配置则该 MCP 服务自动禁用）
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
 
     ports:
       - "18989:8989"

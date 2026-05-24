@@ -219,13 +219,15 @@ public class McpServiceImpl implements McpService {
 
     /**
      * 解析 env map 中的占位符，将 ${VAR} 替换为系统环境变量值。
-     * 未配置且无默认值时，记录警告并保留原值，避免泄露真实 key 到 json。
+     * 若任一占位符既无环境变量也无默认值，则自动禁用该 MCP 服务，
+     * 避免启动时因缺少 key 而影响整体可用性（用户未配置 MCP 时无感）。
      */
     private void resolveEnvPlaceholders(String serverName, McpServerConfig serverConfig) {
         Map<String, String> env = serverConfig.getEnv();
         if (env == null || env.isEmpty()) {
             return;
         }
+        boolean missingRequired = false;
         for (Map.Entry<String, String> entry : env.entrySet()) {
             String value = entry.getValue();
             if (value == null) {
@@ -241,14 +243,18 @@ public class McpServiceImpl implements McpService {
                     resolved = defaultValue;
                 }
                 if (resolved == null) {
-                    log.warn("MCP 服务 [{}] 环境变量 {} 未配置，env.{} 将被置空",
-                            serverName, varName, entry.getKey());
+                    log.info("MCP 服务 [{}] 未注入环境变量 {}，将自动禁用该服务",
+                            serverName, varName);
+                    missingRequired = true;
                     resolved = "";
                 }
                 matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(resolved));
             }
             matcher.appendTail(sb);
             entry.setValue(sb.toString());
+        }
+        if (missingRequired) {
+            serverConfig.setEnabled(false);
         }
     }
 
