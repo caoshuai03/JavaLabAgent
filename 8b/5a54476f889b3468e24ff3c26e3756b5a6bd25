@@ -1,0 +1,224 @@
+javalab-agent-back/src/main/java/com/cs/rag/service/impl/McpServiceImpl.java
+  90889bdecf1fb0e7 196-198,214-252 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a12fbbe39de87589e0e1da9","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Range":[196,198]},{"Range":[214,252]}]}]}
+javalab-agent-back/src/main/resources/application.yml
+  90889bdecf1fb0e7 27 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a12fbbe39de87589e0e1da9","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Single":27}]}]}
+docker-compose.yml
+  90889bdecf1fb0e7 71-78 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a12fbbe39de87589e0e1da9","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Range":[71,78]}]}]}
+docker-compose.prod.yml
+  90889bdecf1fb0e7 59-66 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a12fbbe39de87589e0e1da9","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Range":[59,66]}]}]}
+README.md
+  90889bdecf1fb0e7 54-61 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a12fbbe39de87589e0e1da9","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Range":[54,61]}]}]}
+javalab-agent-back/src/main/resources/mcp-tools.json
+  90889bdecf1fb0e7 10,20 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a12fbbe39de87589e0e1da9","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Single":10},{"Single":20}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8b5a54476f889b3468e24ff3c26e3756b5a6bd25",
+  "prompts": {
+    "90889bdecf1fb0e7": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a12f19339de87589e0e1c0a",
+        "model": "openrouter-2o__dev"
+      },
+      "human_author": "caoshuai.cs <caoshuai.cs@bytedance.com>",
+      "messages": [],
+      "total_additions": 71,
+      "total_deletions": 3,
+      "accepted_lines": 71,
+      "overriden_lines": 0
+    }
+  },
+  "attestation_metadata": {
+    "README.md": [
+      {
+        "hash": "90889bdecf1fb0e7",
+        "line_ranges": [
+          {
+            "Range": [
+              54,
+              61
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a12fbbe39de87589e0e1da9",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Range": [
+                  54,
+                  61
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "docker-compose.prod.yml": [
+      {
+        "hash": "90889bdecf1fb0e7",
+        "line_ranges": [
+          {
+            "Range": [
+              59,
+              66
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a12fbbe39de87589e0e1da9",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Range": [
+                  59,
+                  66
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "docker-compose.yml": [
+      {
+        "hash": "90889bdecf1fb0e7",
+        "line_ranges": [
+          {
+            "Range": [
+              71,
+              78
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a12fbbe39de87589e0e1da9",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Range": [
+                  71,
+                  78
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "javalab-agent-back/src/main/java/com/cs/rag/service/impl/McpServiceImpl.java": [
+      {
+        "hash": "90889bdecf1fb0e7",
+        "line_ranges": [
+          {
+            "Range": [
+              196,
+              198
+            ]
+          },
+          {
+            "Range": [
+              214,
+              252
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a12fbbe39de87589e0e1da9",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Range": [
+                  196,
+                  198
+                ]
+              },
+              {
+                "Range": [
+                  214,
+                  252
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "javalab-agent-back/src/main/resources/application.yml": [
+      {
+        "hash": "90889bdecf1fb0e7",
+        "line_ranges": [
+          {
+            "Single": 27
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a12fbbe39de87589e0e1da9",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Single": 27
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "javalab-agent-back/src/main/resources/mcp-tools.json": [
+      {
+        "hash": "90889bdecf1fb0e7",
+        "line_ranges": [
+          {
+            "Single": 10
+          },
+          {
+            "Single": 20
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a12fbbe39de87589e0e1da9",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Single": 10
+              },
+              {
+                "Single": 20
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "90889bdecf1fb0e7": {
+      "tool": "trae",
+      "conversation_id": "6a12f19339de87589e0e1c0a",
+      "session_id": "6a12f19339de87589e0e1c0a",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
