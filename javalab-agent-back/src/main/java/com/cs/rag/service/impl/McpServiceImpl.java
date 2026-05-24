@@ -193,6 +193,9 @@ public class McpServiceImpl implements McpService {
             if (serverConfig == null) {
                 return;
             }
+            // 解析 env 中的 ${VAR} / ${VAR:default} 占位符，从系统环境变量注入敏感信息
+            resolveEnvPlaceholders(name, serverConfig);
+
             if ((serverConfig.getType() == null || serverConfig.getType().isBlank())
                     && serverConfig.getUrl() != null && !serverConfig.getUrl().isBlank()) {
                 serverConfig.setType(RagConstant.MCP_TRANSPORT_HTTP);
@@ -206,6 +209,47 @@ public class McpServiceImpl implements McpService {
                 log.info("MCP服务器[{}]检测到SSE地址，自动切换为SSE传输模式: {}", name, serverConfig.getUrl());
             }
         });
+    }
+
+    /**
+     * 占位符匹配模式：${VAR} 或 ${VAR:default}
+     */
+    private static final java.util.regex.Pattern ENV_PLACEHOLDER_PATTERN =
+            java.util.regex.Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\\}");
+
+    /**
+     * 解析 env map 中的占位符，将 ${VAR} 替换为系统环境变量值。
+     * 未配置且无默认值时，记录警告并保留原值，避免泄露真实 key 到 json。
+     */
+    private void resolveEnvPlaceholders(String serverName, McpServerConfig serverConfig) {
+        Map<String, String> env = serverConfig.getEnv();
+        if (env == null || env.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, String> entry : env.entrySet()) {
+            String value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            java.util.regex.Matcher matcher = ENV_PLACEHOLDER_PATTERN.matcher(value);
+            StringBuffer sb = new StringBuffer();
+            while (matcher.find()) {
+                String varName = matcher.group(1);
+                String defaultValue = matcher.group(2);
+                String resolved = System.getenv(varName);
+                if (resolved == null || resolved.isEmpty()) {
+                    resolved = defaultValue;
+                }
+                if (resolved == null) {
+                    log.warn("MCP 服务 [{}] 环境变量 {} 未配置，env.{} 将被置空",
+                            serverName, varName, entry.getKey());
+                    resolved = "";
+                }
+                matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(resolved));
+            }
+            matcher.appendTail(sb);
+            entry.setValue(sb.toString());
+        }
     }
 
     /**

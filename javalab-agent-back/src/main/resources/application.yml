@@ -24,7 +24,7 @@ spring:
       embedding:
         enabled: false
       base-url: https://aistudio.baidu.com/llm/lmapi
-      api-key: 28f3df7b28a7d9338e1fdbeba4e4a30babd6df52
+      api-key: ${OPENAI_API_KEY}     # 必须通过环境变量注入，不提供默认值
       chat:
         completions-path: /v3/chat/completions
 

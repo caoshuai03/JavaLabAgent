@@ -56,6 +56,14 @@ services:
       # 阿里云 OSS 备用配置
       OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
       OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
+
+      # -------------------- API Key（敏感信息，必须通过 .env 注入） --------------------
+      # 百度千帆 / OpenAI 兼容接口
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # MCP 工具：高德地图
+      AMAP_MAPS_API_KEY: ${AMAP_MAPS_API_KEY}
+      # MCP 工具：Tavily 搜索
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
     ports:
       - "8989:8989"
     healthcheck:
