@@ -52,7 +52,7 @@ services:
 
       # Ollama 服务地址（你可以填宿主机或容器内 ollama）
 
-      OLlama_BASE_URL: ${OLlama_BASE_URL}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
 
       # -------------------- 存储配置 --------------------
       # 存储类型：minio 或 alioss

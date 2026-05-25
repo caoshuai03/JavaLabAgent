@@ -24,302 +24,266 @@
 ### 2.1 系统分层
 
 ```
-┌──────────────────────────────────────────────────┐
-│  前端 (Vue 3 + Element Plus + Vite)               │
-│  - 对话 UI / 知识库管理 / Skills / MCP 设置        │
-└──────────────────────┬───────────────────────────┘
-                       │ HTTP + SSE
-┌──────────────────────▼───────────────────────────┐
-│  后端 (Spring Boot 3.4 + Spring AI)               │
-│                                                  │
-│  Controller 层  ── 鉴权拦截器 (JWT)               │
-│  Service 层                                       │
-│   ├─ AskService        普通 RAG 流式问答          │
-│   ├─ AgentService      ReAct Plan/Act/Observe    │
-│   ├─ ToolService       内置工具 + MCP 工具汇聚    │
-│   ├─ SkillService      Skills 加载与命中匹配      │
-│   ├─ McpService        MCP stdio/http/sse        │
-│   ├─ KnowledgeService  文档切分 / 向量化 / 检索   │
-│   ├─ SummaryService    会话滚动摘要                │
-│   └─ ChatSession/MessageService  会话与消息持久化  │
-│  存储抽象  StorageUtil (MinIO / 阿里云 OSS)        │
-└──────┬─────────────────┬─────────────────────────┘
-       │                 │
-┌──────▼─────┐  ┌────────▼────────┐  ┌────────────┐
-│ PostgreSQL │  │   MinIO / OSS   │  │  Ollama /  │
-│ + pgvector │  │   对象存储       │  │  千帆 LLM  │
-└────────────┘  └─────────────────┘  └────────────┘
+┌──────────────────────────────────────────────────────┐
+│ 前端 (Vue 3 + Element Plus + Vite)                    │
+│ - 对话 UI / 会话管理 / 知识库管理 / Skills / MCP 设置   │
+└────────────────────────┬─────────────────────────────┘
+                         │ HTTP + SSE
+┌────────────────────────▼─────────────────────────────┐
+│ 后端 (Spring Boot 3.4 + Spring AI)                    │
+│                                                      │
+│ Controller 层 ── 鉴权拦截器 (JWT)                     │
+│ Service / Orchestration 层                            │
+│  ├─ AskService         普通 RAG 流式问答              │
+│  ├─ AgentService       ReAct 主循环 / Agent 编排      │
+│  ├─ ToolService        内置工具 + MCP 工具池汇聚      │
+│  ├─ SkillService       Skills 加载 / 匹配 / 注入      │
+│  ├─ McpService         MCP stdio / http / sse         │
+│  ├─ KnowledgeService   文档切分 / 向量化 / 检索       │
+│  ├─ SummaryService     会话滚动摘要                   │
+│  ├─ ChatSession / MessageService  会话与消息持久化    │
+│  └─ PromptService / PromptRegistry  Prompt 管理       │
+│ Memory / Storage 抽象层                               │
+│  ├─ PostgreSQL + pgvector  会话 / 摘要 / 向量数据     │
+│  ├─ StorageUtil           MinIO / 阿里云 OSS          │
+│  └─ LLMProviderService    Ollama / 千帆 / 外部模型     │
+└───────┬──────────────────┬─────────────────┬─────────┘
+        │                  │                 │
+┌───────▼────────┐ ┌───────▼────────┐ ┌──────▼──────┐ ┌──────────────┐
+│ PostgreSQL     │ │ MinIO / OSS    │ │ Ollama /    │ │ MCP Servers  │
+│ + pgvector     │ │ 对象存储        │ │ 千帆 / API  │ │ 外部工具服务  │
+└────────────────┘ └────────────────┘ └─────────────┘ └──────────────┘
 ```
 
-### 2.2 模块职责
+---
 
-| 模块 | 主要类 | 说明 |
+## 三、RAG 检索增强（重点）
+
+RAG（Retrieval-Augmented Generation）通过外挂知识库为 LLM 注入领域事实，缓解大模型「幻觉」与「知识时效性不足」的问题。完整链路：**文档解析 → 切分 → 向量化 → 检索 → 过滤 → 提示词拼接 → 生成**。每一步的取舍都直接影响最终回答质量。
+
+### 3.1 文档切分策略
+
+切分粒度直接决定召回质量：粒度过大检索不准，过小则丢失上下文。本项目根据文档形态自动选择切分器：
+
+- **QA 切分**：当文档同时包含 `---` 分隔符与 `## Q:` 标记时，使用 `QaDocumentSplitter` 按 QA 对整体切分，保证「问—答」语义不被截断 —— 这对教学场景的 FAQ 类知识尤其关键；
+- **Token 切分**：通用文档采用 `TokenTextSplitter` 按 token 规模均匀切分，避免按字符切割破坏中文语义边界。
+
+### 3.2 向量化与索引
+
+- **嵌入模型**：本地 `gte-large-zh`，输出 1024 维向量，对中文 QA 任务效果优于通用多语模型；
+- **索引结构**：pgvector 的 **HNSW**，相比 IVFFlat 召回精度与吞吐更高，写入成本略高但适合离线入库的场景；
+- **距离度量**：**余弦距离**，对句向量长度不敏感，更贴合语义相似度。
+
+### 3.3 检索与过滤
+
+- 双阈值召回：`TOP_K = 10` + `SIMILARITY_THRESHOLD = 0.71`，先取 Top-K 再用相似度阈值兜底；
+
+### 3.4 提示词拼接与置信度标注
+
+回答时按 **「工具结果 > 知识库 > 通用知识」** 的优先级组装上下文，并强制模型在输出前缀加上：
+
+- 命中知识库 → `【根据知识库】：`
+- 走通用知识 → `【根据通用知识】：`
+
+让用户一眼分辨答案来源，避免「看似权威实则臆造」的回答。
+
+### 3.5 一致性保障
+
+当前实现里，`KnowledgeServiceImpl#uploadFiles()` 采用的是**顺序执行 + 失败即中断**，而不是严格意义上的“整条链路事务回滚”：
+
+1. 先解析文档并切分；
+2. 再调用 `storeVectors()` 执行向量化写入；
+3. 只有向量化成功后，才会继续 `uploadToOss()`；
+4. 最后才会 `saveFileRecord()` 写数据库记录。
+
+
+
+---
+
+## 四、Memory 管理（重点）
+
+LLM 是无状态的，会话记忆需由应用层负责。常见方案：
+
+| 方案 | 优势 | 劣势 |
 | :--- | :--- | :--- |
-| ReAct Agent | `AgentServiceImpl` | Plan / Act / Observe 多轮循环，工具调度 |
-| 工具汇聚 | `ToolServiceImpl` | 内置 5 个工具 + MCP 工具，统一执行入口 |
-| MCP 协议 | `McpServiceImpl` | stdio / http / sse 三模式，工具列表缓存 |
-| 普通 RAG | `AskServiceImpl` | 检索召回 + 单轮 LLM 回答 |
-| 共享支撑 | `RagConversationSupport` | RAG/Agent 共用：召回过滤、摘要、模型选择 |
-| 知识库 | `KnowledgeServiceImpl` | 文档切分、向量化、文件落库 |
-| Skills | `SkillServiceImpl` | 启动加载 SKILL.md，按关键词命中注入 |
-| 摘要 | `SummaryServiceImpl` | 滚动摘要生成与持久化 |
-| 鉴权 | `JwtTokenUserInterceptor` / `AdminInterceptor` | 用户与管理员双拦截器 |
-| 存储 | `StorageUtil` (`MinioUtil` / `AliOssUtil`) | `storage.type` 切换实现 |
+| 完整历史拼接 | 信息无损 | token 成本高、易超长 |
+| 滑动窗口 | 简单稳定 | 丢失早期信息 |
+| 向量记忆 | 按相似度召回 | 实现复杂，召回不稳 |
+| 摘要记忆 | 压缩长对话 | 摘要质量决定上限 |
+
+本项目采用 **「数据库持久化 + 滑动窗口 + 滚动摘要」** 的混合方案，兼顾成本与上下文完整性。
+
+### 4.1 滑动窗口（短期记忆）
+
+- 每次请求先持久化用户消息，再读取最近 `MEMORY_SIZE = 10` 条作为上下文；
+- 转换为 Spring AI 的 user / assistant 成对 `Message` 列表喂给模型；
+
+### 4.2 滚动摘要（中期记忆）
+
+- 每累积 10 条消息触发一次摘要任务（`totalMessages % MEMORY_SIZE <= 1`）；
+- 摘要写入 `chat_session.summary`，下一轮以「背景信息」前置注入，弥补滑动窗口对早期上下文的丢失。
+
+### 4.3 长期记忆的未来优化设计
+
+下一步的优化方向，是把 Memory 从“会话内可延续”升级为“跨会话可积累、可筛选、可进化”。
+
+- **用户画像**：把用户在长期交互中稳定不变或低频变化的信息结构化沉淀下来，例如课程背景、实验阶段、常见报错类型、偏好的回答风格、常用开发环境等。画像是对长期行为的抽象标签，作用是让系统在新会话开始时就具备更贴近该用户的上下文。
+- **记忆分层**：可进一步拆成短期工作记忆、中期摘要记忆、长期事实记忆三层。短期记忆保留最近几轮细节，中期记忆负责压缩连续对话，长期记忆只保留跨会话仍有意义的稳定事实，避免把所有历史原样塞给模型造成上下文污染。
+- **自迭代 `agent.md`**：未来可以引入一份面向 Agent 的运行期自描述文档，例如 `agent.md`，用于沉淀“这个用户/课程/项目下，Agent 已学到的稳定操作经验、常用步骤、常见坑点与已验证策略”。它是 Agent 在长期服务中提炼出的高价值工作说明书。
+
+
 
 ---
 
-## 三、快速开始（Docker）
+## 五、ReAct Agent（重点）
 
-### 3.1 环境变量
+ReAct = **Re**asoning + **Act**ing，由 LLM 输出 *Thought / Action / Observation* 三段式，通过「思考 → 执行 → 观察」的循环逐步逼近答案。相比单轮 RAG，它能完成需要多步操作的复杂任务（检索 → 写文件 → 验证）。
 
-根目录创建 `.env`（参考 `README.md`）。最关键的几项：
+### 5.1 Plan / Act / Observe 主循环
 
-```env
-OLlama_BASE_URL=http://xxx:11434          # Ollama 服务地址
-OPENAI_API_KEY=your_openai_api_key        # 主 LLM 密钥（必填）
-AMAP_MAPS_API_KEY=...                     # MCP 高德地图 Key（可选）
-TAVILY_API_KEY=...                        # MCP Tavily 搜索 Key（可选）
-IMAGE_TAG=latest                          # 拉取的镜像 tag（生产用）
-```
-
-
-
-### 3.2 启动方式
-
-生产镜像方式：
-
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-本地构建方式：
-
-```bash
-docker compose up -d --build
-```
-
-启动后常用访问地址（默认）：
-
-- 前端：`http://localhost`
-- 后端：`http://localhost:8989`
-- MinIO 控制台：`http://localhost:9001`
-- PostgreSQL：`http://localhost:5432`
-
----
-
-## 四、ReAct Agent 引擎
-
-入口：`POST /api/v1/ai/react-agent`，由 `AgentServiceImpl` 实现，返回 SSE 流。
-
-### 4.1 主循环
-
-核心循环 `runPlanningLoop()`，最大轮数 `RagConstant.MAX_ROUNDS = 10`。每轮做三件事：
+入口 `AgentServiceImpl#runPlanningLoop()`，每轮三步：
 
 1. **Plan**：调 LLM 输出 JSON 决策，`next_action` ∈ `tool` / `final_answer` / `clarify`；
-2. **Act**：若决策为 `tool`，执行工具并做去重与失败计数；
-3. **Observe**：把工具结果以 `observation` 追加进上下文，进入下一轮。
+2. **Act**：若决策为 `tool`，执行工具，并对 *相同入参* 做去重、对失败做计数；
+3. **Observe**：把工具返回作为 `observation` 段追加进上下文，进入下一轮。
 
-终止条件：到达最大轮数 / 模型给出 `final_answer` / 连续工具失败 / 触发任一层超时。
+终止条件：模型给出 `final_answer` / 达到最大轮数 。
 
-### 4.2 工具体系
+### 5.2 plan-execute 优化
 
-内置 5 个工具：`file_read`、`file_write`、`file_search`、`grep_search`、`terminal_exec`；MCP 工具通过 `ToolServiceImpl` 一并合并进工具池，对 LLM 一视同仁。
+后续可引入 **plan-execute** 模式：
 
-### 4.3 安全与超时
+- **先整体规划**：先产出完整任务分解、步骤依赖、预期产物与风险点；
+- **再分步执行**：执行阶段按计划逐段推进，而不是每一轮都从头临场决策；
+- **支持重规划**：当某一步失败、前置条件变化或新信息出现时，再局部重算计划；
+- **更易观测**：计划本身可落库、可展示、可人工审阅，便于排查 Agent 为什么会这样执行。
 
-- **安全沙箱**：工作区根目录强制校验、shell 命令白名单、写入扩展名黑名单；
-- **四层超时**：Agent 全局 / 单轮预算 / LLM 决策 / 工具执行，全部由 `AgentToolProperties` 集中配置；
-- **LLM 兜底**：主模型失败统一回退 Ollama `qwen3:8b`。
+它适合代码生成、实验排障、文档整理、复杂工具链编排这类长链路任务。
 
----
+### 5.3 subagent 优化
 
-## 五、RAG 检索增强
+单个 Agent 在复杂任务里容易同时背负“规划、执行、验证、总结”多种职责，导致上下文拥挤、推理目标混杂。一个更可扩展的方向，是在主 Agent 之外引入 **subagent** 机制。
 
-本项目 RAG 分为两条主链路：
+- **主 Agent 负责路由**：判断任务是否需要拆分，以及该分配给哪类子 Agent；
+- **subagent 负责专长任务**：例如检索型、代码型、验证型、总结型，各自使用更聚焦的上下文与工具集；
+- **结果回收再汇总**：子 Agent 只返回结构化结果或中间产物，由主 Agent 做最终整合；
+- **隔离上下文污染**：把不同子任务拆到独立上下文中，减少长链路任务里的信息相互干扰；
+- **支持并行执行**：对可并行的检索、比对、分析类任务，可同时派发多个 subagent，缩短整体时延。
 
-- **知识库入库链路**：将文档切分并写入 pgvector
-- **在线问答检索链路**：对用户问题检索相关片段，拼接到提示词中再请求大模型
-
-### 5.1 知识库入库流程
-
-入口接口：`KnowledgeController#upload()`（仅管理员）
-
-处理流程：
-
-1. **文档解析**：使用 `TikaDocumentReader` 从 `MultipartFile` 抽取文本（支持 doc/docx/pdf/纯文本）；
-2. **文档切分（Chunking）**：
-   - 若同时含 `---` 与 `## Q:`，使用 `QaDocumentSplitter` 按 QA 对切分（保证 QA 完整性，提升回答准确率）；
-   - 否则使用 `TokenTextSplitter` 按 token 规模切分；
-3. **向量化存储**：调用 `vectorStore.add(splitDocuments)` 写入 pgvector；
-4. **原始文件存储**：通过 `StorageUtil` 上传到 MinIO 或 阿里云 OSS（由 `STORAGE_TYPE` 决定）；
-5. **元数据落库**：写入 `ali_oss_file`，包含 `file_name`、`url`、`vector_id`（分片 Document 的 id 列表）。
-
-**失败处理**：若向量化失败，会抛出运行时异常并阻断后续步骤（避免「文件上传成功但向量缺失」的不一致状态）。
-
-### 5.2 向量库与索引
-
-向量存储基于 PostgreSQL + pgvector 实现：
-
-1. **索引类型**：HNSW，兼顾检索效率与召回精度；
-2. **距离度量**：余弦距离（COSINE_DISTANCE），适配文本语义匹配；
-3. **向量维度**：1024 维，与 `gte-large-zh` 嵌入模型对齐；
-4. **召回参数**：`TOP_K = 10`、`SIMILARITY_THRESHOLD = 0.71`，召回后 `filterByTermConsistency()` 做术语二次过滤。
-
-### 5.3 提示词策略
-
-提示词文件：
-
-- `prompts/rag/rag-answer-system.md`
-- `prompts/summary/summary-system.md`
-- `prompts/react/react-plan-system.md`
-- `prompts/react/react-plan-user.md`
-- `prompts/react/react-answer-system.md`
-- `prompts/react/react-skills-fragment.md`
-
-关键点：
-
-1. 普通 RAG 采用通用助手定位，优先级为「工具结果 > 知识库内容 > 通用知识」；
-2. 命中知识库内容时，回答前缀标注「【根据知识库】：」；主要依赖通用知识时标注「【根据通用知识】：」；
-3. ReAct 的规划与最终回答拆分为两套 prompt：规划阶段只输出 JSON 决策，最终回答阶段负责自然语言整合；
-4. ReAct 的动态上下文通过独立 user template 注入，系统规则尽量收敛到 system prompt；
-5. 所有运行时 prompt 通过 `PromptRegistry` 启动时预加载并缓存，避免重复读文件。
+从工程视角看，subagent 本质上是在 ReAct 之上再增加一层任务编排能力，使 Agent 从“单线程工具调用器”演进为“可分工协作的任务系统”。
 
 ---
 
-## 六、Skills 专业技能模块（待完善）
+## 六、Prompt 工程
 
-### 6.1 SKILL.md 格式
+Prompt 是与 LLM 通信的协议，质量直接决定上限。本项目沉淀的几条经验：
 
-每个 Skill 是一个目录 `skills/<skill-name>/SKILL.md`：YAML frontmatter（`---` 包围，含 `name` / `description` / `trigger_keywords` 等）+ Markdown 正文。
+### 6.1 系统模板与用户模板拆分
 
-### 6.2 加载与命中
+- **System prompt**：稳定的角色、规则、输出格式，以及**明确禁止做什么**（如禁止臆造事实、禁止伪造工具结果、禁止越权执行、禁止泄露内部推理或敏感信息）；启动时加载、运行期几乎不变；
+- **User prompt**：动态拼接知识库片段、对话摘要、工具结果等运行时信息。
 
-- 启动时（`@PostConstruct`）按 **classpath → 文件系统** 顺序加载，同名 Skill 文件系统覆盖优先，便于热更新；
-- 用户提问到达后，按 `trigger_keywords` 命中数量计分排序，注入分数最高的前 `MAX_SKILLS_PER_REQUEST = 3` 个 Skill 到系统提示词；
-- 查询接口：`GET /api/v1/skills`。
+将动态变量从系统约束里剥离，能避免每次都重复挤占「关键规则」的注意力预算。
 
----
+### 6.2 决策 prompt / 回答 prompt 分离
 
-## 七、MCP 工具集成
+ReAct 的规划阶段强约束 JSON 输出，回答阶段聚焦自然语言整合。两者目标不同，**不混用一套 system prompt** —— 一旦混用，模型经常在该输出 JSON 时夹带解释、在该回答时却返回结构化字段。
 
-### 7.1 配置文件
+### 6.3 显式来源标注
 
-`mcp-tools.json` 声明 MCP 服务，支持 `${VAR}` / `${VAR:default}` 占位符。加载逻辑：
+强制模型在回答前加 `【根据知识库】：` / `【根据通用知识】：` 前缀，是低成本但高效的「可信度信号」，对用户体验和错误归因都有帮助。
 
-1. **优先从外部路径**读取（运行目录 `mcp-tools.json`），便于运维替换，缺失则回退 classpath；
-2. `resolveEnvPlaceholders()` 从 `System.getenv()` 注入占位符；
-3. **若必需变量缺失，自动禁用对应 MCP 服务** 而非抛异常 —— 用户未配置 MCP 时无感。
+### 6.4 启动时预加载
 
-### 7.2 三种传输模式
-
-- **stdio**：通过 `ProcessBuilder` 启动子进程，劫持 stdin / stdout 做 JSON-RPC 通信（配置含 `command` 字段时启用）；
-- **http**：直连 HTTP JSON-RPC 端点；
-- **sse**：通过 SSE 流接收 endpoint 事件后再发起 JSON-RPC（URL 含 `/sse` 时启用）。
-
-### 7.3 接口
-
-- `GET /api/v1/mcp/list`：MCP 服务及工具列表；
-- `POST /api/v1/mcp/reload`：热重载配置。
+所有运行时 prompt 由 `PromptRegistry` 在启动时统一加载并缓存到内存，避免每次问答都做磁盘 IO。Prompt 文件按业务（`prompts/rag` / `prompts/react` / `prompts/summary`）分目录管理，便于版本化迭代。
 
 ---
 
-## 八、会话记忆管理
+## 七、本地大模型与模型路由
 
-本项目的会话记忆采用**数据库持久化 + 滑动窗口**方案，可保障：保留最近 10 条历史对话、每次对话均做持久化、消息类型分为 user/assistant/system 三类、支持跨请求 / 跨刷新恢复上下文、用户与会话隔离。
+本地化部署兼顾数据隐私与离线可用。本项目通过 **Ollama** 部署：
 
-### 8.1 滑动窗口
+- **对话模型**：`qwen3:8b`，在中文教学问答上有较好性价比；
+- **嵌入模型**：`gte-large-zh`，1024 维，与 pgvector 表结构对齐。
 
-入口：`AskServiceImpl / AgentServiceImpl` → `ChatMessageServiceImpl#getRecentMessages()`。
+### 7.1 大模型路由
 
-处理流程：先将用户消息保存至 `chat_message` 表，再查询最近 `MEMORY_SIZE` 条作为对话上下文，最后转换为 Spring AI `Message` 列表（user / assistant 成对组织）。
-
-`sanitizeForContext()` 会移除 `<!-- thinking_process_start --> ... <!-- thinking_process_end -->` 之间的「思考过程」标记，防止链式污染。
-
-**关键常量**：`RagConstant.MEMORY_SIZE`（当前为 10）。
-
-### 8.2 滚动摘要
-
-`SummaryServiceImpl` 在每完成 10 条消息后触发一次（`totalMessages % MEMORY_SIZE <= 1`），结果写回 `chat_session.summary`，下一轮提示词中以背景信息出现。
+`LLMProviderServiceImpl` 按模型名分发到 `openAiChatModel`（外部 API）或 `ollamaChatModel`（本地）。Spring AI 抽象屏蔽了不同 provider 的差异，调用方对路由无感知。
 
 ---
 
-## 九、本地大模型集成
+## 八、MCP 工具集成
 
-本项目通过 Ollama 本地部署 **qwen3:8b** 对话模型与 **gte-large-zh** 嵌入模型。
+MCP（Model Context Protocol）是 Anthropic 推出的工具协议标准，将工具调用的传输层与协议解耦，使 Agent 可以即插即用接入第三方工具服务，避免为每个工具单独写适配层。
 
-基于 **Spring AI** 集成，要点如下：
+### 8.1 三种传输模式
 
-1. 依赖：`spring-ai-ollama-spring-boot-starter`、`spring-ai-openai-spring-boot-starter`；
-2. 配置：`application.yml` → `spring.ai.ollama.*` 与 `spring.ai.openai.*`；
-3. **双模型路由**：`LLMProviderServiceImpl` 按模型名分发到 `openAiChatModel` 或 `ollamaChatModel`；
-4. **统一兜底**：任何主调用失败时回退到本地 Ollama `qwen3:8b`，保障可用性；
-5. 嵌入模型输出维度必须与 pgvector 数据表保持一致（当前为 1024 维）。
+- **stdio**：通过 `ProcessBuilder` 启动子进程，劫持 stdin / stdout 做 JSON-RPC，适合本地工具；
+- **http**：直连 HTTP JSON-RPC 端点，适合标准服务化部署；
+- **sse**：先通过 SSE 流接收 endpoint 事件，再发起 JSON-RPC，适合服务端推流场景。
 
----
+### 8.2 配置与热重载
 
-## 十、对象存储抽象
+- `mcp-tools.json` 支持 `${VAR:default}` 占位符；
+- 配置变更可通过 `POST /api/v1/mcp/reload` 热生效，无需重启。
 
-`StorageUtil` 定义统一存储 API：`upload / delete / download / getObject / getPresignedUrl`。
+### 8.3 工具池
 
-通过 `storage.type` 切换实现：
-
-- `minio`：`MinioConfig` 注入 MinIO 实现；
-- `alioss`：`OssConfiguration` 注入阿里云 OSS 实现。
-
-业务层注入 `StorageUtil` 抽象类型，无需感知具体实现。文件元数据统一落到 `ali_oss_file` 表（保留历史命名）。
+MCP 工具与内置工具在 `ToolServiceImpl` 中合并为同一工具池，可直接调用。
 
 ---
 
-## 十一、鉴权设计
+## 九、Skills 专业技能
 
-- 拦截器：`JwtTokenUserInterceptor` 拦截 `/api/v1/**`，排除登录注册；`AdminInterceptor` 仅拦截敏感接口（如 `knowledge/file/upload`、`knowledge/delete`），校验 `role == 1`；
-- 双令牌：用户与管理员独立的 secret-key、token-name、ttl，配置在 `cs.jwt.*`；
-- 工具：`JwtUtil`（HS256 签名）；
-- 密码：`UserServiceImpl` 使用 `DigestUtils.md5DigestAsHex` 加密；
-- `BaseContext` 在拦截器中存放当前 `userId`，供下游 Service 使用。
+Skills 是「轻量的、面向特定领域的行为补丁」。它更准确地说是一种**可热插拔的领域指令包**：通常以 Markdown 文件承载，前面的 YAML frontmatter 描述名称、触发关键词、适用范围等元数据，正文则定义该领域下的角色约束、回答策略、术语偏好、边界条件与禁忌行为。
 
----
 
-## 十二、关键接口速查
+### 9.1 渐进式披露
 
-- RAG 对话（SSE）：`POST /api/v1/ai/rag`
-- ReAct Agent（SSE）：`POST /api/v1/ai/react-agent`
-- 查询会话历史：`POST /api/v1/ai/rag/history`
-- 查询会话列表：`POST /api/v1/ai/rag/sessions`
-- 删除会话（逻辑删除）：`POST /api/v1/ai/rag/sessions/delete`
+ Skill 注入方式是通过**渐进式披露（Progressive Disclosure）**：
 
-- 上传知识库文件（管理员）：`POST /api/v1/knowledge/file/upload`（multipart）
-- 查询文件：`GET /api/v1/knowledge/contents`
-- 删除文件（管理员）：`DELETE /api/v1/knowledge/delete`
-- 下载文件（批量）：`GET /api/v1/knowledge/download`
-- 下载文件（流）：`GET /api/v1/knowledge/downloadFile/{id}`
+1. **首轮轻披露**：先只暴露最相关 Skill 的标题、适用范围、简要摘要与触发理由，尽量少占用 system prompt 预算；
+2. **按需展开**：只有当模型后续判断该 Skill 确实参与当前任务时，才继续注入更完整的规则、范式、示例或限制条件；
+3. **多 Skill 冲突裁剪**：若多个 Skill 同时命中，则优先保留当前问题最直接相关的那几个，其余仅保留摘要，不立即展开全文；
+4. **动态升级**：随着对话深入，若任务从“普通问答”演进为“实验排障”“报告规范审查”“平台操作指导”，系统再逐步展开更细的领域约束。
 
-- Skills 列表：`GET /api/v1/skills`
-- MCP 服务及工具列表：`GET /api/v1/mcp/list`
-- 热重载 MCP：`POST /api/v1/mcp/reload`
-- 用户反馈：`POST /api/v1/feedback/submit`
+这种设计的关键收益在于：**既利用了 Skill 的专业性，又避免一开始把全部领域规则压给模型，造成注意力分散、上下文膨胀和相互干扰。**
 
 ---
 
-## 十三、未来优化方向
+## 十、超时与安全
 
-### 13.1 工具集成
+### 10.1 四层超时
 
-- 集成更多本地工具与 MCP 工具，提升 Agent 能力和回答准确性；
-- Agent 行为可配置化：用户自定义工具白名单、超时与最大轮数。
+Agent 类长链路最容易出现「卡死」。本项目设置四层独立超时（`AgentToolProperties`），任一触发即中断，保证最坏情况下的响应时延上界：
 
-### 13.2 会话记忆升级
+| 层级 | 作用 |
+| :--- | :--- |
+| Agent 全局超时 | 整次会话的硬上限 |
+| 单轮预算 | 限制每一轮 Plan/Act/Observe 的耗时 |
+| LLM 决策超时 | 限制单次模型调用 |
+| 工具执行超时 | 限制单次工具调用 |
 
-- 当前为滑动窗口「短记忆」，可引入：
-  - 对话摘要记忆（定期总结历史上下文，减少 token 消耗）
-  - 对话语义检索（将历史消息向量化后按相似度检索相关历史）
+### 10.2 工具沙箱
 
-### 13.3 多模型 / 容灾策略
+- **工作区根目录强制校验**：所有文件操作必须落在指定根目录内，防止路径穿越；
+- **shell 命令白名单**：`terminal_exec` 仅放行白名单内命令，杜绝 LLM 误执行高危命令；
+- **写入扩展名黑名单**：阻止生成 `.sh` / `.exe` 等可执行文件，避免「被 LLM 写出后门」。
 
-- 模型选择策略：根据问题类型路由（命中知识库走本地小模型，未命中走外部大模型）；
-- 超时 / 重试 / 熔断：对流式输出增加超时与错误兜底响应。
+---
 
-### 13.4 知识库运营与质量控制
+## 十一、未来优化方向
 
-- 增量更新：同文件多次上传时支持覆盖 / 版本管理，并同步清理旧向量；
-- 评价闭环：收集用户反馈（好 / 差、纠错），反向驱动知识库更新。
+结合当前实现与 README 中的规划，后续优化方向可以概括为以下几类：
+
+- [ ] **plan-execute 模块**：在 ReAct 之外引入“先产出全局计划、再分阶段执行”的模式，适合长链路、多依赖、多工具协作任务；最终实现多个 agent 框架的协作模式。
+- [ ] **长期记忆 + 用户画像**：沉淀跨会话稳定信息、用户偏好与历史问题模式，详见 [4.3](#43-长期记忆的未来优化设计)；
+- [ ] **自迭代 Agent 经验层**：引入 `agent.md` 一类可持续演进的经验文档，沉淀高频问题的处理套路、常见故障排查路径与课程领域最佳实践；
+- [ ] **subagent / 多 Agent 协作**：把检索、执行、验证、总结等能力拆给不同角色的 Agent，支持串行分工与并行协作，提升复杂任务处理上限；
+- [ ] **通用 Agent 平台化**：从“Java 实验教学助手”逐步抽象为通用 Agent 底座，把知识库、工具、Memory、Skill、MCP、评测等能力做成可复用模块，便于扩展到更多场景和其他业务领域；
+- [ ] **Harness Engineering 完善**：从 Prompt 之外，系统化补齐 Agent 外围基础设施，包括上下文管理、记忆写入门控、工具治理、状态持久化、错误恢复、观测埋点与安全护栏，让能力提升不只依赖模型本身；
+- [ ] **自进化 Agent**：参考自进化 Hermes Agent 的思路，把“做任务 → 验证结果 → 沉淀经验 → 复用经验”做成闭环，不只沉淀 `agent.md`，也让 Skill 能随使用过程持续修正和迭代；
+- [ ] **自迭代 Skills**：把一次次人工纠偏、成功案例、标准流程沉淀为可复用 Skill，并支持增量更新、版本对比、回滚和人工审核，避免错误经验被无限放大；
+- [ ] **框架路线升级评估**：当前系统基于 Spring AI，后续可系统评估 Spring AI、LangGraph、LangChain 等框架在状态管理、长链路编排、持久化恢复、人机协同、生态扩展上的优缺点；若 Python 生态在 Agent 编排层更成熟，也可逐步演进到 `LangGraph + Python` 这类更利于复杂工作流扩展的方案；
+- [ ] **多模态能力**：扩展图片识别、语音输入、语音回复等能力，让实验教学场景从文本交互走向更自然的人机协作；
+- [ ] **观测与评测体系**：补齐对问答质量、召回效果、工具调用成功率、超时分布与用户反馈的评测闭环，让后续优化有数据依据。

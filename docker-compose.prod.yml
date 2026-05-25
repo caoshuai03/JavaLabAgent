@@ -44,7 +44,7 @@ services:
 
       # AI 向量配置
       SPRING_AI_VECTORSTORE_PGVECTOR_DIMENSIONS: 1024
-      OLlama_BASE_URL: ${OLlama_BASE_URL}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
 
       # 存储配置
       STORAGE_TYPE: ${STORAGE_TYPE:-minio}

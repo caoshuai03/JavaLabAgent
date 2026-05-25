@@ -38,7 +38,7 @@
 
 ```env
 # Ollama 服务地址（必填）
-OLlama_BASE_URL=http://xxx:11434
+OLLAMA_BASE_URL=http://xxx:11434
 
 # =================【API Key（敏感信息）】=================
 # 百度千帆 / OpenAI 兼容接口的 API Key（必填）

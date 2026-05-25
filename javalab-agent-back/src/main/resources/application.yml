@@ -31,7 +31,7 @@ spring:
 
     # 使用 Ollama 本地模型
     ollama:
-      base-url: ${OLlama_BASE_URL}  # Ollama 服务地址
+      base-url: ${OLLAMA_BASE_URL}  # Ollama 服务地址
       chat:
         model: qwen3:8b                 # 聊天模型
         options:
