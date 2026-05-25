@@ -10,14 +10,13 @@
 
 ## 🌟 主要功能
 
-- 🤖 **ReAct Agent 引擎**：基于 Plan / Act / Observe 多轮循环的任务规划与执行，支持工具调用、去重、超时熔断与失败兜底。
+- 🤖 **ReAct Agent 引擎**：基于 Plan / Act / Observe 多轮循环的任务规划与执行，支持工具调用、去重、超时熔断与失败兜底，并可向 plan-execute、subagent 编排方向扩展。
 - 🛠️ **MCP 工具集成**：兼容 Model Context Protocol，支持 `stdio` / `http` / `sse` 三种传输模式，一份 `mcp-tools.json` 即可热接入外部工具。
-- 📚 **RAG 知识库**：自动识别 QA 文档与普通文档分别采用 `QaDocumentSplitter` / `TokenTextSplitter`，使用 PostgreSQL + pgvector（HNSW + 余弦距离）做向量检索。
-- 🎯 **Skills 专业技能**：通过 `SKILL.md` (YAML frontmatter + 正文) 描述技能，注入给大模型 skill。
-- 🧠 **会话记忆与摘要**：滑动窗口+ 滚动摘要，支持跨刷新恢复上下文。
+- 📚 **RAG 知识库**：支持文档解析、切分、向量化、检索与提示词拼接，自动识别 QA 文档与普通文档，采用 PostgreSQL + pgvector（HNSW + 余弦距离）做向量检索。
+- 🎯 **Skills 专业技能**：通过 `SKILL.md`（YAML frontmatter + 正文）定义领域技能，支持加载、匹配、注入，并可按渐进式披露思路执行。
+- 🧠 **会话记忆与摘要**：采用“滑动窗口 + 滚动摘要”的中短期记忆方案，兼顾上下文连续性与 token 成本。
 - 💬 **流式交互**：基于 SSE 的事件流，前端可实时渲染思考链路。
 - 🖥️ **现代化前端**：Vue 3 + Element Plus 响应式 UI，包含会话、知识库、MCP 设置、Skills 管理等页面。
-- 🔐 **完善鉴权**：基于 JWT 的双令牌（用户 / 管理员），管理员令牌专用于知识库写操作。
 
 ## 🛠️ 技术栈
 
@@ -25,9 +24,10 @@
 | :--- | :--- |
 | **Spring Boot 3.4** + **Java 17** | 核心开发框架 |
 | **Spring AI** | LLM / Embedding / VectorStore 抽象与编排 |
-| **PostgreSQL + pgvector** | 关系型数据 + 1024 维向量存储（HNSW 索引） |
-| **Ollama** | 本地大模型 |
+| **PostgreSQL + pgvector** | 会话 / 摘要 / 向量数据存储，1024 维向量检索（HNSW 索引） |
+| **Ollama / 千帆** | 本地模型与外部模型路由 |
 | **MinIO / 阿里云 OSS** | 对象存储二选一 |
+| **MCP** | 外部工具协议接入与热重载 |
 | **Vue 3 + Element Plus** | 现代化前端 |
 
 ## 🚀 快速开始
